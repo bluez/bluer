@@ -1,0 +1,7 @@
+[package]
+name = "bluetooth"
+version = "0.1.0"
+authors = ["Attila Dusnoki <adusnoki@inf.u-szeged.hu>"]
+
+[dependencies]
+dbus = "0.2.2"
