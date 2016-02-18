@@ -1,7 +1,14 @@
 [package]
-name = "bluetooth"
+name = "blurz"
 version = "0.1.0"
 authors = ["Attila Dusnoki <adusnoki@inf.u-szeged.hu>"]
+repository = "https://github.com/dati91/blurz"
+keywords = ["Bluetooth", "Bluez"]
+license = "BSD 2-clause License"
+
+[lib]
+name = "blurz"
+path = "src/lib.rs"
 
 [dependencies]
-dbus = "0.2.2"
+dbus = "0.3.2"
