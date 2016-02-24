@@ -1,4 +1,4 @@
-use dbus::{Connection, BusType, Props};
+use dbus::{Connection, BusType, Props, Message};
 use bluetooth_utils;
 use bluetooth_device::BluetoothDevice;
 
@@ -56,9 +56,70 @@ impl BluetoothAdapter {
         String::from(d.get("Name").unwrap().inner::<&str>().unwrap())
     }
 
+    pub fn get_alias(&self) -> String {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        String::from(d.get("Alias").unwrap().inner::<&str>().unwrap())
+    }
+
+    pub fn set_alias(&self, value: String) {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.set("Alias", value.into()).unwrap();
+    }
+
     pub fn get_class(&self) -> u32 {
         let c = Connection::get_private(BusType::System).unwrap();
         let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
         d.get("Class").unwrap().inner::<u32>().unwrap()
     }
+
+    pub fn is_powered(&self) -> bool {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.get("Powered").unwrap().inner::<bool>().unwrap()
+    }
+
+    pub fn set_powered(&self, value: bool) {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.set("Powered", value.into()).unwrap();
+    }
+
+    pub fn get_rssi(&self) -> i32 {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.get("RSSI").unwrap().inner::<i32>().unwrap()        
+    }
+
+    pub fn is_discoverable(&self) -> bool {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.get("Discoverable").unwrap().inner::<bool>().unwrap()
+    }
+
+    pub fn set_discoverable(&self, value: bool) {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.set("Discoverable", value.into()).unwrap();
+    }
+
+    pub fn is_discovering(&self) -> bool {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let d = Props::new(&c, SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, 10000);
+        d.get("Discovering").unwrap().inner::<bool>().unwrap()
+    }
+
+    pub fn start_discovery(&self) {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let m = Message::new_method_call(SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, "StartDiscovery").unwrap();
+        c.send(m).unwrap();
+    }
+
+    pub fn stop_discovery(&self) {
+        let c = Connection::get_private(BusType::System).unwrap();
+        let m = Message::new_method_call(SERVICE_NAME, &self.object_path, ADAPTER_INTERFACE, "StopDiscovery").unwrap();
+        c.send(m).unwrap();
+    }
+
 }
