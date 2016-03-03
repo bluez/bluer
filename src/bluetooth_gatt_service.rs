@@ -1,5 +1,4 @@
-use dbus::{Connection, BusType, Props, Message, MessageItem};
-use bluetooth_utils;
+use dbus::{Connection, BusType, Props, MessageItem};
 
 static SERVICE_NAME: &'static str = "org.bluez";
 static GATT_SERVICE_INTERFACE: &'static str = "org.bluez.GattService1";
@@ -27,5 +26,5 @@ impl BluetoothGATTService {
             v.push(String::from(y.inner::<&str>().unwrap()));
         }
         v
-    }   
+    }
 }

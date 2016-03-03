@@ -1,4 +1,5 @@
 use dbus::{Connection, BusType, Props, Message, MessageItem};
+use rustc_serialize::hex::FromHex;
 
 static SERVICE_NAME: &'static str = "org.bluez";
 static DEVICE_INTERFACE: &'static str = "org.bluez.Device1";
@@ -55,30 +56,35 @@ impl BluetoothDevice {
     }
 
     pub fn get_vendor_id(&self) -> u32 {
-        let vendor_id = 0u32;
-        let modalias = self.get_modalias();
-        //TODO get vendor_id
+        let (_,vendor_id,_,_) = self.get_modalias();
         vendor_id
     }
 
     pub fn get_product_id(&self) -> u32 {
-        let product_id = 0u32;
-        let modalias = self.get_modalias();
-        //TODO get product_id
+        let (_,_,product_id,_) = self.get_modalias();
         product_id
     }
 
     pub fn get_device_id(&self) -> u32 {
-        let device_id = 0u32;
-        let modalias = self.get_modalias();
-        //TODO get device_id
+        let (_,_,_,device_id) = self.get_modalias();
         device_id
     }
 
-    fn get_modalias(&self) -> String {
+    fn get_modalias(&self) -> (String, u32, u32, u32) {
         let c = Connection::get_private(BusType::System).unwrap();
         let d = Props::new(&c, SERVICE_NAME, &self.object_path, DEVICE_INTERFACE, 10000);
-        String::from(d.get("Modalias").unwrap().inner::<&str>().unwrap())
+        let modalias = String::from(d.get("Modalias").unwrap().inner::<&str>().unwrap());
+        let ids: Vec<&str> = modalias.split(":").collect();
+
+        let source = String::from(ids[0]);
+        let vendor = ids[1][1..5].from_hex().unwrap();
+        let product = ids[1][6..10].from_hex().unwrap();
+        let device = ids[1][11..15].from_hex().unwrap();
+
+        (source,
+        (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
+        (product[0] as u32) * 16 * 16 + (product[1] as u32),
+        (device[0] as u32) * 16 * 16 + (device[1] as u32))
     }
 
     pub fn is_pairable(&self) -> bool {
@@ -148,13 +154,13 @@ impl BluetoothDevice {
     pub fn connect(&self) {
         let c = Connection::get_private(BusType::System).unwrap();
         let m = Message::new_method_call(SERVICE_NAME, &self.object_path, DEVICE_INTERFACE, "Connect").unwrap();
-        let r = c.send_with_reply_and_block(m, 15000).unwrap();
+        c.send_with_reply_and_block(m, 15000).unwrap();
     }
 
     pub fn disconnect(&self) {
         let c = Connection::get_private(BusType::System).unwrap();
         let m = Message::new_method_call(SERVICE_NAME, &self.object_path, DEVICE_INTERFACE, "Disconnect").unwrap();
-        let r = c.send_with_reply_and_block(m, 15000).unwrap();
+        c.send_with_reply_and_block(m, 15000).unwrap();
     }
 
     
