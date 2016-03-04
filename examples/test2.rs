@@ -10,42 +10,74 @@ use blurz::bluetooth_device::BluetoothDevice as BTDevice;
 use blurz::bluetooth_gatt_service::BluetoothGATTService as BTGATTService;
 use blurz::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as BTGATTCharacteristic;
 
+fn error(error: String) {
+    println!("{}", error);
+    std::process::exit(1);
+}
+
 fn main() {
-    let adapter: BTAdapter = BTAdapter::init().unwrap();
-    adapter.start_discovery();
-    let devices = adapter.get_devices();
+    let adapter: BTAdapter = match BTAdapter::init() {
+        Ok(a) => a,
+        Err(e) => return error(e),
+    };
+    match adapter.start_discovery() {
+        Ok(_) => println!("Start discovery"),
+        Err(e) => return error(e),
+    }
+    let devices = adapter.get_device_list();
+    if devices.is_empty() {
+        println!("No device found");
+        match adapter.stop_discovery() {
+            Ok(_) => println!("Stop discovery"),
+            Err(e) => return error(e),
+        }
+    }
+    println!("{} device(s) found", devices.len());
     let mut device: BTDevice = BTDevice::create_device("".to_string());
     'device_loop: for d in devices {
-    	device = BTDevice::create_device(d.clone());
-    	println!("{:?}", device);
-    	let uuids = device.get_uuids();
-    	println!("{:?}", uuids);
-    	'uuid_loop: for uuid in uuids {
-    		if uuid == BATTERY_SERVICE_UUID {
-    			println!("{:?} has battery service!", device.get_alias());
-    			println!("connect device...");
-    			if device.is_connected() {
-    				device.disconnect();
-    			}
-    			device.connect();
-    			println!("connected!!");
-    			break 'device_loop;
-    		}
-    	}
-    	println!("");
+        device = BTDevice::create_device(d.clone());
+        println!("{} {:?}", device.get_object_path(), device.get_alias());
+        let uuids = match device.get_uuids() {
+            Ok(u) => u,
+            Err(e) => return error(e),
+        };
+        println!("{:?}", uuids);
+        'uuid_loop: for uuid in uuids {
+            if uuid == BATTERY_SERVICE_UUID {
+                println!("{:?} has battery service!", device.get_alias());
+                if !device.is_connected().unwrap() {
+                    println!("connect device...");
+                    match device.connect() {
+                        Ok(_) => println!("connected!"),
+                        Err(e) => return error(e),
+                    }
+                }
+                break 'device_loop;
+            }
+        }
+        println!("");
     }
     adapter.stop_discovery();
     println!("wait for it!!");
-    thread::sleep(Duration::from_millis(3000));
-    let services = device.get_gatt_services();
+    // We need to wait a bit after calling connect to safely
+    // get the gatt services
+    thread::sleep(Duration::from_millis(1000));
+    let services = match device.get_gatt_services() {
+        Ok(s) => s,
+        Err(e) => return error(e),
+    };
     for service in services {
         let s = BTGATTService::new(service.clone());
-    	println!("{:?}", s);
-        let cs = s.get_characteristics();
-        for c in cs {
-            let characteristic = BTGATTCharacteristic::new(c.clone());
-            println!("{:?}", characteristic);
-            println!("Value: {:?}", characteristic.read_value());
+        println!("{:?}", s);
+        let characteristics = match s.get_characteristics() {
+            Ok(c) => c,
+            Err(e) => return error(e),
+        };
+        for characteristic in characteristics {
+            let c = BTGATTCharacteristic::new(characteristic.clone());
+            println!("{:?}", c);
+            println!("Value: {:?}", c.read_value());
         }
     }
+    device.disconnect();
 }

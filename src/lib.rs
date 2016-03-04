@@ -10,4 +10,4 @@ pub mod bluetooth_device;
 pub mod bluetooth_adapter;
 pub mod bluetooth_gatt_service;
 pub mod bluetooth_gatt_characteristic;
-pub mod bluetooth_utils;
+mod bluetooth_utils;
