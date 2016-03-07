@@ -24,6 +24,10 @@ impl BluetoothGATTService {
         bluetooth_utils::get_property(GATT_SERVICE_INTERFACE, &self.object_path, prop)
     }
 
+/*
+ * Properties
+ */
+
     pub fn get_primary(&self) -> Result<bool, String> {
         match self.get_property("Primary") {
             Ok(primary) => Ok(primary.inner::<bool>().unwrap()),

@@ -31,6 +31,19 @@ impl BluetoothAdapter {
         self.object_path.clone()
     }
 
+    pub fn get_first_device(&self) -> Result<BluetoothDevice, String> {
+        let devices = bluetooth_utils::list_devices(&self.object_path);
+
+        if devices.is_empty() {
+            return Err(String::from("No device found."))
+        }
+        Ok(BluetoothDevice::create_device(devices[0].clone()))
+    }
+
+    pub fn get_device_list(&self) -> Vec<String> {
+        bluetooth_utils::list_devices(&self.object_path)
+    }
+
     fn get_property(&self, prop: &str) -> Result<MessageItem, String> {
         bluetooth_utils::get_property(ADAPTER_INTERFACE, &self.object_path, prop)
     }
@@ -39,6 +52,10 @@ impl BluetoothAdapter {
     where T: Into<MessageItem> {
         bluetooth_utils::set_property(ADAPTER_INTERFACE, &self.object_path, prop, value)
     }
+
+/*
+ * Properties
+ */
 
     pub fn get_address(&self) -> Result<String, String> {
         match self.get_property("Address") {
@@ -117,19 +134,9 @@ impl BluetoothAdapter {
         }
     }
 
-
-    pub fn get_first_device(&self) -> Result<BluetoothDevice, String> {
-        let devices = bluetooth_utils::list_devices(&self.object_path);
-
-        if devices.is_empty() {
-            return Err(String::from("No device found."))
-        }
-        Ok(BluetoothDevice::create_device(devices[0].clone()))
-    }
-
-    pub fn get_device_list(&self) -> Vec<String> {
-        bluetooth_utils::list_devices(&self.object_path)
-    }
+/*
+ * Methods
+ */
 
     pub fn start_discovery(&self) -> Result<(), String> {
         let c = match Connection::get_private(BusType::System) {
@@ -154,5 +161,4 @@ impl BluetoothAdapter {
             Err(_) => Err(String::from("Error! Starting discovery.")),
         }
     }
-
 }

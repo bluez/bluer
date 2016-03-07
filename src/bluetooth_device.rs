@@ -35,6 +35,10 @@ impl BluetoothDevice {
         bluetooth_utils::set_property(DEVICE_INTERFACE, &self.object_path, prop, value)
     }
 
+/*
+ * Properties
+ */
+
     pub fn get_address(&self) -> Result<String, String> {
         match self.get_property("Address") {
             Ok(address) => Ok(String::from(address.inner::<&str>().unwrap())),
@@ -172,7 +176,7 @@ impl BluetoothDevice {
     }
 
 /*
- * METHOD_CALLS
+ * Methods
  */
 
     pub fn connect(&self) -> Result<(), String> {

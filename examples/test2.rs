@@ -78,6 +78,8 @@ fn main() {
             let c = BTGATTCharacteristic::new(characteristic.clone());
             println!("{:?}", c);
             println!("Value: {:?} == {:?}", c.read_value(), c.get_value());
+            println!("{:?}", c.write_value(vec![120u8]));
+            println!("Value: {:?} == {:?}", c.read_value(), c.get_value());
             let descriptors = match c.get_descriptors() {
                 Ok(d) => d,
                 Err(e) => return error(e),
@@ -85,6 +87,8 @@ fn main() {
             for descriptor in descriptors {
                 let d = BTGATTDescriptor::new(descriptor.clone());
                 println!("{:?}", d);
+                println!("Value: {:?} == {:?}", d.read_value(), d.get_value());
+                println!("{:?}", d.write_value(vec![0u8, 100u8]));
                 println!("Value: {:?} == {:?}", d.read_value(), d.get_value());
             }
 
