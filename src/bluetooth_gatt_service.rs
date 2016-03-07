@@ -50,4 +50,11 @@ impl BluetoothGATTService {
             Err(e) => Err(e),
         }
     }
+
+    pub fn get_device(&self) -> Result<String, String> {
+        match self.get_property("Device") {
+            Ok(device) => Ok(String::from(device.inner::<&str>().unwrap())),
+            Err(e) => Err(e),
+        }
+    }
 }
