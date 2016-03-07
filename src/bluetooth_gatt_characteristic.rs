@@ -39,11 +39,17 @@ impl BluetoothGATTCharacteristic {
         }
     }
 
-    pub fn get_value(&self) -> Result<u8, String> {
-        match self.get_property("Value") {
-            Ok(value) => Ok(value.inner::<u8>().unwrap()),
-            Err(e) => Err(e),
+    pub fn get_value(&self) -> Result<Vec<u8>, String> {
+        let value = match self.get_property("Value") {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
+        let z: &[MessageItem] = value.inner().unwrap();
+        let mut v: Vec<u8> = Vec::new();
+        for y in z {
+            v.push(y.inner::<u8>().unwrap());
         }
+        Ok(v)
     }
 
     pub fn get_descriptors(&self) -> Result<Vec<String>,String> {
@@ -89,8 +95,11 @@ impl BluetoothGATTCharacteristic {
             Ok(r) => r,
             Err(_) => return Err(String::from("Error! Read value.")),
         };
-        let items = reply.get_items();
-        let z: &[MessageItem] = items.get(0).unwrap().inner().unwrap();
+        let items: MessageItem = match reply.get1() {
+            Some(i) => i,
+            None => return Err(String::from("Error! Read value.")),
+        };
+        let z: &[MessageItem] = items.inner().unwrap();
         let mut v: Vec<u8> = Vec::new();
         for i in z {
             v.push(i.inner::<u8>().unwrap());
