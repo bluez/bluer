@@ -9,6 +9,7 @@ use blurz::bluetooth_adapter::BluetoothAdapter as BTAdapter;
 use blurz::bluetooth_device::BluetoothDevice as BTDevice;
 use blurz::bluetooth_gatt_service::BluetoothGATTService as BTGATTService;
 use blurz::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as BTGATTCharacteristic;
+use blurz::bluetooth_gatt_descriptor::BluetoothGATTDescriptor as BTGATTDescriptor;
 
 fn error(error: String) {
     println!("{}", error);
@@ -76,7 +77,17 @@ fn main() {
         for characteristic in characteristics {
             let c = BTGATTCharacteristic::new(characteristic.clone());
             println!("{:?}", c);
-            println!("Value: {:?}", c.read_value());
+            println!("Value: {:?} == {:?}", c.read_value(), c.get_value());
+            let descriptors = match c.get_descriptors() {
+                Ok(d) => d,
+                Err(e) => return error(e),
+            };
+            for descriptor in descriptors {
+                let d = BTGATTDescriptor::new(descriptor.clone());
+                println!("{:?}", d);
+                println!("Value: {:?} == {:?}", d.read_value(), d.get_value());
+            }
+
         }
     }
     device.disconnect();
