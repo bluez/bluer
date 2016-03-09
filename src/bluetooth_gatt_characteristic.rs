@@ -1,6 +1,8 @@
 use dbus::{Connection, BusType, Message, MessageItem};
 use bluetooth_utils;
 
+use std::error::Error;
+
 static SERVICE_NAME: &'static str = "org.bluez";
 static GATT_CHARACTERISTIC_INTERFACE: &'static str = "org.bluez.GattCharacteristic1";
 
@@ -21,33 +23,30 @@ impl BluetoothGATTCharacteristic {
         self.object_path.clone()
     }
 
-    fn get_property(&self, prop: &str) -> Result<MessageItem, String> {
+    fn get_property(&self, prop: &str) -> Result<MessageItem, Box<Error>> {
         bluetooth_utils::get_property(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, prop)
+    }
+
+    fn call_method(&self, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
+        bluetooth_utils::call_method(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, method, param)
     }
 
 /*
  * Properties
  */
 
-    pub fn get_uuid(&self) -> Result<String, String> {
-        match self.get_property("UUID") {
-            Ok(uuid) => Ok(String::from(uuid.inner::<&str>().unwrap())),
-            Err(e) => Err(e),
-        }
+    pub fn get_uuid(&self) -> Result<String, Box<Error>> {
+        let uuid = try!(self.get_property("UUID"));
+        Ok(String::from(uuid.inner::<&str>().unwrap()))
     }
 
-    pub fn get_service(&self) -> Result<String, String> {
-        match self.get_property("Service") {
-            Ok(service) => Ok(String::from(service.inner::<&str>().unwrap())),
-            Err(e) => Err(e),
-        }
+    pub fn get_service(&self) -> Result<String, Box<Error>> {
+        let service = try!(self.get_property("Service"));
+        Ok(String::from(service.inner::<&str>().unwrap()))
     }
 
-    pub fn get_value(&self) -> Result<Vec<u8>, String> {
-        let value = match self.get_property("Value") {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+    pub fn get_value(&self) -> Result<Vec<u8>, Box<Error>> {
+        let value = try!(self.get_property("Value"));
         let z: &[MessageItem] = value.inner().unwrap();
         let mut v: Vec<u8> = Vec::new();
         for y in z {
@@ -56,11 +55,8 @@ impl BluetoothGATTCharacteristic {
         Ok(v)
     }
 
-    pub fn get_descriptors(&self) -> Result<Vec<String>,String> {
-        let descriptors = match self.get_property("Descriptors") {
-            Ok(d) => d,
-            Err(e) => return Err(e),
-        };
+    pub fn get_descriptors(&self) -> Result<Vec<String>, Box<Error>> {
+        let descriptors = try!(self.get_property("Descriptors"));
         let z: &[MessageItem] = descriptors.inner().unwrap();
         let mut v: Vec<String> = Vec::new();
         for y in z {
@@ -69,11 +65,8 @@ impl BluetoothGATTCharacteristic {
         Ok(v)
     }
 
-    pub fn get_flags(&self) -> Result<Vec<String>,String> {
-        let flags = match self.get_property("Flags") {
-            Ok(f) => f,
-            Err(e) => return Err(e),
-        };
+    pub fn get_flags(&self) -> Result<Vec<String>, Box<Error>> {
+        let flags = try!(self.get_property("Flags"));
         let z: &[MessageItem] = flags.inner().unwrap();
         let mut v: Vec<String> = Vec::new();
         for y in z {
@@ -82,31 +75,20 @@ impl BluetoothGATTCharacteristic {
         Ok(v)
     }
 
-    pub fn is_notifying(&self) -> Result<bool, String> {
-        match self.get_property("Notifying") {
-            Ok(notifying) => Ok(notifying.inner::<bool>().unwrap()),
-            Err(e) => Err(e),
-        }
+    pub fn is_notifying(&self) -> Result<bool, Box<Error>> {
+        let notifying = try!(self.get_property("Notifying"));
+        Ok(notifying.inner::<bool>().unwrap())
     }
 
 /*
  * Methods
  */
 
-    pub fn read_value(&self) -> Result<Vec<u8>, String> {
-        let c = match Connection::get_private(BusType::System) {
-            Ok(conn) => conn,
-            Err(_) => return Err(String::from("Error! Connecting to dbus."))
-        };
-        let m = Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "ReadValue").unwrap();
-        let reply = match c.send_with_reply_and_block(m, 1000) {
-            Ok(r) => r,
-            Err(_) => return Err(String::from("Error! Read value.")),
-        };
-        let items: MessageItem = match reply.get1() {
-            Some(i) => i,
-            None => return Err(String::from("Error! Read value.")),
-        };
+    pub fn read_value(&self) -> Result<Vec<u8>, Box<Error>> {
+        let c = try!(Connection::get_private(BusType::System));
+        let m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "ReadValue"));
+        let reply = try!(c.send_with_reply_and_block(m, 1000));
+        let items: MessageItem = reply.get1().unwrap();
         let z: &[MessageItem] = items.inner().unwrap();
         let mut v: Vec<u8> = Vec::new();
         for i in z {
@@ -115,12 +97,7 @@ impl BluetoothGATTCharacteristic {
         Ok(v)
     }
 
-    pub fn write_value(&self, values: Vec<u8>) -> Result<(), String> {
-        let c = match Connection::get_private(BusType::System) {
-            Ok(conn) => conn,
-            Err(_) => return Err(String::from("Error! Connecting to dbus."))
-        };
-        let mut m = Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "WriteValue").unwrap();
+    pub fn write_value(&self, values: Vec<u8>) -> Result<(), Box<Error>> {
         let args = {
             let mut res: Vec<MessageItem> = Vec::new();
             for v in values {
@@ -128,35 +105,14 @@ impl BluetoothGATTCharacteristic {
             }
             res
         };
-        m.append_items(&[MessageItem::new_array(args).unwrap()]);
-
-        match c.send_with_reply_and_block(m, 1000) {
-            Ok(_) => Ok(()),
-            Err(e) => {println!("{:?}", e); Err(String::from("Error! Write value."))}
-        }
+        self.call_method("WriteValue", Some([MessageItem::new_array(args).unwrap()]))
     }
 
-    pub fn start_notify(&self) -> Result<(), String> {
-        let c = match Connection::get_private(BusType::System) {
-            Ok(conn) => conn,
-            Err(_) => return Err(String::from("Error! Connecting to dbus."))
-        };
-        let m = Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "StartNotify").unwrap();
-        match c.send_with_reply_and_block(m, 1000) {
-            Ok(_) => Ok(()),
-            Err(e) => {println!("{:?}", e); Err(String::from("Error! Start notify."))}
-        }
+    pub fn start_notify(&self) -> Result<(), Box<Error>> {
+        self.call_method("StartNotify", None)
     }
 
-    pub fn stop_notify(&self) -> Result<(), String> {
-        let c = match Connection::get_private(BusType::System) {
-            Ok(conn) => conn,
-            Err(_) => return Err(String::from("Error! Connecting to dbus."))
-        };
-        let m = Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "StopNotify").unwrap();
-        match c.send_with_reply_and_block(m, 1000) {
-            Ok(_) => Ok(()),
-            Err(e) => {println!("{:?}", e); Err(String::from("Error! Start notify."))}
-        }
+    pub fn stop_notify(&self) -> Result<(), Box<Error>> {
+        self.call_method("StopNotify", None)
     }
 }
