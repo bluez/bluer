@@ -28,6 +28,17 @@ impl BluetoothAdapter {
         Ok(BluetoothAdapter::new(adapters[0].clone()))
     }
 
+    pub fn create_adapter(object_path: String) -> Result<BluetoothAdapter, Box<Error>> {
+        let adapters = try!(bluetooth_utils::get_adapters());
+
+        for adapter in adapters {
+            if adapter == object_path {
+                return Ok(BluetoothAdapter::new(adapter.clone()));
+            }
+        }
+        Err(Box::from("Bluetooth adapter not found"))
+    }
+
     pub fn get_object_path(&self) -> String {
         self.object_path.clone()
     }
