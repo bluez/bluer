@@ -164,7 +164,7 @@ impl BluetoothAdapter {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n215
-    fn get_modalias(&self) ->  Result<(String, u32, u32, u32), Box<Error>> {
+    pub fn get_modalias(&self) ->  Result<(String, u32, u32, u32), Box<Error>> {
         let modalias = try!(self.get_property("Modalias"));
         let m = modalias.inner::<&str>().unwrap();
         let ids: Vec<&str> = m.split(":").collect();
@@ -180,7 +180,7 @@ impl BluetoothAdapter {
         (device[0] as u32) * 16 * 16 + (device[1] as u32)))
     }
 
-    pub fn get_vendor_id_soruce(&self) -> Result<String, Box<Error>> {
+    pub fn get_vendor_id_source(&self) -> Result<String, Box<Error>> {
         let (vendor_id_source,_,_,_) = try!(self.get_modalias());
         Ok(vendor_id_source)
     }

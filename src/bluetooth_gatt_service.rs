@@ -37,7 +37,7 @@ impl BluetoothGATTService {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n37
-    pub fn get_primary(&self) -> Result<bool, Box<Error>> {
+    pub fn is_primary(&self) -> Result<bool, Box<Error>> {
         let primary = try!(self.get_property("Primary"));
         Ok(primary.inner::<bool>().unwrap())
     }
