@@ -17,7 +17,7 @@ fn test2() -> Result<(), Box<Error>> {
     try!(adapter.start_discovery());
     let devices = try!(adapter.get_device_list());
     if devices.is_empty() {
-        adapter.stop_discovery();
+        adapter.stop_discovery().ok();
         return Err(Box::from("No device found"));
     }
     println!("{} device(s) found", devices.len());
@@ -31,7 +31,7 @@ fn test2() -> Result<(), Box<Error>> {
             if uuid == BATTERY_SERVICE_UUID {
                 println!("{:?} has battery service!", device.get_alias());
                 println!("connect device...");
-                device.connect();
+                device.connect().ok();
                 if try!(device.is_connected()) {
                     println!("checking gatt...");
                     // We need to wait a bit after calling connect to safely
@@ -48,7 +48,7 @@ fn test2() -> Result<(), Box<Error>> {
         }
         println!("");
     }
-    adapter.stop_discovery();
+    adapter.stop_discovery().ok();
     if !try!(device.is_connected()) {
         return Err(Box::from("No connectable device found"));
     }
