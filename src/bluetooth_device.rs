@@ -192,13 +192,7 @@ impl BluetoothDevice {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n215
     pub fn get_gatt_services(&self) -> Result<Vec<String>, Box<Error>> {
-        let services = try!(self.get_property("GattServices"));
-        let z: &[MessageItem] = services.inner().unwrap();
-        let mut v: Vec<String> = Vec::new();
-        for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
-        }
-        Ok(v)
+        bluetooth_utils::list_services(&self.object_path)
     }
 
 /*

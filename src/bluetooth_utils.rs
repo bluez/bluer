@@ -3,6 +3,9 @@ use std::error::Error;
 
 static ADAPTER_INTERFACE: &'static str = "org.bluez.Adapter1";
 static DEVICE_INTERFACE: &'static str = "org.bluez.Device1";
+static SERVICE_INTERFACE: &'static str = "org.bluez.GattService1";
+static CHARACTERISTIC_INTERFACE: &'static str = "org.bluez.GattCharacteristic1";
+static DESCRIPTOR_INTERFACE: &'static str = "org.bluez.GattDescriptor1";
 static SERVICE_NAME: &'static str = "org.bluez";
 
 fn get_managed_objects(c: &Connection) ->  Result<Vec<MessageItem>, Box<Error>> {
@@ -32,6 +35,22 @@ pub fn get_adapters() -> Result<Vec<String>, Box<Error>> {
 }
 
 pub fn list_devices(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(DEVICE_INTERFACE, adapter_path, "Adapter")
+}
+
+pub fn list_services(device_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(SERVICE_INTERFACE, device_path, "Device")
+}
+
+pub fn list_characteristics(device_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(CHARACTERISTIC_INTERFACE, device_path, "Service")
+}
+
+pub fn list_descriptors(device_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(DESCRIPTOR_INTERFACE, device_path, "Characteristic")
+}
+
+fn list_item(item_interface: &str, item_path: &str, item_property: &str) -> Result<Vec<String>, Box<Error>> {
     let mut v: Vec<String> = Vec::new();
     let c = try!(Connection::get_private(BusType::System));
     let objects: Vec<MessageItem> = try!(get_managed_objects(&c));
@@ -42,11 +61,11 @@ pub fn list_devices(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
         for interface in x {
             let (i,_) = interface.inner().unwrap();
             let name: &str = i.inner().unwrap();
-            if name == DEVICE_INTERFACE {
+            if name == item_interface {
                 let objpath: &str = path.inner().unwrap();
-                let prop = try!(get_property(DEVICE_INTERFACE, objpath, "Adapter"));
-                let adapter = prop.inner::<&str>().unwrap();
-                if adapter == adapter_path {
+                let prop = try!(get_property(item_interface, objpath, item_property));
+                let prop_path = prop.inner::<&str>().unwrap();
+                if prop_path == item_path {
                     v.push(String::from(objpath));
                 }
             }

@@ -49,13 +49,7 @@ impl BluetoothGATTService {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n48
-    pub fn get_characteristics(&self) -> Result<Vec<String>,Box<Error>> {
-        let characteristics = try!(self.get_property("Characteristics"));
-        let z: &[MessageItem] = characteristics.inner().unwrap();
-        let mut v: Vec<String> = Vec::new();
-        for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
-        }
-        Ok(v)
+    pub fn get_gatt_characteristics(&self) -> Result<Vec<String>,Box<Error>> {
+        bluetooth_utils::list_characteristics(&self.object_path)
     }
 }

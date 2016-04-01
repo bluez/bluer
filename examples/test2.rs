@@ -36,7 +36,7 @@ fn test2() -> Result<(), Box<Error>> {
                     println!("checking gatt...");
                     // We need to wait a bit after calling connect to safely
                     // get the gatt services
-                    thread::sleep(Duration::from_millis(2000));
+                    thread::sleep(Duration::from_millis(5000));
                     match device.get_gatt_services() {
                         Ok(_) => break 'device_loop,
                         Err(e) => println!("{:?}", e),
@@ -56,12 +56,12 @@ fn test2() -> Result<(), Box<Error>> {
     for service in services {
         let s = Service::new(service.clone());
         println!("{:?}", s);
-        let characteristics = try!(s.get_characteristics());
+        let characteristics = try!(s.get_gatt_characteristics());
         for characteristic in characteristics {
             let c = Characteristic::new(characteristic.clone());
             println!("{:?}", c);
             println!("Value: {:?}", c.read_value());
-            let descriptors = try!(c.get_descriptors());
+            let descriptors = try!(c.get_gatt_descriptors());
             for descriptor in descriptors {
                 let d = Descriptor::new(descriptor.clone());
                 println!("{:?}", d);

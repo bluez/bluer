@@ -76,14 +76,8 @@ impl BluetoothGATTCharacteristic {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n156
-    pub fn get_descriptors(&self) -> Result<Vec<String>, Box<Error>> {
-        let descriptors = try!(self.get_property("Descriptors"));
-        let z: &[MessageItem] = descriptors.inner().unwrap();
-        let mut v: Vec<String> = Vec::new();
-        for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
-        }
-        Ok(v)
+    pub fn get_gatt_descriptors(&self) -> Result<Vec<String>, Box<Error>> {
+        bluetooth_utils::list_descriptors(&self.object_path)
     }
 
 /*
