@@ -49,7 +49,7 @@ impl BluetoothAdapter {
         if devices.is_empty() {
             return Err(Box::from("No device found."))
         }
-        Ok(BluetoothDevice::create_device(devices[0].clone()))
+        Ok(BluetoothDevice::new(devices[0].clone()))
     }
 
     pub fn get_device_list(&self) -> Result<Vec<String>, Box<Error>> {

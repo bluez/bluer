@@ -21,9 +21,9 @@ fn test2() -> Result<(), Box<Error>> {
         return Err(Box::from("No device found"));
     }
     println!("{} device(s) found", devices.len());
-    let mut device: Device = Device::create_device("".to_string());
+    let mut device: Device = Device::new("".to_string());
     'device_loop: for d in devices {
-        device = Device::create_device(d.clone());
+        device = Device::new(d.clone());
         println!("{} {:?}", device.get_object_path(), device.get_alias());
         let uuids = try!(device.get_uuids());
         println!("{:?}", uuids);

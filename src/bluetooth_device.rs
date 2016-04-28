@@ -12,15 +12,11 @@ pub struct BluetoothDevice {
 }
 
 impl BluetoothDevice {
-    fn new(object_path: String)
+    pub fn new(object_path: String)
            -> BluetoothDevice {
         BluetoothDevice {
             object_path: object_path
         }
-    }
-
-    pub fn create_device(object_path: String) -> BluetoothDevice {
-        BluetoothDevice::new(object_path)
     }
 
     pub fn get_object_path(&self) -> String {
