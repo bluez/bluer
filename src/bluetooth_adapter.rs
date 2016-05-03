@@ -217,12 +217,12 @@ impl BluetoothAdapter {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n12
     pub fn start_discovery(&self) -> Result<(), Box<Error>> {
-        self.call_method("StartDiscovery", None)
+        Err(Box::from("Deprecated, use Discovery Session"))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n27
     pub fn stop_discovery(&self) -> Result<(), Box<Error>> {
-        self.call_method("StopDiscovery", None)
+        Err(Box::from("Deprecated, use Discovery Session"))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40

@@ -1,6 +1,7 @@
 extern crate blurz;
 
 static BATTERY_SERVICE_UUID: &'static str = "0000180f-0000-1000-8000-00805f9b34fb";
+static COLOR_PICKER_SERVICE_UUID: &'static str = "00001812-0000-1000-8000-00805f9b34fb";
 
 use std::error::Error;
 use std::time::Duration;
@@ -11,13 +12,23 @@ use blurz::bluetooth_device::BluetoothDevice as Device;
 use blurz::bluetooth_gatt_service::BluetoothGATTService as Service;
 use blurz::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as Characteristic;
 use blurz::bluetooth_gatt_descriptor::BluetoothGATTDescriptor as Descriptor;
+use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
 
 fn test2() -> Result<(), Box<Error>> {
     let adapter: Adapter = try!(Adapter::init());
-    try!(adapter.start_discovery());
+    let session = try!(DiscoverySession::create_session(adapter.get_object_path()));
+    try!(session.start_discovery());
+    //let mut devices = vec!();
+    for _ in 0..5 {
+        let devices = try!(adapter.get_device_list());
+        if !devices.is_empty() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(1000));
+    }
+    try!(session.stop_discovery());
     let devices = try!(adapter.get_device_list());
     if devices.is_empty() {
-        adapter.stop_discovery().ok();
         return Err(Box::from("No device found"));
     }
     println!("{} device(s) found", devices.len());
@@ -28,8 +39,9 @@ fn test2() -> Result<(), Box<Error>> {
         let uuids = try!(device.get_uuids());
         println!("{:?}", uuids);
         'uuid_loop: for uuid in uuids {
-            if uuid == BATTERY_SERVICE_UUID {
-                println!("{:?} has battery service!", device.get_alias());
+            if uuid == COLOR_PICKER_SERVICE_UUID ||
+               uuid == BATTERY_SERVICE_UUID {
+                println!("{:?} has a service!", device.get_alias());
                 println!("connect device...");
                 device.connect().ok();
                 if try!(device.is_connected()) {
