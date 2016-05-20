@@ -49,6 +49,10 @@ impl BluetoothGATTService {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n48
+    pub fn get_includes(&self) -> Result<Vec<String>, Box<Error>> {
+        Err(Box::from("Not implemented"))
+    }
+
     pub fn get_gatt_characteristics(&self) -> Result<Vec<String>,Box<Error>> {
         bluetooth_utils::list_characteristics(&self.object_path)
     }
