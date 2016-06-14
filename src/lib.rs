@@ -7,7 +7,11 @@ pub use bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
 pub use bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
 pub use bluetooth_gatt_service::BluetoothGATTService;
 pub use bluetooth_discovery_session::BluetoothDiscoverySession;
+pub use bluetooth_le_advertising_data::BluetoothAdvertisingData;
+pub use bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
 
+pub mod bluetooth_le_advertising_data;
+pub mod bluetooth_le_advertising_manager;
 pub mod bluetooth_device;
 pub mod bluetooth_adapter;
 pub mod bluetooth_gatt_characteristic;
