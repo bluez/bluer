@@ -14,7 +14,7 @@ impl BluetoothAdvertisingData {
 	pub fn new(object_path: String)
            -> BluetoothAdvertisingData {
         BluetoothAdvertisingData {
-            object_path: object_path
+            object_path: object_path,
         }
     }
 

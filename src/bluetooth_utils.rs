@@ -7,6 +7,8 @@ static SERVICE_INTERFACE: &'static str = "org.bluez.GattService1";
 static CHARACTERISTIC_INTERFACE: &'static str = "org.bluez.GattCharacteristic1";
 static DESCRIPTOR_INTERFACE: &'static str = "org.bluez.GattDescriptor1";
 static SERVICE_NAME: &'static str = "org.bluez";
+static LEADVERTISING_DATA_INTERFACE: &'static str = "org.bluez.LEAdvertisement1";
+static LEADVERTISING_MANAGER_INTERFACE: &'static str = "org.bluez.LEAdvertisingManager1";
 
 fn get_managed_objects(c: &Connection) ->  Result<Vec<MessageItem>, Box<Error>> {
     let m = try!(Message::new_method_call(SERVICE_NAME, "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"));
@@ -34,6 +36,26 @@ pub fn get_adapters() -> Result<Vec<String>, Box<Error>> {
     Ok(adapters)
 }
 
+pub fn get_ad_man() -> Result<Vec<String>, Box<Error>> {
+    let mut mans: Vec<String> = Vec::new();
+    let c = try!(Connection::get_private(BusType::System));
+    let objects: Vec<MessageItem> = try!(get_managed_objects(&c));
+    let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
+    for y in z {
+        let (path, interfaces) = y.inner().unwrap();
+        let x: &[MessageItem] = interfaces.inner().unwrap();
+        for interface in x {
+            let (i,_) = interface.inner().unwrap();
+            let name: &str = i.inner().unwrap();
+            if name == LEADVERTISING_MANAGER_INTERFACE {
+                let p: &str = path.inner().unwrap();
+                mans.push(String::from(p));
+            }
+        }
+    }
+    Ok(mans)
+}
+
 pub fn list_devices(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
     list_item(DEVICE_INTERFACE, adapter_path, "Adapter")
 }
@@ -48,6 +70,14 @@ pub fn list_characteristics(device_path: &String) -> Result<Vec<String>, Box<Err
 
 pub fn list_descriptors(device_path: &String) -> Result<Vec<String>, Box<Error>> {
     list_item(DESCRIPTOR_INTERFACE, device_path, "Characteristic")
+}
+
+pub fn list_addata_1(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
+}
+
+pub fn list_addata_2(device_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
 }
 
 fn list_item(item_interface: &str, item_path: &str, item_property: &str) -> Result<Vec<String>, Box<Error>> {

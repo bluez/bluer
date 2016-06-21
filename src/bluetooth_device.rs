@@ -3,6 +3,7 @@ use dbus::MessageItem;
 use rustc_serialize::hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
+use bluetooth_le_advertising_data::BluetoothAdvertisingData;
 
 static DEVICE_INTERFACE: &'static str = "org.bluez.Device1";
 
@@ -34,6 +35,15 @@ impl BluetoothDevice {
 
     fn call_method(&self, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(DEVICE_INTERFACE, &self.object_path, method, param)
+    }
+
+    pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<Error>> {
+        let addata = try!(bluetooth_utils::list_addata_2(&self.object_path));
+
+        if addata.is_empty() {
+            return Err(Box::from("No addata found."))
+        }
+        Ok(BluetoothAdvertisingData::new(addata[0].clone()))
     }
 
 /*
