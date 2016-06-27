@@ -37,7 +37,7 @@ pub fn get_adapters() -> Result<Vec<String>, Box<Error>> {
 }
 
 pub fn get_ad_man() -> Result<Vec<String>, Box<Error>> {
-    let mut mans: Vec<String> = Vec::new();
+    let mut managers: Vec<String> = Vec::new();
     let c = try!(Connection::get_private(BusType::System));
     let objects: Vec<MessageItem> = try!(get_managed_objects(&c));
     let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
@@ -49,11 +49,11 @@ pub fn get_ad_man() -> Result<Vec<String>, Box<Error>> {
             let name: &str = i.inner().unwrap();
             if name == LEADVERTISING_MANAGER_INTERFACE {
                 let p: &str = path.inner().unwrap();
-                mans.push(String::from(p));
+                managers.push(String::from(p));
             }
         }
     }
-    Ok(mans)
+    Ok(managers)
 }
 
 pub fn list_devices(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {

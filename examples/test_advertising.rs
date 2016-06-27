@@ -17,6 +17,8 @@ use blurz::bluetooth_le_advertising_manager::BluetoothAdvertisingManager as Mana
 
 static LEADVERTISING_MANAGER_INTERFACE: &'static str = "org.bluez.LEAdvertisingManager1";
 static LEADVERTISING_DATA_INTERFACE: &'static str = "org.bluez.LEAdvertisement1";
+static BATTERY_SERVICE_UUID: &'static str = "0000180f-0000-1000-8000-00805f9b34fb";
+static COLOR_PICKER_SERVICE_UUID: &'static str = "00001812-0000-1000-8000-00805f9b34fb";
 
 fn test_advertising() -> Result<(), Box<Error>>{
 	let adapter: Adapter = try!(Adapter::init());
@@ -36,18 +38,44 @@ fn test_advertising() -> Result<(), Box<Error>>{
         return Err(Box::from("No device found"));
     }
     println!("{} device(s) found", devices.len());
-    let manager: Manager = try!(Manager::init());
-    println!("{:?}", manager);
-    try!(manager.register_advertisement(Some([LEADVERTISING_DATA_INTERFACE.into(), .into()])));
-    /*let addata1: AdData = try!(adapter.get_addata());
-    println!("{:?}", addata1);
-    let device: Device = Device::new(devices[4].clone());
-    println!("{:?}", device);
-    let addata2: AdData = try!(device.get_addata());
-    println!("{:?}", addata2.include_tx_power());*/
+    let mut device: Device = Device::new("".to_string());
+    'device_loop: for d in devices {
+        device = Device::new(d.clone());
+        println!("{} {:?}", device.get_object_path(), device.get_alias());
+        let uuids = try!(device.get_uuids());
+        println!("{:?}", uuids);
+        'uuid_loop: for uuid in uuids {
+            if uuid == COLOR_PICKER_SERVICE_UUID ||
+               uuid == BATTERY_SERVICE_UUID {
+                println!("{:?} has a service!", device.get_alias());
+                println!("connect device...");
+                device.connect().ok();
+                if try!(device.is_connected()) {
+                    println!("checking gatt...");
+                    // We need to wait a bit after calling connect to safely
+                    // get the gatt services
+                    thread::sleep(Duration::from_millis(5000));
+                    match device.get_gatt_services() {
+                        Ok(_) => break 'device_loop,
+                        Err(e) => println!("{:?}", e),
+                    }
+                } else {
+                    println!("could not connect");
+                }
+            }
+        }
+        println!("");
+    }
+    adapter.stop_discovery().ok();
+    if !try!(device.is_connected()) {
+        return Err(Box::from("No connectable device found"));
+    }
 
-
-
+    let addata = AdData::new(LEADVERTISING_DATA_INTERFACE.to_string());
+    
+    let manager = try!(Manager::create_adv_manager());
+    println!("{:?} : {:?}", manager, manager.get_conn());
+    try!(manager.register_advertisement([addata.get_object_path().into(), MessageItem::DictEntry(Box::new(MessageItem::Byte(0)), Box::new(MessageItem::Byte(0)))]));
 
     Ok(())
 }
