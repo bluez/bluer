@@ -18,7 +18,7 @@ impl BluetoothGATTService {
         }
     }
 
-    pub fn get_object_path(&self) -> String {
+    pub fn get_id(&self) -> String {
         self.object_path.clone()
     }
 

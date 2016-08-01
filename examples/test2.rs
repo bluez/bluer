@@ -16,7 +16,7 @@ use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySe
 
 fn test2() -> Result<(), Box<Error>> {
     let adapter: Adapter = try!(Adapter::init());
-    let session = try!(DiscoverySession::create_session(adapter.get_object_path()));
+    let session = try!(DiscoverySession::create_session(adapter.get_id()));
     try!(session.start_discovery());
     //let mut devices = vec!();
     for _ in 0..5 {
@@ -35,7 +35,7 @@ fn test2() -> Result<(), Box<Error>> {
     let mut device: Device = Device::new("".to_string());
     'device_loop: for d in devices {
         device = Device::new(d.clone());
-        println!("{} {:?}", device.get_object_path(), device.get_alias());
+        println!("{} {:?}", device.get_id(), device.get_alias());
         let uuids = try!(device.get_uuids());
         println!("{:?}", uuids);
         'uuid_loop: for uuid in uuids {
