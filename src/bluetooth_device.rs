@@ -178,12 +178,36 @@ impl BluetoothDevice {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n204
     pub fn get_manufacturer_data(&self) -> Result<HashMap<u16, Vec<u8>>, Box<Error>> {
-        unimplemented!()
+        let manufacturer_data_array = try!(self.get_property("ManufacturerData"));
+        let mut m = HashMap::new();
+        let dict_vec = manufacturer_data_array.inner::<&Vec<MessageItem>>().unwrap();
+        for dict in dict_vec {
+            let (key, value) = dict.inner::<(&MessageItem, &MessageItem)>().unwrap();
+            let v = value.inner::<&MessageItem>().unwrap()
+                         .inner::<&Vec<MessageItem>>().unwrap()
+                         .into_iter()
+                         .map(|b| b.inner::<u8>().unwrap_or(0))
+                         .collect();
+            m.insert(key.inner::<u16>().unwrap(), v);
+        }
+        Ok(m)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n210
     pub fn get_service_data(&self) -> Result<HashMap<String, Vec<u8>>, Box<Error>> {
-        unimplemented!()
+        let service_data_array = try!(self.get_property("ServiceData"));
+        let mut m = HashMap::new();
+        let dict_vec = service_data_array.inner::<&Vec<MessageItem>>().unwrap();
+        for dict in dict_vec {
+            let (key, value) = dict.inner::<(&MessageItem, &MessageItem)>().unwrap();
+            let v = value.inner::<&MessageItem>().unwrap()
+                         .inner::<&Vec<MessageItem>>().unwrap()
+                         .into_iter()
+                         .map(|b| b.inner::<u8>().unwrap_or(0))
+                         .collect();
+            m.insert(key.inner::<&str>().unwrap().to_string(), v);
+        }
+        Ok(m)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n215
