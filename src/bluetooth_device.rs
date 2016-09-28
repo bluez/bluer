@@ -231,7 +231,7 @@ impl BluetoothDevice {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n43
     pub fn connect_profile(&self, uuid: String) -> Result<(), Box<Error>>{
-        self.call_method("Connectprofile", Some([uuid.into()]))
+        self.call_method("ConnectProfile", Some([uuid.into()]))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n55
