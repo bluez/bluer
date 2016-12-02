@@ -227,6 +227,6 @@ impl BluetoothAdapter {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
     pub fn remove_device(&self, device: String) -> Result<(), Box<Error>> {
-        self.call_method("RemoveDevice", Some([device.into()]))
+        self.call_method("RemoveDevice", Some([MessageItem::ObjectPath(device.into())]))
     }
 }
