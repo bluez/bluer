@@ -13,5 +13,5 @@ name = "blurz"
 path = "src/lib.rs"
 
 [dependencies]
-dbus = "0.3.2"
+dbus = "0.5.1"
 rustc-serialize = "0.3"
