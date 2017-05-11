@@ -1,6 +1,7 @@
 use dbus::{Connection, BusType, Message, MessageItem};
 use bluetooth_utils;
 
+use std::borrow::Cow;
 use std::error::Error;
 
 static SERVICE_NAME: &'static str = "org.bluez";
@@ -27,7 +28,7 @@ impl BluetoothGATTCharacteristic {
         bluetooth_utils::get_property(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, prop)
     }
 
-    fn call_method(&self, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
+    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, method, param)
     }
 
@@ -85,9 +86,19 @@ impl BluetoothGATTCharacteristic {
  */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n72
-    pub fn read_value(&self) -> Result<Vec<u8>, Box<Error>> {
+    pub fn read_value(&self, offset: Option<u16>) -> Result<Vec<u8>, Box<Error>> {
         let c = try!(Connection::get_private(BusType::System));
-        let m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "ReadValue"));
+        let mut m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "ReadValue"));
+        m.append_items(&[
+            MessageItem::Array(
+                match offset {
+                    Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
+                                    Box::new(MessageItem::Variant(Box::new(o.into()))))],
+                    None => vec![],
+                },
+                Cow::Borrowed("{sv}")
+            )
+        ]);
         let reply = try!(c.send_with_reply_and_block(m, 1000));
         let items: MessageItem = reply.get1().unwrap();
         let z: &[MessageItem] = items.inner().unwrap();
@@ -99,15 +110,25 @@ impl BluetoothGATTCharacteristic {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n84
-    pub fn write_value(&self, values: Vec<u8>) -> Result<(), Box<Error>> {
-        let args = {
+    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<(), Box<Error>> {
+        let values_msgs = {
             let mut res: Vec<MessageItem> = Vec::new();
             for v in values {
                 res.push(v.into());
             }
             res
         };
-        self.call_method("WriteValue", Some([MessageItem::new_array(args).unwrap()]))
+        self.call_method("WriteValue", Some(&[
+            MessageItem::new_array(values_msgs).unwrap(),
+            MessageItem::Array(
+                match offset {
+                    Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
+                                    Box::new(MessageItem::Variant(Box::new(o.into()))))],
+                    None => vec![],
+                },
+                Cow::Borrowed("{sv}")
+            )
+        ]))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96

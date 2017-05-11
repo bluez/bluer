@@ -87,11 +87,11 @@ where T: Into<MessageItem> {
     Ok(try!(p.set(prop, value.into())))
 }
 
-pub fn call_method(interface: &str, object_path: &str, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
+pub fn call_method(interface: &str, object_path: &str, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
     let c = try!(Connection::get_private(BusType::System));
     let mut m = try!(Message::new_method_call(SERVICE_NAME, object_path, interface, method));
     match param {
-        Some(p) => m.append_items(&p),
+        Some(p) => m.append_items(p),
         None => (),
     };
     try!(c.send_with_reply_and_block(m, 1000));
