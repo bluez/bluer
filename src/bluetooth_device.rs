@@ -32,7 +32,7 @@ impl BluetoothDevice {
         bluetooth_utils::set_property(DEVICE_INTERFACE, &self.object_path, prop, value)
     }
 
-    fn call_method(&self, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
+    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(DEVICE_INTERFACE, &self.object_path, method, param)
     }
 
@@ -231,12 +231,12 @@ impl BluetoothDevice {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n43
     pub fn connect_profile(&self, uuid: String) -> Result<(), Box<Error>>{
-        self.call_method("ConnectProfile", Some([uuid.into()]))
+        self.call_method("ConnectProfile", Some(&[uuid.into()]))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n55
     pub fn disconnect_profile(&self, uuid: String) -> Result<(), Box<Error>>{
-        self.call_method("DisconnectProfile", Some([uuid.into()]))
+        self.call_method("DisconnectProfile", Some(&[uuid.into()]))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70

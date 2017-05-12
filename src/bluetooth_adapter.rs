@@ -65,7 +65,7 @@ impl BluetoothAdapter {
         bluetooth_utils::set_property(ADAPTER_INTERFACE, &self.object_path, prop, value)
     }
 
-    fn call_method(&self, method: &str, param: Option<[MessageItem; 1]>) -> Result<(), Box<Error>> {
+    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(ADAPTER_INTERFACE, &self.object_path, method, param)
     }
 
@@ -227,6 +227,6 @@ impl BluetoothAdapter {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
     pub fn remove_device(&self, device: String) -> Result<(), Box<Error>> {
-        self.call_method("RemoveDevice", Some([MessageItem::ObjectPath(device.into())]))
+        self.call_method("RemoveDevice", Some(&[MessageItem::ObjectPath(device.into())]))
     }
 }
