@@ -72,12 +72,12 @@ fn test2() -> Result<(), Box<Error>> {
         for characteristic in characteristics {
             let c = Characteristic::new(characteristic.clone());
             println!("{:?}", c);
-            println!("Value: {:?}", c.read_value());
+            println!("Value: {:?}", c.read_value(None));
             let descriptors = try!(c.get_gatt_descriptors());
             for descriptor in descriptors {
                 let d = Descriptor::new(descriptor.clone());
                 println!("{:?}", d);
-                println!("Value: {:?}", d.read_value());
+                println!("Value: {:?}", d.read_value(None));
             }
 
         }
