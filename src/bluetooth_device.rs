@@ -1,6 +1,6 @@
 use bluetooth_utils;
 use dbus::MessageItem;
-use rustc_serialize::hex::FromHex;
+use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -134,9 +134,9 @@ impl BluetoothDevice {
         let ids: Vec<&str> = m.split(":").collect();
 
         let source = String::from(ids[0]);
-        let vendor = ids[1][1..5].from_hex().unwrap();
-        let product = ids[1][6..10].from_hex().unwrap();
-        let device = ids[1][11..15].from_hex().unwrap();
+        let vendor = Vec::from_hex(ids[1][1..5].to_string()).unwrap();
+        let product = Vec::from_hex(ids[1][6..10].to_string()).unwrap();
+        let device = Vec::from_hex(ids[1][11..15].to_string()).unwrap();
 
         Ok((source,
         (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),

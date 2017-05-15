@@ -14,4 +14,4 @@ path = "src/lib.rs"
 
 [dependencies]
 dbus = "0.5.1"
-rustc-serialize = "0.3"
+hex = "0.2.0"

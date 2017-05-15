@@ -1,5 +1,5 @@
 extern crate dbus;
-extern crate rustc_serialize;
+extern crate hex;
 
 pub use bluetooth_adapter::BluetoothAdapter;
 pub use bluetooth_device::BluetoothDevice;
