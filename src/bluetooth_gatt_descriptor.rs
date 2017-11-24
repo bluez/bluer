@@ -1,7 +1,6 @@
-use dbus::{Connection, BusType, Message, MessageItem};
+use dbus::{Connection, BusType, Message, MessageItem, MessageItemArray, Signature};
 use bluetooth_utils;
 
-use std::borrow::Cow;
 use std::error::Error;
 
 static SERVICE_NAME: &'static str = "org.bluez";
@@ -80,12 +79,13 @@ impl BluetoothGATTDescriptor {
         let mut m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_DESCRIPTOR_INTERFACE, "ReadValue"));
         m.append_items(&[
             MessageItem::Array(
-                match offset {
-                    Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
-                                    Box::new(MessageItem::Variant(Box::new(o.into()))))],
-                    None => vec![],
-                },
-                Cow::Borrowed("{sv}")
+                MessageItemArray::new(
+                    match offset {
+                        Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
+                                        Box::new(MessageItem::Variant(Box::new(o.into()))))],
+                        None => vec![]
+                    }, Signature::from("a{sv}")
+                ).unwrap()
             )
         ]);
         let reply = try!(c.send_with_reply_and_block(m, 1000));
@@ -110,12 +110,13 @@ impl BluetoothGATTDescriptor {
         self.call_method("WriteValue", Some(&[
             MessageItem::new_array(args).unwrap(),
             MessageItem::Array(
-                match offset {
-                    Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
-                                    Box::new(MessageItem::Variant(Box::new(o.into()))))],
-                    None => vec![],
-                },
-                Cow::Borrowed("{sv}")
+                MessageItemArray::new(
+                    match offset {
+                        Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
+                                        Box::new(MessageItem::Variant(Box::new(o.into()))))],
+                        None => vec![]
+                    }, Signature::from("a{sv}")
+                ).unwrap()
             )
         ]))
     }
