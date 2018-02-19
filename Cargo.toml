@@ -1,6 +1,6 @@
 [package]
 name = "blurz"
-version = "0.2.4"
+version = "0.3.0"
 description = "Bluetooth lib for Rust using blueZ/dbus"
 readme = "README.md"
 authors = ["Attila Dusnoki <adusnoki@inf.u-szeged.hu>"]
