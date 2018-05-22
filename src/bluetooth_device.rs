@@ -93,6 +93,11 @@ impl BluetoothDevice {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
+    pub fn set_trusted(&self, value: bool) -> Result<(), Box<Error>> {
+        self.set_property("Trusted", value)
+    }
+
+    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
     pub fn is_trusted(&self) -> Result<bool, Box<Error>> {
         let trusted = try!(self.get_property("Trusted"));
         Ok(trusted.inner::<bool>().unwrap())
