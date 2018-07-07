@@ -92,6 +92,18 @@ impl BluetoothDevice {
          Ok(connected.inner::<bool>().unwrap())
     }
 
+    pub fn is_ready_to_receive(&self) -> Option<bool> {
+        let is_connected: bool = match self.is_connected() {
+            Ok(value) => value,
+            Err(_) => false
+        };
+        let is_paired: bool = match self.is_paired() {
+            Ok(value) => value,
+            Err(_) => false
+        };
+        Some(is_paired & is_connected)
+    }
+
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
     pub fn set_trusted(&self, value: bool) -> Result<(), Box<Error>> {
         self.set_property("Trusted", value)
