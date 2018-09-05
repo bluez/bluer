@@ -9,6 +9,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use bluetooth_device::BluetoothDevice;
+use bluetooth_session::BluetoothSession;
 
 const OBEX_BUS: &str = "org.bluez.obex";
 const OBEX_PATH: &str = "/org/bluez/obex";
@@ -61,18 +62,17 @@ pub fn open_bus_connection() -> Result<Connection, Box<Error>> {
     Ok(c)
 }
 
-#[derive(Debug)]
-pub struct BluetoothOBEXSession {
-    connection: Connection,
+pub struct BluetoothOBEXSession<'a> {
+    session: &'a BluetoothSession,
     object_path: String,
 }
 
-impl BluetoothOBEXSession {
+impl<'a> BluetoothOBEXSession<'a> {
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n12
     pub fn new(
-        connection: Connection,
+        session: &'a BluetoothSession,
         device: &BluetoothDevice,
-    ) -> Result<BluetoothOBEXSession, Box<Error>> {
+    ) -> Result<BluetoothOBEXSession<'a>, Box<Error>> {
         let device_address: String = device.get_address()?;
         let mut map = HashMap::new();
         map.insert("Target", Variant(SessionTarget::Opp.as_str()));
@@ -80,11 +80,11 @@ impl BluetoothOBEXSession {
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "CreateSession")?
             .append2(device_address, args);
 
-        let r = connection.send_with_reply_and_block(m, 1000)?;
+        let r = session.get_connection().send_with_reply_and_block(m, 1000)?;
         let session_path: ObjectPath = r.read1()?;
         let session_str: String = session_path.parse()?;
         let obex_session = BluetoothOBEXSession {
-            connection,
+            session,
             object_path: session_str,
         };
         Ok(obex_session)
@@ -95,14 +95,16 @@ impl BluetoothOBEXSession {
         let object_path = ObjectPath::new(self.object_path.as_bytes())?;
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "RemoveSession")?
             .append1(object_path);
-        let _r = self.connection.send_with_reply_and_block(m, 1000)?;
+        let _r = self
+            .session
+            .get_connection()
+            .send_with_reply_and_block(m, 1000)?;
         Ok(())
     }
 }
 
-#[derive(Debug)]
 pub struct BluetoothOBEXTransfer<'a> {
-    session: &'a BluetoothOBEXSession,
+    session: &'a BluetoothOBEXSession<'a>,
     object_path: String,
     name: String,
 }
@@ -114,10 +116,12 @@ impl<'a> BluetoothOBEXTransfer<'a> {
         file_path: &str,
     ) -> Result<BluetoothOBEXTransfer<'a>, Box<Error>> {
         let session_path: String = session.object_path.clone();
-        let m =
-            Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
-                .append1(file_path);
-        let r = session.connection.send_with_reply_and_block(m, 1000)?;
+        let m = Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
+            .append1(file_path);
+        let r = session
+            .session
+            .get_connection()
+            .send_with_reply_and_block(m, 1000)?;
         let transfer_path: ObjectPath = r.read1()?;
         let transfer_str: String = transfer_path.parse()?;
 
@@ -138,7 +142,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
     pub fn status(&self) -> Result<String, Box<Error>> {
         let transfer_path = self.object_path.clone();
         let p = Props::new(
-            &self.session.connection,
+            &self.session.session.get_connection(),
             OBEX_BUS,
             transfer_path,
             TRANSFER_INTERFACE,

@@ -1,20 +1,22 @@
-use dbus::{MessageItem};
+use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
+use dbus::MessageItem;
 
 use std::error::Error;
 
 static GATT_SERVICE_INTERFACE: &'static str = "org.bluez.GattService1";
 
-#[derive(Clone, Debug)]
-pub struct BluetoothGATTService {
+#[derive(Clone)]
+pub struct BluetoothGATTService<'a> {
     object_path: String,
+    session: &'a BluetoothSession,
 }
 
-impl BluetoothGATTService {
-    pub fn new(object_path: String)
-           -> BluetoothGATTService {
+impl<'a> BluetoothGATTService<'a> {
+    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTService {
         BluetoothGATTService {
-            object_path: object_path
+            object_path: object_path,
+            session: session,
         }
     }
 
@@ -23,12 +25,17 @@ impl BluetoothGATTService {
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<Error>> {
-        bluetooth_utils::get_property(GATT_SERVICE_INTERFACE, &self.object_path, prop)
+        bluetooth_utils::get_property(
+            self.session.get_connection(),
+            GATT_SERVICE_INTERFACE,
+            &self.object_path,
+            prop,
+        )
     }
 
-/*
- * Properties
- */
+    /*
+     * Properties
+     */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n33
     pub fn get_uuid(&self) -> Result<String, Box<Error>> {
@@ -53,7 +60,7 @@ impl BluetoothGATTService {
         Err(Box::from("Not implemented"))
     }
 
-    pub fn get_gatt_characteristics(&self) -> Result<Vec<String>,Box<Error>> {
-        bluetooth_utils::list_characteristics(&self.object_path)
+    pub fn get_gatt_characteristics(&self) -> Result<Vec<String>, Box<Error>> {
+        bluetooth_utils::list_characteristics(self.session.get_connection(), &self.object_path)
     }
 }
