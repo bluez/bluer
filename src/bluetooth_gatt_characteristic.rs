@@ -1,21 +1,23 @@
-use dbus::{Connection, BusType, Message, MessageItem, MessageItemArray, Signature};
+use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
+use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, Signature};
 
 use std::error::Error;
 
 static SERVICE_NAME: &'static str = "org.bluez";
 static GATT_CHARACTERISTIC_INTERFACE: &'static str = "org.bluez.GattCharacteristic1";
 
-#[derive(Clone, Debug)]
-pub struct BluetoothGATTCharacteristic {
+#[derive(Clone)]
+pub struct BluetoothGATTCharacteristic<'a> {
     object_path: String,
+    session: &'a BluetoothSession,
 }
 
-impl BluetoothGATTCharacteristic {
-    pub fn new(object_path: String)
-           -> BluetoothGATTCharacteristic {
+impl<'a> BluetoothGATTCharacteristic<'a> {
+    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTCharacteristic {
         BluetoothGATTCharacteristic {
-            object_path: object_path
+            object_path: object_path,
+            session: session,
         }
     }
 
@@ -24,16 +26,27 @@ impl BluetoothGATTCharacteristic {
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<Error>> {
-        bluetooth_utils::get_property(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, prop)
+        bluetooth_utils::get_property(
+            self.session.get_connection(),
+            GATT_CHARACTERISTIC_INTERFACE,
+            &self.object_path,
+            prop,
+        )
     }
 
     fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
-        bluetooth_utils::call_method(GATT_CHARACTERISTIC_INTERFACE, &self.object_path, method, param)
+        bluetooth_utils::call_method(
+            self.session.get_connection(),
+            GATT_CHARACTERISTIC_INTERFACE,
+            &self.object_path,
+            method,
+            param,
+        )
     }
 
-/*
- * Properties
- */
+    /*
+     * Properties
+     */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n114
     pub fn get_uuid(&self) -> Result<String, Box<Error>> {
@@ -77,28 +90,34 @@ impl BluetoothGATTCharacteristic {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n156
     pub fn get_gatt_descriptors(&self) -> Result<Vec<String>, Box<Error>> {
-        bluetooth_utils::list_descriptors(&self.object_path)
+        bluetooth_utils::list_descriptors(self.session.get_connection(), &self.object_path)
     }
 
-/*
- * Methods
- */
+    /*
+     * Methods
+     */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n72
     pub fn read_value(&self, offset: Option<u16>) -> Result<Vec<u8>, Box<Error>> {
         let c = try!(Connection::get_private(BusType::System));
-        let mut m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, GATT_CHARACTERISTIC_INTERFACE, "ReadValue"));
-        m.append_items(&[
-            MessageItem::Array(
-                MessageItemArray::new(
-                    match offset {
-                        Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
-                                        Box::new(MessageItem::Variant(Box::new(o.into()))))],
-                        None => vec![]
-                    }, Signature::from("a{sv}")
-                ).unwrap()
-            )
-        ]);
+        let mut m = try!(Message::new_method_call(
+            SERVICE_NAME,
+            &self.object_path,
+            GATT_CHARACTERISTIC_INTERFACE,
+            "ReadValue"
+        ));
+        m.append_items(&[MessageItem::Array(
+            MessageItemArray::new(
+                match offset {
+                    Some(o) => vec![MessageItem::DictEntry(
+                        Box::new("offset".into()),
+                        Box::new(MessageItem::Variant(Box::new(o.into()))),
+                    )],
+                    None => vec![],
+                },
+                Signature::from("a{sv}"),
+            ).unwrap(),
+        )]);
         let reply = try!(c.send_with_reply_and_block(m, 1000));
         let items: MessageItem = reply.get1().unwrap();
         let z: &[MessageItem] = items.inner().unwrap();
@@ -118,18 +137,24 @@ impl BluetoothGATTCharacteristic {
             }
             res
         };
-        self.call_method("WriteValue", Some(&[
-            MessageItem::new_array(values_msgs).unwrap(),
-            MessageItem::Array(
-                MessageItemArray::new(
-                    match offset {
-                        Some(o) => vec![MessageItem::DictEntry(Box::new("offset".into()),
-                                        Box::new(MessageItem::Variant(Box::new(o.into()))))],
-                        None => vec![]
-                    }, Signature::from("a{sv}")
-                ).unwrap()
-            )
-        ]))
+        self.call_method(
+            "WriteValue",
+            Some(&[
+                MessageItem::new_array(values_msgs).unwrap(),
+                MessageItem::Array(
+                    MessageItemArray::new(
+                        match offset {
+                            Some(o) => vec![MessageItem::DictEntry(
+                                Box::new("offset".into()),
+                                Box::new(MessageItem::Variant(Box::new(o.into()))),
+                            )],
+                            None => vec![],
+                        },
+                        Signature::from("a{sv}"),
+                    ).unwrap(),
+                ),
+            ]),
+        )
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96

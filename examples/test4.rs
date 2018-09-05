@@ -8,28 +8,29 @@ use std::path::Path;
 
 use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
 use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_obex::open_bus_connection;
 use blurz::bluetooth_obex::{
     BluetoothOBEXSession as OBEXSession, BluetoothOBEXTransfer as OBEXTransfer,
 };
+use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test_obex_file_transfer() -> Result<(), Box<Error>> {
-    let adapter: Adapter = Adapter::init()?;
+    let session = &Session::create_session()?;
+    let adapter: Adapter = Adapter::init(session)?;
     let devices: Vec<String> = adapter.get_device_list()?;
 
     let filtered_devices = devices
         .iter()
         .filter(|&device_id| {
-            let device = Device::new(device_id.to_string());
+            let device = Device::new(session, device_id.to_string());
             device.is_ready_to_receive().unwrap()
-        }).cloned()
+        })
+        .cloned()
         .collect::<Vec<String>>();
 
     let device_id: &str = &filtered_devices[0];
-    let device = Device::new(device_id.to_string());
+    let device = Device::new(session, device_id.to_string());
 
-    let connection = open_bus_connection()?;
-    let session = OBEXSession::new(connection, &device)?;
+    let session = OBEXSession::new(session, &device)?;
 
     let mut empty_file = File::create("./test.png")?;
     empty_file.write_all(b"1111")?;

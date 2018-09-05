@@ -1,4 +1,5 @@
 use bluetooth_device::BluetoothDevice;
+use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
 use dbus::MessageItem;
 use hex::FromHex;
@@ -6,34 +7,39 @@ use std::error::Error;
 
 static ADAPTER_INTERFACE: &'static str = "org.bluez.Adapter1";
 
-#[derive(Clone, Debug)]
-pub struct BluetoothAdapter {
+#[derive(Clone)]
+pub struct BluetoothAdapter<'a> {
     object_path: String,
+    session: &'a BluetoothSession,
 }
 
-impl BluetoothAdapter {
-    fn new(object_path: String) -> BluetoothAdapter {
+impl<'a> BluetoothAdapter<'a> {
+    fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothAdapter<'a> {
         BluetoothAdapter {
             object_path: object_path,
+            session: session,
         }
     }
 
-    pub fn init() -> Result<BluetoothAdapter, Box<Error>> {
-        let adapters = try!(bluetooth_utils::get_adapters());
+    pub fn init(session: &BluetoothSession) -> Result<BluetoothAdapter, Box<Error>> {
+        let adapters = try!(bluetooth_utils::get_adapters(session.get_connection()));
 
         if adapters.is_empty() {
-            return Err(Box::from("Bluetooth adapter not found"))
+            return Err(Box::from("Bluetooth adapter not found"));
         }
 
-        Ok(BluetoothAdapter::new(adapters[0].clone()))
+        Ok(BluetoothAdapter::new(session, adapters[0].clone()))
     }
 
-    pub fn create_adapter(object_path: String) -> Result<BluetoothAdapter, Box<Error>> {
-        let adapters = try!(bluetooth_utils::get_adapters());
+    pub fn create_adapter(
+        session: &BluetoothSession,
+        object_path: String,
+    ) -> Result<BluetoothAdapter, Box<Error>> {
+        let adapters = try!(bluetooth_utils::get_adapters(session.get_connection()));
 
         for adapter in adapters {
             if adapter == object_path {
-                return Ok(BluetoothAdapter::new(adapter.clone()));
+                return Ok(BluetoothAdapter::new(session, adapter.clone()));
             }
         }
         Err(Box::from("Bluetooth adapter not found"))
@@ -44,34 +50,56 @@ impl BluetoothAdapter {
     }
 
     pub fn get_first_device(&self) -> Result<BluetoothDevice, Box<Error>> {
-        let devices = try!(bluetooth_utils::list_devices(&self.object_path));
+        let devices = try!(bluetooth_utils::list_devices(
+            self.session.get_connection(),
+            &self.object_path
+        ));
 
         if devices.is_empty() {
-            return Err(Box::from("No device found."))
+            return Err(Box::from("No device found."));
         }
-        Ok(BluetoothDevice::new(devices[0].clone()))
+        Ok(BluetoothDevice::new(self.session, devices[0].clone()))
     }
 
     pub fn get_device_list(&self) -> Result<Vec<String>, Box<Error>> {
-        bluetooth_utils::list_devices(&self.object_path)
+        bluetooth_utils::list_devices(self.session.get_connection(), &self.object_path)
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<Error>> {
-        bluetooth_utils::get_property(ADAPTER_INTERFACE, &self.object_path, prop)
+        bluetooth_utils::get_property(
+            self.session.get_connection(),
+            ADAPTER_INTERFACE,
+            &self.object_path,
+            prop,
+        )
     }
 
     fn set_property<T>(&self, prop: &str, value: T) -> Result<(), Box<Error>>
-    where T: Into<MessageItem> {
-        bluetooth_utils::set_property(ADAPTER_INTERFACE, &self.object_path, prop, value)
+    where
+        T: Into<MessageItem>,
+    {
+        bluetooth_utils::set_property(
+            self.session.get_connection(),
+            ADAPTER_INTERFACE,
+            &self.object_path,
+            prop,
+            value,
+        )
     }
 
     fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
-        bluetooth_utils::call_method(ADAPTER_INTERFACE, &self.object_path, method, param)
+        bluetooth_utils::call_method(
+            self.session.get_connection(),
+            ADAPTER_INTERFACE,
+            &self.object_path,
+            method,
+            param,
+        )
     }
 
-/*
- * Properties
- */
+    /*
+     * Properties
+     */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n108
     pub fn get_address(&self) -> Result<String, Box<Error>> {
@@ -109,7 +137,7 @@ impl BluetoothAdapter {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
-    pub fn set_powered(&self, value: bool) -> Result<(),Box<Error>> {
+    pub fn set_powered(&self, value: bool) -> Result<(), Box<Error>> {
         self.set_property("Powered", value)
     }
 
@@ -175,7 +203,7 @@ impl BluetoothAdapter {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n215
-    pub fn get_modalias(&self) ->  Result<(String, u32, u32, u32), Box<Error>> {
+    pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<Error>> {
         let modalias = try!(self.get_property("Modalias"));
         let m = modalias.inner::<&str>().unwrap();
         let ids: Vec<&str> = m.split(":").collect();
@@ -185,35 +213,37 @@ impl BluetoothAdapter {
         let product = Vec::from_hex(ids[1][6..10].to_string()).unwrap();
         let device = Vec::from_hex(ids[1][11..15].to_string()).unwrap();
 
-        Ok((source,
-        (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
-        (product[0] as u32) * 16 * 16 + (product[1] as u32),
-        (device[0] as u32) * 16 * 16 + (device[1] as u32)))
+        Ok((
+            source,
+            (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
+            (product[0] as u32) * 16 * 16 + (product[1] as u32),
+            (device[0] as u32) * 16 * 16 + (device[1] as u32),
+        ))
     }
 
     pub fn get_vendor_id_source(&self) -> Result<String, Box<Error>> {
-        let (vendor_id_source,_,_,_) = try!(self.get_modalias());
+        let (vendor_id_source, _, _, _) = try!(self.get_modalias());
         Ok(vendor_id_source)
     }
 
     pub fn get_vendor_id(&self) -> Result<u32, Box<Error>> {
-        let (_,vendor_id,_,_) = try!(self.get_modalias());
+        let (_, vendor_id, _, _) = try!(self.get_modalias());
         Ok(vendor_id)
     }
 
     pub fn get_product_id(&self) -> Result<u32, Box<Error>> {
-        let (_,_,product_id,_) = try!(self.get_modalias());
+        let (_, _, product_id, _) = try!(self.get_modalias());
         Ok(product_id)
     }
 
     pub fn get_device_id(&self) -> Result<u32, Box<Error>> {
-        let (_,_,_,device_id) = try!(self.get_modalias());
+        let (_, _, _, device_id) = try!(self.get_modalias());
         Ok(device_id)
     }
 
-/*
- * Methods
- */
+    /*
+     * Methods
+     */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n12
     pub fn start_discovery(&self) -> Result<(), Box<Error>> {
@@ -227,6 +257,9 @@ impl BluetoothAdapter {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
     pub fn remove_device(&self, device: String) -> Result<(), Box<Error>> {
-        self.call_method("RemoveDevice", Some(&[MessageItem::ObjectPath(device.into())]))
+        self.call_method(
+            "RemoveDevice",
+            Some(&[MessageItem::ObjectPath(device.into())]),
+        )
     }
 }
