@@ -14,7 +14,7 @@ use blurz::bluetooth_obex::{
 use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test_obex_file_transfer() -> Result<(), Box<Error>> {
-    let session = &Session::create_session()?;
+    let session = &Session::create_session(None)?;
     let adapter: Adapter = Adapter::init(session)?;
     let devices: Vec<String> = adapter.get_device_list()?;
 
@@ -23,8 +23,7 @@ fn test_obex_file_transfer() -> Result<(), Box<Error>> {
         .filter(|&device_id| {
             let device = Device::new(session, device_id.to_string());
             device.is_ready_to_receive().unwrap()
-        })
-        .cloned()
+        }).cloned()
         .collect::<Vec<String>>();
 
     let device_id: &str = &filtered_devices[0];

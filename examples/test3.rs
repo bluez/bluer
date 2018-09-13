@@ -10,11 +10,14 @@ use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySe
 use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test3() -> Result<(), Box<Error>> {
-    let bt_session = &Session::create_session()?;
+    let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = try!(Adapter::init(bt_session));
     try!(adapter.set_powered(true));
     loop {
-        let session = try!(DiscoverySession::create_session(adapter.get_id()));
+        let session = try!(DiscoverySession::create_session(
+            &bt_session,
+            adapter.get_id()
+        ));
         thread::sleep(Duration::from_millis(200));
         try!(session.start_discovery());
         thread::sleep(Duration::from_millis(800));

@@ -16,9 +16,12 @@ use blurz::bluetooth_gatt_service::BluetoothGATTService as Service;
 use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test2() -> Result<(), Box<Error>> {
-    let bt_session = &Session::create_session()?;
+    let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = try!(Adapter::init(bt_session));
-    let session = try!(DiscoverySession::create_session(adapter.get_id()));
+    let session = try!(DiscoverySession::create_session(
+        &bt_session,
+        adapter.get_id()
+    ));
     try!(session.start_discovery());
     //let mut devices = vec!();
     for _ in 0..5 {
@@ -44,7 +47,7 @@ fn test2() -> Result<(), Box<Error>> {
             if uuid == COLOR_PICKER_SERVICE_UUID || uuid == BATTERY_SERVICE_UUID {
                 println!("{:?} has a service!", device.get_alias());
                 println!("connect device...");
-                device.connect().ok();
+                device.connect(10000).ok();
                 if try!(device.is_connected()) {
                     println!("checking gatt...");
                     // We need to wait a bit after calling connect to safely
