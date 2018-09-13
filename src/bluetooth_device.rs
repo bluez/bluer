@@ -7,7 +7,7 @@ use std::error::Error;
 
 static DEVICE_INTERFACE: &'static str = "org.bluez.Device1";
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BluetoothDevice<'a> {
     object_path: String,
     session: &'a BluetoothSession,

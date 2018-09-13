@@ -6,7 +6,7 @@ use std::error::Error;
 
 static GATT_SERVICE_INTERFACE: &'static str = "org.bluez.GattService1";
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BluetoothGATTService<'a> {
     object_path: String,
     session: &'a BluetoothSession,

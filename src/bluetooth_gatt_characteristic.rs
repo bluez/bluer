@@ -7,7 +7,7 @@ use std::error::Error;
 static SERVICE_NAME: &'static str = "org.bluez";
 static GATT_CHARACTERISTIC_INTERFACE: &'static str = "org.bluez.GattCharacteristic1";
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BluetoothGATTCharacteristic<'a> {
     object_path: String,
     session: &'a BluetoothSession,
