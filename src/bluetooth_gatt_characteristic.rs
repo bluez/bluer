@@ -1,6 +1,6 @@
 use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
-use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, Signature};
+use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, OwnedFd, Signature};
 
 use std::error::Error;
 
@@ -165,5 +165,41 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
     pub fn stop_notify(&self) -> Result<(), Box<Error>> {
         self.call_method("StopNotify", None)
+    }
+
+    pub fn acquire_notify(&self) -> Result<(OwnedFd, u16), Box<Error>> {
+        let mut m = Message::new_method_call(
+            SERVICE_NAME,
+            &self.object_path,
+            GATT_CHARACTERISTIC_INTERFACE,
+            "AcquireNotify",
+        )?;
+        m.append_items(&[MessageItem::Array(
+            MessageItemArray::new(vec![], Signature::from("a{sv}")).unwrap(),
+        )]);
+        let reply = self
+            .session
+            .get_connection()
+            .send_with_reply_and_block(m, 1000)?;
+        let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
+        Ok((opt_fd.unwrap(), opt_mtu.unwrap()))
+    }
+
+    pub fn acquire_write(&self) -> Result<(OwnedFd, u16), Box<Error>> {
+        let mut m = Message::new_method_call(
+            SERVICE_NAME,
+            &self.object_path,
+            GATT_CHARACTERISTIC_INTERFACE,
+            "AcquireWrite",
+        )?;
+        m.append_items(&[MessageItem::Array(
+            MessageItemArray::new(vec![], Signature::from("a{sv}")).unwrap(),
+        )]);
+        let reply = self
+            .session
+            .get_connection()
+            .send_with_reply_and_block(m, 1000)?;
+        let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
+        Ok((opt_fd.unwrap(), opt_mtu.unwrap()))
     }
 }
