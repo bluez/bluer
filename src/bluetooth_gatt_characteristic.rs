@@ -34,13 +34,19 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         )
     }
 
-    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
+    fn call_method(
+        &self,
+        method: &str,
+        param: Option<&[MessageItem]>,
+        timeout_ms: i32,
+    ) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             GATT_CHARACTERISTIC_INTERFACE,
             &self.object_path,
             method,
             param,
+            timeout_ms,
         )
     }
 
@@ -154,17 +160,18 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
                     ).unwrap(),
                 ),
             ]),
+            10000,
         )
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96
     pub fn start_notify(&self) -> Result<(), Box<Error>> {
-        self.call_method("StartNotify", None)
+        self.call_method("StartNotify", None, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
     pub fn stop_notify(&self) -> Result<(), Box<Error>> {
-        self.call_method("StopNotify", None)
+        self.call_method("StopNotify", None, 1000)
     }
 
     pub fn acquire_notify(&self) -> Result<(OwnedFd, u16), Box<Error>> {

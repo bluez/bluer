@@ -34,13 +34,19 @@ impl<'a> BluetoothGATTDescriptor<'a> {
         )
     }
 
-    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
+    fn call_method(
+        &self,
+        method: &str,
+        param: Option<&[MessageItem]>,
+        timeout_ms: i32,
+    ) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             GATT_DESCRIPTOR_INTERFACE,
             &self.object_path,
             method,
             param,
+            timeout_ms,
         )
     }
 
@@ -143,6 +149,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
                     ).unwrap(),
                 ),
             ]),
+            1000,
         )
     }
 }

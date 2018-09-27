@@ -101,11 +101,12 @@ pub fn set_property<T>(
     object_path: &str,
     prop: &str,
     value: T,
+    timeout_ms: i32,
 ) -> Result<(), Box<Error>>
 where
     T: Into<MessageItem>,
 {
-    let p = Props::new(&c, SERVICE_NAME, object_path, interface, 1000);
+    let p = Props::new(&c, SERVICE_NAME, object_path, interface, timeout_ms);
     Ok(try!(p.set(prop, value.into())))
 }
 
@@ -115,6 +116,7 @@ pub fn call_method(
     object_path: &str,
     method: &str,
     param: Option<&[MessageItem]>,
+    timeout_ms: i32,
 ) -> Result<(), Box<Error>> {
     let mut m = try!(Message::new_method_call(
         SERVICE_NAME,
@@ -126,6 +128,6 @@ pub fn call_method(
         Some(p) => m.append_items(p),
         None => (),
     };
-    try!(c.send_with_reply_and_block(m, 1000));
+    try!(c.send_with_reply_and_block(m, timeout_ms));
     Ok(())
 }

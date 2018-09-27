@@ -34,7 +34,7 @@ impl<'a> BluetoothDevice<'a> {
         )
     }
 
-    fn set_property<T>(&self, prop: &str, value: T) -> Result<(), Box<Error>>
+    fn set_property<T>(&self, prop: &str, value: T, timeout_ms: i32) -> Result<(), Box<Error>>
     where
         T: Into<MessageItem>,
     {
@@ -44,16 +44,23 @@ impl<'a> BluetoothDevice<'a> {
             &self.object_path,
             prop,
             value,
+            timeout_ms,
         )
     }
 
-    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
+    fn call_method(
+        &self,
+        method: &str,
+        param: Option<&[MessageItem]>,
+        timeout_ms: i32,
+    ) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             DEVICE_INTERFACE,
             &self.object_path,
             method,
             param,
+            timeout_ms,
         )
     }
 
@@ -127,7 +134,7 @@ impl<'a> BluetoothDevice<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
     pub fn set_trusted(&self, value: bool) -> Result<(), Box<Error>> {
-        self.set_property("Trusted", value)
+        self.set_property("Trusted", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
@@ -150,7 +157,7 @@ impl<'a> BluetoothDevice<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n161
     pub fn set_alias(&self, value: String) -> Result<(), Box<Error>> {
-        self.set_property("Alias", value)
+        self.set_property("Alias", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n174
@@ -269,31 +276,31 @@ impl<'a> BluetoothDevice<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n12
     pub fn connect(&self) -> Result<(), Box<Error>> {
-        self.call_method("Connect", None)
+        self.call_method("Connect", None, 30000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n29
     pub fn disconnect(&self) -> Result<(), Box<Error>> {
-        self.call_method("Disconnect", None)
+        self.call_method("Disconnect", None, 5000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n43
     pub fn connect_profile(&self, uuid: String) -> Result<(), Box<Error>> {
-        self.call_method("ConnectProfile", Some(&[uuid.into()]))
+        self.call_method("ConnectProfile", Some(&[uuid.into()]), 30000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n55
     pub fn disconnect_profile(&self, uuid: String) -> Result<(), Box<Error>> {
-        self.call_method("DisconnectProfile", Some(&[uuid.into()]))
+        self.call_method("DisconnectProfile", Some(&[uuid.into()]), 5000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70
     pub fn pair(&self) -> Result<(), Box<Error>> {
-        self.call_method("Pair", None)
+        self.call_method("Pair", None, 60000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n97
     pub fn cancel_pairing(&self) -> Result<(), Box<Error>> {
-        self.call_method("CancelPairing", None)
+        self.call_method("CancelPairing", None, 5000)
     }
 }

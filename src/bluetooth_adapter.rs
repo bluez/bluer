@@ -74,7 +74,7 @@ impl<'a> BluetoothAdapter<'a> {
         )
     }
 
-    fn set_property<T>(&self, prop: &str, value: T) -> Result<(), Box<Error>>
+    fn set_property<T>(&self, prop: &str, value: T, timeout_ms: i32) -> Result<(), Box<Error>>
     where
         T: Into<MessageItem>,
     {
@@ -84,16 +84,23 @@ impl<'a> BluetoothAdapter<'a> {
             &self.object_path,
             prop,
             value,
+            timeout_ms,
         )
     }
 
-    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<Error>> {
+    fn call_method(
+        &self,
+        method: &str,
+        param: Option<&[MessageItem]>,
+        timeout_ms: i32,
+    ) -> Result<(), Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             ADAPTER_INTERFACE,
             &self.object_path,
             method,
             param,
+            timeout_ms,
         )
     }
 
@@ -121,7 +128,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
     pub fn set_alias(&self, value: String) -> Result<(), Box<Error>> {
-        self.set_property("Alias", value)
+        self.set_property("Alias", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n139
@@ -138,7 +145,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
     pub fn set_powered(&self, value: bool) -> Result<(), Box<Error>> {
-        self.set_property("Powered", value)
+        self.set_property("Powered", value, 10000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
@@ -149,7 +156,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
     pub fn set_discoverable(&self, value: bool) -> Result<(), Box<Error>> {
-        self.set_property("Discoverable", value)
+        self.set_property("Discoverable", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
@@ -160,7 +167,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
     pub fn set_pairable(&self, value: bool) -> Result<(), Box<Error>> {
-        self.set_property("Pairable", value)
+        self.set_property("Pairable", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
@@ -171,7 +178,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
     pub fn set_pairable_timeout(&self, value: u32) -> Result<(), Box<Error>> {
-        self.set_property("PairableTimeout", value)
+        self.set_property("PairableTimeout", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
@@ -182,7 +189,7 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
     pub fn set_discoverable_timeout(&self, value: u32) -> Result<(), Box<Error>> {
-        self.set_property("DiscoverableTimeout", value)
+        self.set_property("DiscoverableTimeout", value, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n205
@@ -260,6 +267,7 @@ impl<'a> BluetoothAdapter<'a> {
         self.call_method(
             "RemoveDevice",
             Some(&[MessageItem::ObjectPath(device.into())]),
+            1000,
         )
     }
 }
