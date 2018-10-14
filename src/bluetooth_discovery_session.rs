@@ -1,5 +1,5 @@
 use bluetooth_session::BluetoothSession;
-use dbus::{BusType, Connection, Message, MessageItem};
+use dbus::{Message, MessageItem};
 use std::error::Error;
 
 static ADAPTER_INTERFACE: &'static str = "org.bluez.Adapter1";
