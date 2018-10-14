@@ -275,8 +275,8 @@ impl<'a> BluetoothDevice<'a> {
      */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n12
-    pub fn connect(&self) -> Result<(), Box<Error>> {
-        self.call_method("Connect", None, 30000)
+    pub fn connect(&self, timeout_ms: i32) -> Result<(), Box<Error>> {
+        self.call_method("Connect", None, timeout_ms)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n29

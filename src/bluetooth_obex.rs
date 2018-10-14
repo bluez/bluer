@@ -80,7 +80,9 @@ impl<'a> BluetoothOBEXSession<'a> {
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "CreateSession")?
             .append2(device_address, args);
 
-        let r = session.get_connection().send_with_reply_and_block(m, 1000)?;
+        let r = session
+            .get_connection()
+            .send_with_reply_and_block(m, 1000)?;
         let session_path: ObjectPath = r.read1()?;
         let session_str: String = session_path.parse()?;
         let obex_session = BluetoothOBEXSession {
@@ -106,7 +108,7 @@ impl<'a> BluetoothOBEXSession<'a> {
 pub struct BluetoothOBEXTransfer<'a> {
     session: &'a BluetoothOBEXSession<'a>,
     object_path: String,
-    name: String,
+    _name: String,
 }
 
 impl<'a> BluetoothOBEXTransfer<'a> {
@@ -116,8 +118,9 @@ impl<'a> BluetoothOBEXTransfer<'a> {
         file_path: &str,
     ) -> Result<BluetoothOBEXTransfer<'a>, Box<Error>> {
         let session_path: String = session.object_path.clone();
-        let m = Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
-            .append1(file_path);
+        let m =
+            Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
+                .append1(file_path);
         let r = session
             .session
             .get_connection()
@@ -133,7 +136,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
         let obex_transfer = BluetoothOBEXTransfer {
             session,
             object_path: transfer_str,
-            name: file_name,
+            _name: file_name,
         };
         Ok(obex_transfer)
     }
