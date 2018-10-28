@@ -23,6 +23,10 @@ pub enum BluetoothEvent {
         object_path: String,
         value: Box<[u8]>,
     },
+    RSSI {
+        object_path: String,
+        rssi: i16,
+    },
     None,
 }
 
@@ -86,6 +90,17 @@ impl BluetoothEvent {
                         let event = BluetoothEvent::Value {
                             object_path: object_path.clone(),
                             value: value.clone().into_boxed_slice(),
+                        };
+
+                        return Some(event);
+                    }
+                }
+
+                if let Some(value) = properties.get("RSSI") {
+                    if let Some(rssi) = cast::<i16>(&value.0) {
+                        let event = BluetoothEvent::RSSI {
+                            object_path: object_path.clone(),
+                            rssi: *rssi,
                         };
 
                         return Some(event);
