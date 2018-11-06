@@ -1,7 +1,7 @@
 use bluetooth_device::BluetoothDevice;
 use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
-use dbus::MessageItem;
+use dbus::{MessageItem, MessageItemArray, Signature};
 use hex::FromHex;
 use std::error::Error;
 
@@ -270,4 +270,40 @@ impl<'a> BluetoothAdapter<'a> {
             1000,
         )
     }
+
+    // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154
+    pub fn connect_device(
+        &self,
+        address: String,
+        address_type: AddressType,
+        timeout_ms: i32,
+    ) -> Result<(), Box<Error>> {
+        let address_type = match address_type {
+            AddressType::Public => "public",
+            AddressType::Random => "random",
+        };
+
+        let mut m = vec![MessageItem::DictEntry(
+            Box::new("Address".into()),
+            Box::new(MessageItem::Variant(Box::new(address.into()))),
+        )];
+
+        m.push(MessageItem::DictEntry(
+            Box::new("AddressType".into()),
+            Box::new(MessageItem::Variant(Box::new(address_type.into()))),
+        ));
+
+        self.call_method(
+            "ConnectDevice",
+            Some(&[MessageItem::Array(
+                MessageItemArray::new(m, Signature::from("a{sv}")).unwrap(),
+            )]),
+            timeout_ms,
+        )
+    }
+}
+
+pub enum AddressType {
+    Public,
+    Random,
 }
