@@ -117,7 +117,7 @@ pub fn call_method(
     method: &str,
     param: Option<&[MessageItem]>,
     timeout_ms: i32,
-) -> Result<(), Box<Error>> {
+) -> Result<Message, Box<Error>> {
     let mut m = try!(Message::new_method_call(
         SERVICE_NAME,
         object_path,
@@ -128,6 +128,5 @@ pub fn call_method(
         Some(p) => m.append_items(p),
         None => (),
     };
-    try!(c.send_with_reply_and_block(m, timeout_ms));
-    Ok(())
+    Ok(try!(c.send_with_reply_and_block(m, timeout_ms)))
 }

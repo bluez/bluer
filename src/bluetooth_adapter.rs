@@ -1,7 +1,7 @@
 use bluetooth_device::BluetoothDevice;
 use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
-use dbus::MessageItem;
+use dbus::{Message, MessageItem};
 use hex::FromHex;
 use std::error::Error;
 
@@ -93,7 +93,7 @@ impl<'a> BluetoothAdapter<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<Message, Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             ADAPTER_INTERFACE,
@@ -268,6 +268,7 @@ impl<'a> BluetoothAdapter<'a> {
             "RemoveDevice",
             Some(&[MessageItem::ObjectPath(device.into())]),
             1000,
-        )
+        )?;
+        Ok(())
     }
 }

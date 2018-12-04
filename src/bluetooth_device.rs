@@ -1,6 +1,6 @@
 use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
-use dbus::MessageItem;
+use dbus::{Message, MessageItem};
 use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
@@ -53,7 +53,7 @@ impl<'a> BluetoothDevice<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<Message, Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             DEVICE_INTERFACE,
@@ -276,31 +276,37 @@ impl<'a> BluetoothDevice<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n12
     pub fn connect(&self, timeout_ms: i32) -> Result<(), Box<Error>> {
-        self.call_method("Connect", None, timeout_ms)
+        self.call_method("Connect", None, timeout_ms)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n29
     pub fn disconnect(&self) -> Result<(), Box<Error>> {
-        self.call_method("Disconnect", None, 5000)
+        self.call_method("Disconnect", None, 5000)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n43
     pub fn connect_profile(&self, uuid: String) -> Result<(), Box<Error>> {
-        self.call_method("ConnectProfile", Some(&[uuid.into()]), 30000)
+        self.call_method("ConnectProfile", Some(&[uuid.into()]), 30000)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n55
     pub fn disconnect_profile(&self, uuid: String) -> Result<(), Box<Error>> {
-        self.call_method("DisconnectProfile", Some(&[uuid.into()]), 5000)
+        self.call_method("DisconnectProfile", Some(&[uuid.into()]), 5000)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70
     pub fn pair(&self) -> Result<(), Box<Error>> {
-        self.call_method("Pair", None, 60000)
+        self.call_method("Pair", None, 60000)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n97
     pub fn cancel_pairing(&self) -> Result<(), Box<Error>> {
-        self.call_method("CancelPairing", None, 5000)
+        self.call_method("CancelPairing", None, 5000)?;
+        Ok(())
     }
 }

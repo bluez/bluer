@@ -39,7 +39,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<Message, Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             GATT_CHARACTERISTIC_INTERFACE,
@@ -135,7 +135,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n84
-    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<(), Box<Error>> {
+    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<Message, Box<Error>> {
         let values_msgs = {
             let mut res: Vec<MessageItem> = Vec::new();
             for v in values {
@@ -166,12 +166,14 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96
     pub fn start_notify(&self) -> Result<(), Box<Error>> {
-        self.call_method("StartNotify", None, 1000)
+        self.call_method("StartNotify", None, 1000)?;
+        Ok(())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
     pub fn stop_notify(&self) -> Result<(), Box<Error>> {
-        self.call_method("StopNotify", None, 1000)
+        self.call_method("StopNotify", None, 1000)?;
+        Ok(())
     }
 
     pub fn acquire_notify(&self) -> Result<(OwnedFd, u16), Box<Error>> {

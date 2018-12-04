@@ -39,7 +39,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<Message, Box<Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             GATT_DESCRIPTOR_INTERFACE,
@@ -124,7 +124,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n186
-    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<(), Box<Error>> {
+    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<Message, Box<Error>> {
         let args = {
             let mut res: Vec<MessageItem> = Vec::new();
             for v in values {
