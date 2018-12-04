@@ -1,5 +1,6 @@
 use bluetooth_session::BluetoothSession;
 use bluetooth_utils;
+use bluetooth_event::BluetoothEvent;
 use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, OwnedFd, Signature};
 
 use std::error::Error;
@@ -135,7 +136,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n84
-    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<Message, Box<Error>> {
+    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<Option<BluetoothEvent>, Box<Error>> {
         let values_msgs = {
             let mut res: Vec<MessageItem> = Vec::new();
             for v in values {
@@ -143,7 +144,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             }
             res
         };
-        self.call_method(
+        let message = self.call_method(
             "WriteValue",
             Some(&[
                 MessageItem::new_array(values_msgs).unwrap(),
@@ -161,7 +162,8 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
                 ),
             ]),
             10000,
-        )
+        )?;
+        Ok(BluetoothEvent::from(message))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96
