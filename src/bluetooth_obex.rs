@@ -8,8 +8,8 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-use bluetooth_device::BluetoothDevice;
-use bluetooth_session::BluetoothSession;
+use crate::bluetooth_device::BluetoothDevice;
+use crate::bluetooth_session::BluetoothSession;
 
 const OBEX_BUS: &str = "org.bluez.obex";
 const OBEX_PATH: &str = "/org/bluez/obex";
@@ -57,7 +57,7 @@ impl TransferState {
     }
 }
 
-pub fn open_bus_connection() -> Result<Connection, Box<Error>> {
+pub fn open_bus_connection() -> Result<Connection, Box<dyn Error>> {
     let c = Connection::get_private(BusType::Session)?;
     Ok(c)
 }
@@ -72,7 +72,7 @@ impl<'a> BluetoothOBEXSession<'a> {
     pub fn new(
         session: &'a BluetoothSession,
         device: &BluetoothDevice,
-    ) -> Result<BluetoothOBEXSession<'a>, Box<Error>> {
+    ) -> Result<BluetoothOBEXSession<'a>, Box<dyn Error>> {
         let device_address: String = device.get_address()?;
         let mut map = HashMap::new();
         map.insert("Target", Variant(SessionTarget::Opp.as_str()));
@@ -93,7 +93,7 @@ impl<'a> BluetoothOBEXSession<'a> {
     }
 
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n35
-    pub fn remove_session(&self) -> Result<(), Box<Error>> {
+    pub fn remove_session(&self) -> Result<(), Box<dyn Error>> {
         let object_path = ObjectPath::new(self.object_path.as_bytes())?;
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "RemoveSession")?
             .append1(object_path);
@@ -116,7 +116,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
     pub fn send_file(
         session: &'a BluetoothOBEXSession,
         file_path: &str,
-    ) -> Result<BluetoothOBEXTransfer<'a>, Box<Error>> {
+    ) -> Result<BluetoothOBEXTransfer<'a>, Box<dyn Error>> {
         let session_path: String = session.object_path.clone();
         let m =
             Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
@@ -142,7 +142,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
     }
 
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n115
-    pub fn status(&self) -> Result<String, Box<Error>> {
+    pub fn status(&self) -> Result<String, Box<dyn Error>> {
         let transfer_path = self.object_path.clone();
         let p = Props::new(
             &self.session.session.get_connection(),
@@ -158,7 +158,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
         }
     }
 
-    pub fn wait_until_transfer_completed(&self) -> Result<(), Box<Error>> {
+    pub fn wait_until_transfer_completed(&self) -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_millis(500));
         let mut transfer_status: String = self.status()?;
 

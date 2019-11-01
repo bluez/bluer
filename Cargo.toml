@@ -7,6 +7,7 @@ authors = ["Attila Dusnoki <adusnoki@inf.u-szeged.hu>"]
 repository = "https://github.com/szeged/blurz"
 keywords = ["bluetooth", "bluez", "ble"]
 license = "BSD-2-Clause"
+edition = "2018"
 
 [lib]
 name = "blurz"
