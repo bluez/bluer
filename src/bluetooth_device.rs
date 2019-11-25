@@ -295,8 +295,8 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70
-    pub fn pair(&self) -> Result<(), Box<Error>> {
-        self.call_method("Pair", None, 60000)
+    pub fn pair(&self, timeout_ms: i32) -> Result<(), Box<Error>> {
+        self.call_method("Pair", None, timeout_ms)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n97
