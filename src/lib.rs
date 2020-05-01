@@ -2,6 +2,7 @@ extern crate dbus;
 extern crate hex;
 
 pub use bluetooth_adapter::BluetoothAdapter;
+pub use bluetooth_device::BluetoothAddressType;
 pub use bluetooth_device::BluetoothDevice;
 pub use bluetooth_discovery_session::BluetoothDiscoverySession;
 pub use bluetooth_event::BluetoothEvent;

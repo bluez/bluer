@@ -4,8 +4,29 @@ use dbus::MessageItem;
 use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
+use std::str::FromStr;
 
 static DEVICE_INTERFACE: &'static str = "org.bluez.Device1";
+
+/// Bluetooth device address type.
+#[derive(Clone, Debug)]
+pub enum BluetoothAddressType {
+    /// Public address
+    Public,
+    /// Random address
+    Random,
+}
+
+impl FromStr for BluetoothAddressType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "public" => Ok(Self::Public),
+            "random" => Ok(Self::Random),
+            _ => Err(format!("unknown address type: {}", &s)),
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct BluetoothDevice<'a> {
@@ -72,6 +93,12 @@ impl<'a> BluetoothDevice<'a> {
         let address = try!(self.get_property("Address"));
         Ok(String::from(address.inner::<&str>().unwrap()))
     }
+
+    /// The Bluetooth device Address Type.
+    pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<Error>> {
+        let address = try!(self.get_property("AddressType"));
+        Ok(address.inner::<&str>().unwrap().parse()?)
+    }    
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n109
     pub fn get_name(&self) -> Result<String, Box<Error>> {
