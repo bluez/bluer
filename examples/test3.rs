@@ -9,7 +9,7 @@ use blurz::bluetooth_device::BluetoothDevice as Device;
 use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
 use blurz::bluetooth_session::BluetoothSession as Session;
 
-fn test3() -> Result<(), Box<Error>> {
+fn test3() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = try!(Adapter::init(bt_session));
     try!(adapter.set_powered(true));

@@ -13,7 +13,7 @@ use blurz::bluetooth_obex::{
 };
 use blurz::bluetooth_session::BluetoothSession as Session;
 
-fn test_obex_file_transfer() -> Result<(), Box<Error>> {
+fn test_obex_file_transfer() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(None)?;
     let adapter: Adapter = Adapter::init(session)?;
     let devices: Vec<String> = adapter.get_device_list()?;

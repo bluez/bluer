@@ -15,7 +15,7 @@ use blurz::bluetooth_gatt_descriptor::BluetoothGATTDescriptor as Descriptor;
 use blurz::bluetooth_gatt_service::BluetoothGATTService as Service;
 use blurz::bluetooth_session::BluetoothSession as Session;
 
-fn test2() -> Result<(), Box<Error>> {
+fn test2() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = try!(Adapter::init(bt_session));
     let session = try!(DiscoverySession::create_session(

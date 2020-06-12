@@ -12,7 +12,7 @@ use blurz::BluetoothGATTService;
 use blurz::BluetoothGATTCharacteristic;
 
 
-fn test6() -> Result<(), Box<Error>> {
+fn test6() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = Adapter::init(bt_session)?;
     adapter.set_powered(true)?;

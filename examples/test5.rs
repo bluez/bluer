@@ -5,7 +5,7 @@ use std::error::Error;
 use blurz::bluetooth_event::BluetoothEvent;
 use blurz::bluetooth_session::BluetoothSession as Session;
 
-fn test5() -> Result<(), Box<Error>> {
+fn test5() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(Some("/org/bluez/hci0")).unwrap();
     loop {
         for event in session.incoming(1000).map(BluetoothEvent::from) {

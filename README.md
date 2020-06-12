@@ -12,3 +12,5 @@ let adapter: BluetoothAdapter = BluetoothAdapter::init().unwrap();
 let device: BluetoothDevice = adapter.get_first_device().unwrap();
 println!("{:?}", device);
 ```
+
+TODO: Mark errors as Sync + Send?  This is apparently a breaking change.

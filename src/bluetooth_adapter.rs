@@ -277,7 +277,7 @@ impl<'a> BluetoothAdapter<'a> {
         address: String,
         address_type: AddressType,
         timeout_ms: i32,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<(), Box<dyn Error>> {
         let address_type = match address_type {
             AddressType::Public => "public",
             AddressType::Random => "random",

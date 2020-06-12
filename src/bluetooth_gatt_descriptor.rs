@@ -124,7 +124,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n186
-    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<(), Box<Error>> {
+    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<(), Box<dyn Error>> {
         let args = values
             .into()
             .iter()
