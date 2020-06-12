@@ -124,14 +124,13 @@ impl<'a> BluetoothGATTDescriptor<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n186
-    pub fn write_value(&self, values: Vec<u8>, offset: Option<u16>) -> Result<(), Box<Error>> {
-        let args = {
-            let mut res: Vec<MessageItem> = Vec::new();
-            for v in values {
-                res.push(v.into());
-            }
-            res
-        };
+    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<(), Box<Error>> {
+        let args = values
+            .into()
+            .iter()
+            .map(|v| MessageItem::from(*v))
+            .collect();
+
         self.call_method(
             "WriteValue",
             Some(&[
