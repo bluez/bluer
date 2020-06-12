@@ -1,10 +1,8 @@
-use bluetooth_utils;
+use crate::bluetooth_utils;
 use std::error::Error;
-use dbus::{Connection, BusType, Message, MessageItem, Props};
+use dbus::{Connection, BusType, Message, MessageItem};
 
 static LEADVERTISING_MANAGER_INTERFACE: &'static str = "org.bluez.LEAdvertisingManager1";
-static ADAPTER_INTERFACE: &'static str = "org.bluez.Adapter1";
-static SERVICE_NAME: &'static str = "org.bluez";
 
 #[derive(Debug)]
 pub struct BluetoothAdvertisingManager {
@@ -13,13 +11,13 @@ pub struct BluetoothAdvertisingManager {
 }
 
 impl BluetoothAdvertisingManager {
-    pub fn create_adv_manager() -> Result<BluetoothAdvertisingManager, Box<Error>> {
-        let managers = try!(bluetooth_utils::get_ad_man());
+    pub fn create_adv_manager() -> Result<BluetoothAdvertisingManager, Box<dyn Error>> {
+        let managers = bluetooth_utils::get_ad_man()?;
         if managers.is_empty() {
             return Err(Box::from("Bluetooth adapter not found"))
         }
 
-        let c = try!(Connection::get_private(BusType::System));
+        let c = Connection::get_private(BusType::System)?;
         println!("{:?}", c);
         Ok(BluetoothAdvertisingManager::new(managers[0].clone(), c))
     }
@@ -36,30 +34,28 @@ impl BluetoothAdvertisingManager {
         self.object_path.clone()
     }
 
-    fn call_method(&self, method: &str, param: Option<[MessageItem; 2]>) -> Result<(), Box<Error>> {
-        let mut m = try!(Message::new_method_call(SERVICE_NAME, &self.object_path, LEADVERTISING_MANAGER_INTERFACE, method));
-        match param {
-            Some(p) => m.append_items(&p),
-            None => (),
-        };
-        try!(self.connection.send_with_reply_and_block(m, 1000));
+    fn call_method(&self, method: &str, param: Option<&[MessageItem]>) -> Result<(), Box<dyn Error>> {
+        let mut m = Message::new_method_call(bluetooth_utils::SERVICE_NAME, &self.object_path, LEADVERTISING_MANAGER_INTERFACE, method)?;
+        if let Some(p) = param {
+            m.append_items(&p);
+        }
+        self.connection.send_with_reply_and_block(m, 1000)?;
         Ok(())
     }
 
-/*
- * Methods
- */
+    /*
+     * Methods
+     */
 
-    pub fn register_advertisement(&self, param: [MessageItem; 2]) -> Result<(), Box<Error>> {
-    	self.call_method("RegisterAdvertisement", Some(param))
+    pub fn register_advertisement(&self, param: [MessageItem; 2]) -> Result<(), Box<dyn Error>> {
+    	self.call_method("RegisterAdvertisement", Some(&param))
     }
 
     pub fn get_conn(&self) -> &Connection {
         &self.connection
     }
 
-    pub fn unregister_advertisement(&self, addata: &str) -> Result<(), Box<Error>> {
-    	//self.call_method("UnregisterAdvertisement", Some([addata.into()]))
-        Ok(())
+    pub fn unregister_advertisement(&self, addata: &str) -> Result<(), Box<dyn Error>> {
+    	self.call_method("UnregisterAdvertisement", Some(&[addata.into()]))
     }
 }

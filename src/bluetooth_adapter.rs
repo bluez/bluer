@@ -1,10 +1,10 @@
 use crate::bluetooth_device::BluetoothDevice;
+use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
 use dbus::{Message, MessageItem, MessageItemArray, Signature};
 use hex::FromHex;
 use std::error::Error;
-use bluetooth_le_advertising_data::BluetoothAdvertisingData;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 
@@ -63,12 +63,12 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
-        let addata = try!(bluetooth_utils::list_addata_1(&self.object_path));
+        let addata = bluetooth_utils::list_addata_1(self.session.get_connection(), &self.object_path)?;
 
         if addata.is_empty() {
             return Err(Box::from("No addata found."))
         }
-        Ok(BluetoothAdvertisingData::new(addata[0].clone()))
+        Ok(BluetoothAdvertisingData::new(&self.session, addata[0].clone()))
     }
 
     pub fn get_device_list(&self) -> Result<Vec<String>, Box<dyn Error>> {
@@ -288,7 +288,7 @@ impl<'a> BluetoothAdapter<'a> {
         address: String,
         address_type: AddressType,
         timeout_ms: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Message, Box<dyn Error>> {
         let address_type = match address_type {
             AddressType::Public => "public",
             AddressType::Random => "random",

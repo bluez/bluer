@@ -1,6 +1,6 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use ctate::bluetooth_event::BluetoothEvent;
+use crate::bluetooth_event::BluetoothEvent;
 use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, OwnedFd, Signature};
 
 use std::error::Error;
@@ -166,12 +166,12 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96
-    pub fn start_notify(&self) -> Result<(), Box<dyn Error>> {
+    pub fn start_notify(&self) -> Result<Message, Box<dyn Error>> {
         self.call_method("StartNotify", None, 1000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
-    pub fn stop_notify(&self) -> Result<(), Box<dyn Error>> {
+    pub fn stop_notify(&self) -> Result<Message, Box<dyn Error>> {
         self.call_method("StopNotify", None, 1000)
     }
 

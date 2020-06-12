@@ -47,13 +47,13 @@ impl<'a> BluetoothDevice<'a> {
         self.object_path.clone()
     }
 
-    pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<Error>> {
-        let addata = try!(bluetooth_utils::list_addata_2(&self.object_path));
+    pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
+        let addata = bluetooth_utils::list_addata_2(self.session.get_connection(), &self.object_path)?;
 
         if addata.is_empty() {
             return Err(Box::from("No addata found."))
         }
-        Ok(BluetoothAdvertisingData::new(addata[0].clone()))
+        Ok(BluetoothAdvertisingData::new(&self.session, addata[0].clone()))
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
@@ -107,7 +107,7 @@ impl<'a> BluetoothDevice<'a> {
 
     /// The Bluetooth device Address Type.
     pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<dyn Error>> {
-        let address = try!(self.get_property("AddressType"));
+        let address = self.get_property("AddressType")?;
         Ok(address.inner::<&str>().unwrap().parse()?)
     }
 
@@ -313,32 +313,32 @@ impl<'a> BluetoothDevice<'a> {
      */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n12
-    pub fn connect(&self, timeout_ms: i32) -> Result<(), Box<dyn Error>> {
+    pub fn connect(&self, timeout_ms: i32) -> Result<Message, Box<dyn Error>> {
         self.call_method("Connect", None, timeout_ms)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n29
-    pub fn disconnect(&self) -> Result<(), Box<dyn Error>> {
+    pub fn disconnect(&self) -> Result<Message, Box<dyn Error>> {
         self.call_method("Disconnect", None, 5000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n43
-    pub fn connect_profile(&self, uuid: String) -> Result<(), Box<dyn Error>> {
+    pub fn connect_profile(&self, uuid: String) -> Result<Message, Box<dyn Error>> {
         self.call_method("ConnectProfile", Some(&[uuid.into()]), 30000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n55
-    pub fn disconnect_profile(&self, uuid: String) -> Result<(), Box<dyn Error>> {
+    pub fn disconnect_profile(&self, uuid: String) -> Result<Message, Box<dyn Error>> {
         self.call_method("DisconnectProfile", Some(&[uuid.into()]), 5000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70
-    pub fn pair(&self, timeout_ms: i32) -> Result<(), Box<dyn Error>> {
+    pub fn pair(&self, timeout_ms: i32) -> Result<Message, Box<dyn Error>> {
         self.call_method("Pair", None, timeout_ms)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n97
-    pub fn cancel_pairing(&self) -> Result<(), Box<dyn Error>> {
+    pub fn cancel_pairing(&self) -> Result<Message, Box<dyn Error>> {
         self.call_method("CancelPairing", None, 5000)
     }
 }

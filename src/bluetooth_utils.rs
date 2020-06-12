@@ -1,4 +1,4 @@
-use dbus::{Connection, Message, MessageItem, Props};
+use dbus::{BusType, Connection, Message, MessageItem, Props};
 use std::error::Error;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
@@ -6,7 +6,7 @@ static DEVICE_INTERFACE: &str = "org.bluez.Device1";
 static SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 static CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 static DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
-static SERVICE_NAME: &str = "org.bluez";
+pub static SERVICE_NAME: &str = "org.bluez";
 static LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
 static LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 
@@ -40,10 +40,10 @@ pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
     Ok(adapters)
 }
 
-pub fn get_ad_man() -> Result<Vec<String>, Box<Error>> {
+pub fn get_ad_man() -> Result<Vec<String>, Box<dyn Error>> {
     let mut managers: Vec<String> = Vec::new();
-    let c = try!(Connection::get_private(BusType::System));
-    let objects: Vec<MessageItem> = try!(get_managed_objects(&c));
+    let c = Connection::get_private(BusType::System)?;
+    let objects: Vec<MessageItem> = get_managed_objects(&c)?;
     let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
     for y in z {
         let (path, interfaces) = y.inner().unwrap();
@@ -79,12 +79,12 @@ pub fn list_descriptors(c: &Connection, device_path: &str) -> Result<Vec<String>
     list_item(c, DESCRIPTOR_INTERFACE, device_path, "Characteristic")
 }
 
-pub fn list_addata_1(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
-    list_item(LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
+pub fn list_addata_1(c: &Connection, adapter_path: &String) -> Result<Vec<String>, Box<dyn Error>> {
+    list_item(c, LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
 }
 
-pub fn list_addata_2(device_path: &String) -> Result<Vec<String>, Box<Error>> {
-    list_item(LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
+pub fn list_addata_2(c: &Connection, device_path: &String) -> Result<Vec<String>, Box<dyn Error>> {
+    list_item(c, LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
 }
 
 fn list_item(
@@ -158,5 +158,5 @@ pub fn call_method(
     if let Some(p) = param {
         m.append_items(p);
     }
-    c.send_with_reply_and_block(m, timeout_ms)
+    Ok(c.send_with_reply_and_block(m, timeout_ms)?)
 }
