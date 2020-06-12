@@ -17,22 +17,22 @@ use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test2() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
-    let adapter: Adapter = try!(Adapter::init(bt_session));
-    let session = try!(DiscoverySession::create_session(
+    let adapter: Adapter = Adapter::init(bt_session)?;
+    let session = DiscoverySession::create_session(
         &bt_session,
         adapter.get_id()
-    ));
-    try!(session.start_discovery());
+    )?;
+    session.start_discovery()?;
     //let mut devices = vec!();
     for _ in 0..5 {
-        let devices = try!(adapter.get_device_list());
+        let devices = adapter.get_device_list()?;
         if !devices.is_empty() {
             break;
         }
         thread::sleep(Duration::from_millis(1000));
     }
-    try!(session.stop_discovery());
-    let devices = try!(adapter.get_device_list());
+    session.stop_discovery()?;
+    let devices = adapter.get_device_list()?;
     if devices.is_empty() {
         return Err(Box::from("No device found"));
     }
@@ -41,14 +41,14 @@ fn test2() -> Result<(), Box<dyn Error>> {
     'device_loop: for d in devices {
         device = Device::new(bt_session, d.clone());
         println!("{} {:?}", device.get_id(), device.get_alias());
-        let uuids = try!(device.get_uuids());
+        let uuids = device.get_uuids()?;
         println!("{:?}", uuids);
-        'uuid_loop: for uuid in uuids {
+        '_uuid_loop: for uuid in uuids {
             if uuid == COLOR_PICKER_SERVICE_UUID || uuid == BATTERY_SERVICE_UUID {
                 println!("{:?} has a service!", device.get_alias());
                 println!("connect device...");
                 device.connect(10000).ok();
-                if try!(device.is_connected()) {
+                if device.is_connected()? {
                     println!("checking gatt...");
                     // We need to wait a bit after calling connect to safely
                     // get the gatt services
@@ -65,19 +65,19 @@ fn test2() -> Result<(), Box<dyn Error>> {
         println!("");
     }
     adapter.stop_discovery().ok();
-    if !try!(device.is_connected()) {
+    if !device.is_connected()? {
         return Err(Box::from("No connectable device found"));
     }
-    let services = try!(device.get_gatt_services());
+    let services = device.get_gatt_services()?;
     for service in services {
         let s = Service::new(bt_session, service.clone());
         println!("{:?}", s);
-        let characteristics = try!(s.get_gatt_characteristics());
+        let characteristics = s.get_gatt_characteristics()?;
         for characteristic in characteristics {
             let c = Characteristic::new(bt_session, characteristic.clone());
             println!("{:?}", c);
             println!("Value: {:?}", c.read_value(None));
-            let descriptors = try!(c.get_gatt_descriptors());
+            let descriptors = c.get_gatt_descriptors()?;
             for descriptor in descriptors {
                 let d = Descriptor::new(bt_session, descriptor.clone());
                 println!("{:?}", d);
@@ -85,7 +85,7 @@ fn test2() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    try!(device.disconnect());
+    device.disconnect()?;
     Ok(())
 }
 

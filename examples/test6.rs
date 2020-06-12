@@ -29,7 +29,7 @@ fn test6() -> Result<(), Box<dyn Error>> {
     println!("{} device(s) found", devices.len());
     println!();
 
-    'device_loop: for d in devices {
+    '_device_loop: for d in devices {
         let device = Device::new(bt_session, d.clone());
 
         println!(
@@ -40,7 +40,7 @@ fn test6() -> Result<(), Box<dyn Error>> {
             device.get_name()
         );
 
-        if let Err(e) = device.pair() {
+        if let Err(e) = device.pair(5000) {
             println!("  Error on pairing: {:?}", e);
         }
 

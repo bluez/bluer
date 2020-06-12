@@ -11,20 +11,20 @@ use blurz::bluetooth_session::BluetoothSession as Session;
 
 fn test3() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
-    let adapter: Adapter = try!(Adapter::init(bt_session));
-    try!(adapter.set_powered(true));
+    let adapter: Adapter = Adapter::init(bt_session)?;
+    adapter.set_powered(true)?;
     loop {
-        let session = try!(DiscoverySession::create_session(
+        let session = DiscoverySession::create_session(
             &bt_session,
             adapter.get_id()
-        ));
+        )?;
         thread::sleep(Duration::from_millis(200));
-        try!(session.start_discovery());
+        session.start_discovery()?;
         thread::sleep(Duration::from_millis(800));
-        let devices = try!(adapter.get_device_list());
+        let devices = adapter.get_device_list()?;
 
         println!("{} device(s) found", devices.len());
-        'device_loop: for d in devices {
+        '_device_loop: for d in devices {
             let device = Device::new(bt_session, d.clone());
             println!(
                 "{} {:?} {:?}",
@@ -32,9 +32,9 @@ fn test3() -> Result<(), Box<dyn Error>> {
                 device.get_address(),
                 device.get_rssi()
             );
-            try!(adapter.remove_device(device.get_id()));
+            adapter.remove_device(device.get_id())?;
         }
-        try!(session.stop_discovery());
+        session.stop_discovery()?;
     }
 }
 
