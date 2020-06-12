@@ -1,6 +1,6 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::MessageItem;
+use dbus::{Message, MessageItem};
 use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
@@ -74,7 +74,7 @@ impl<'a> BluetoothDevice<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             DEVICE_INTERFACE,
@@ -95,7 +95,7 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     /// The Bluetooth device Address Type.
-    pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<Error>> {
+    pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<dyn Error>> {
         let address = try!(self.get_property("AddressType"));
         Ok(address.inner::<&str>().unwrap().parse()?)
     }
@@ -322,7 +322,7 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n70
-    pub fn pair(&self, timeout_ms: i32) -> Result<(), Box<Error>> {
+    pub fn pair(&self, timeout_ms: i32) -> Result<(), Box<dyn Error>> {
         self.call_method("Pair", None, timeout_ms)
     }
 
