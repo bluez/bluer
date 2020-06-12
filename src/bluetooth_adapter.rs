@@ -1,7 +1,7 @@
 use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::{MessageItem, MessageItemArray, Signature};
+use dbus::{Message, MessageItem, MessageItemArray, Signature};
 use hex::FromHex;
 use std::error::Error;
 
@@ -93,7 +93,7 @@ impl<'a> BluetoothAdapter<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             ADAPTER_INTERFACE,
@@ -268,7 +268,8 @@ impl<'a> BluetoothAdapter<'a> {
             "RemoveDevice",
             Some(&[MessageItem::ObjectPath(device.into())]),
             1000,
-        )
+        )?;
+        Ok(())
     }
 
     // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154

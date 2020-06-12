@@ -1,6 +1,6 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::MessageItem;
+use dbus::{Message, MessageItem};
 use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
@@ -74,7 +74,7 @@ impl<'a> BluetoothDevice<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             DEVICE_INTERFACE,

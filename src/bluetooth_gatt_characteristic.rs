@@ -1,5 +1,6 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
+use ctate::bluetooth_event::BluetoothEvent;
 use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, OwnedFd, Signature};
 
 use std::error::Error;
@@ -39,7 +40,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         method: &str,
         param: Option<&[MessageItem]>,
         timeout_ms: i32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
             self.session.get_connection(),
             GATT_CHARACTERISTIC_INTERFACE,
@@ -135,14 +136,14 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n84
-    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<(), Box<dyn Error>> {
+    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<Option<BluetoothEvent>, Box<dyn Error>> {
         let values_msgs = values
             .into()
             .iter()
             .map(|v| MessageItem::from(*v))
             .collect();
 
-        self.call_method(
+        let message = self.call_method(
             "WriteValue",
             Some(&[
                 MessageItem::new_array(values_msgs).unwrap(),
@@ -160,7 +161,8 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
                 ),
             ]),
             10000,
-        )
+        )?;
+        Ok(BluetoothEvent::from(message))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n96
