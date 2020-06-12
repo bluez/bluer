@@ -7,6 +7,8 @@ static SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 static CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 static DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 static SERVICE_NAME: &str = "org.bluez";
+static LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
+static LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 
 fn get_managed_objects(c: &Connection) -> Result<Vec<MessageItem>, Box<dyn Error>> {
     let m = Message::new_method_call(
@@ -38,6 +40,26 @@ pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
     Ok(adapters)
 }
 
+pub fn get_ad_man() -> Result<Vec<String>, Box<Error>> {
+    let mut managers: Vec<String> = Vec::new();
+    let c = try!(Connection::get_private(BusType::System));
+    let objects: Vec<MessageItem> = try!(get_managed_objects(&c));
+    let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
+    for y in z {
+        let (path, interfaces) = y.inner().unwrap();
+        let x: &[MessageItem] = interfaces.inner().unwrap();
+        for interface in x {
+            let (i,_) = interface.inner().unwrap();
+            let name: &str = i.inner().unwrap();
+            if name == LEADVERTISING_MANAGER_INTERFACE {
+                let p: &str = path.inner().unwrap();
+                managers.push(String::from(p));
+            }
+        }
+    }
+    Ok(managers)
+}
+
 pub fn list_devices(c: &Connection, adapter_path: &str) -> Result<Vec<String>, Box<dyn Error>> {
     list_item(c, DEVICE_INTERFACE, adapter_path, "Adapter")
 }
@@ -57,12 +79,21 @@ pub fn list_descriptors(c: &Connection, device_path: &str) -> Result<Vec<String>
     list_item(c, DESCRIPTOR_INTERFACE, device_path, "Characteristic")
 }
 
+pub fn list_addata_1(adapter_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
+}
+
+pub fn list_addata_2(device_path: &String) -> Result<Vec<String>, Box<Error>> {
+    list_item(LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
+}
+
 fn list_item(
     c: &Connection,
     item_interface: &str,
     item_path: &str,
     item_property: &str,
 ) -> Result<Vec<String>, Box<dyn Error>> {
+
     let mut v: Vec<String> = Vec::new();
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
     let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();

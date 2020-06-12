@@ -1,3 +1,4 @@
+use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
 use dbus::{Message, MessageItem};
@@ -46,6 +47,15 @@ impl<'a> BluetoothDevice<'a> {
         self.object_path.clone()
     }
 
+    pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<Error>> {
+        let addata = try!(bluetooth_utils::list_addata_2(&self.object_path));
+
+        if addata.is_empty() {
+            return Err(Box::from("No addata found."))
+        }
+        Ok(BluetoothAdvertisingData::new(addata[0].clone()))
+    }
+
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
         bluetooth_utils::get_property(
             self.session.get_connection(),
@@ -88,6 +98,7 @@ impl<'a> BluetoothDevice<'a> {
     /*
      * Properties
      */
+
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n105
     pub fn get_address(&self) -> Result<String, Box<dyn Error>> {
         let address = self.get_property("Address")?;

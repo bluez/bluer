@@ -9,9 +9,13 @@ pub use crate::bluetooth_event::BluetoothEvent;
 pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
 pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
 pub use crate::bluetooth_gatt_service::BluetoothGATTService;
+pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
+pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
 pub use crate::bluetooth_obex::BluetoothOBEXSession;
 pub use crate::bluetooth_session::BluetoothSession;
 
+pub mod bluetooth_le_advertising_data;
+pub mod bluetooth_le_advertising_manager;
 pub mod bluetooth_adapter;
 pub mod bluetooth_device;
 pub mod bluetooth_discovery_session;
