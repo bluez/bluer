@@ -98,7 +98,7 @@ impl<'a> BluetoothDevice<'a> {
     pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<Error>> {
         let address = try!(self.get_property("AddressType"));
         Ok(address.inner::<&str>().unwrap().parse()?)
-    }    
+    }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n109
     pub fn get_name(&self) -> Result<String, Box<Error>> {
