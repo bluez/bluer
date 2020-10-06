@@ -303,6 +303,12 @@ impl<'a> BluetoothDevice<'a> {
         Ok(m)
     }
 
+    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n251
+    pub fn is_services_resolved(&self) -> Result<bool, Box<dyn Error>> {
+        let services_resolved = self.get_property("ServicesResolved")?;
+        Ok(services_resolved.inner::<bool>().unwrap())
+    }
+
     pub fn get_gatt_services(&self) -> Result<Vec<String>, Box<dyn Error>> {
         bluetooth_utils::list_services(self.session.get_connection(), &self.object_path)
     }
