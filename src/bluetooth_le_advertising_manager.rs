@@ -1,6 +1,8 @@
 use crate::bluetooth_utils;
 use std::error::Error;
-use dbus::{Connection, BusType, Message, MessageItem};
+use dbus::Message;
+use dbus::ffidisp::{Connection, BusType};
+use dbus::arg::messageitem::MessageItem;
 
 static LEADVERTISING_MANAGER_INTERFACE: &'static str = "org.bluez.LEAdvertisingManager1";
 

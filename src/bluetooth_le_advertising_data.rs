@@ -1,6 +1,6 @@
 use crate::bluetooth_utils;
 use crate::bluetooth_session::BluetoothSession;
-use dbus::MessageItem;
+use dbus::arg::messageitem::MessageItem;
 use std::collections::HashMap;
 use std::error::Error;
 

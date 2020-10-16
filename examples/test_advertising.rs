@@ -4,7 +4,7 @@ extern crate dbus;
 use std::error::Error;
 use std::time::Duration;
 use std::thread;
-use dbus::MessageItem;
+use dbus::arg::messageitem::MessageItem;
 
 use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
 use blurz::bluetooth_device::BluetoothDevice as Device;
@@ -80,7 +80,7 @@ fn test_advertising() -> Result<(), Box<dyn Error>>{
     
     let manager = Manager::create_adv_manager()?;
     println!("{:?} : {:?}", manager, manager.get_conn());
-    manager.register_advertisement([addata.get_object_path().into(), MessageItem::DictEntry(Box::new(MessageItem::Byte(0)), Box::new(MessageItem::Byte(0)))])?;
+    manager.register_advertisement([addata.get_object_path().into(), MessageItem::new_dict(vec![(0u8.into(), 0u8.into())]).unwrap()])?;
 
     Ok(())
 }

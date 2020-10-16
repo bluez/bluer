@@ -1,9 +1,12 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
 use crate::bluetooth_event::BluetoothEvent;
-use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, Signature};
+use dbus::{Message, Signature};
+use dbus::ffidisp::{Connection, BusType};
+use dbus::arg::messageitem::{MessageItem, MessageItemDict};
 
 use std::error::Error;
+use dbus::arg::Variant;
 
 static SERVICE_NAME: &str = "org.bluez";
 static GATT_DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
@@ -102,16 +105,17 @@ impl<'a> BluetoothGATTDescriptor<'a> {
             GATT_DESCRIPTOR_INTERFACE,
             "ReadValue"
         )?;
-        m.append_items(&[MessageItem::Array(
-            MessageItemArray::new(
+        m.append_items(&[MessageItem::Dict(
+            MessageItemDict::new(
                 match offset {
-                    Some(o) => vec![MessageItem::DictEntry(
-                        Box::new("offset".into()),
-                        Box::new(MessageItem::Variant(Box::new(o.into()))),
+                    Some(o) => vec![(
+                        "offset".into(),
+                        MessageItem::Variant(Box::new(o.into())),
                     )],
                     None => vec![],
                 },
-                Signature::from("a{sv}"),
+                Signature::make::<String>(),
+                Signature::make::<Variant<u8>>(),
             ).unwrap(),
         )]);
         let reply = c.send_with_reply_and_block(m, 1000)?;
@@ -136,16 +140,17 @@ impl<'a> BluetoothGATTDescriptor<'a> {
             "WriteValue",
             Some(&[
                 MessageItem::new_array(args).unwrap(),
-                MessageItem::Array(
-                    MessageItemArray::new(
+                MessageItem::Dict(
+                    MessageItemDict::new(
                         match offset {
-                            Some(o) => vec![MessageItem::DictEntry(
-                                Box::new("offset".into()),
-                                Box::new(MessageItem::Variant(Box::new(o.into()))),
+                            Some(o) => vec![(
+                                "offset".into(),
+                                MessageItem::Variant(Box::new(o.into())),
                             )],
                             None => vec![],
                         },
-                        Signature::from("a{sv}"),
+                        Signature::make::<String>(),
+                        Signature::make::<Variant<u8>>(),
                     ).unwrap(),
                 ),
             ]),
