@@ -77,11 +77,11 @@ pub fn list_descriptors(c: &Connection, device_path: &str) -> Result<Vec<String>
     list_item(c, DESCRIPTOR_INTERFACE, device_path, "Characteristic")
 }
 
-pub fn list_addata_1(c: &Connection, adapter_path: &String) -> Result<Vec<String>, Box<dyn Error>> {
+pub fn list_addata_1(c: &Connection, adapter_path: &str) -> Result<Vec<String>, Box<dyn Error>> {
     list_item(c, LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
 }
 
-pub fn list_addata_2(c: &Connection, device_path: &String) -> Result<Vec<String>, Box<dyn Error>> {
+pub fn list_addata_2(c: &Connection, device_path: &str) -> Result<Vec<String>, Box<dyn Error>> {
     list_item(c, LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
 }
 
@@ -119,7 +119,7 @@ pub fn get_property(
     prop: &str,
 ) -> Result<MessageItem, Box<dyn Error>> {
     let p = Props::new(&c, SERVICE_NAME, object_path, interface, 1000);
-    Ok(p.get(prop)?.clone())
+    Ok(p.get(prop)?)
 }
 
 pub fn set_property<T>(

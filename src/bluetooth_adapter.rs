@@ -41,7 +41,7 @@ impl<'a> BluetoothAdapter<'a> {
 
         for adapter in adapters {
             if adapter == object_path {
-                return Ok(BluetoothAdapter::new(session, adapter.clone()));
+                return Ok(BluetoothAdapter::new(session, adapter));
             }
         }
         Err(Box::from("Bluetooth adapter not found"))

@@ -4,7 +4,7 @@ use dbus::Message;
 use dbus::ffidisp::{Connection, BusType};
 use dbus::arg::messageitem::MessageItem;
 
-static LEADVERTISING_MANAGER_INTERFACE: &'static str = "org.bluez.LEAdvertisingManager1";
+static LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 
 #[derive(Debug)]
 pub struct BluetoothAdvertisingManager {
@@ -27,8 +27,8 @@ impl BluetoothAdvertisingManager {
 	pub fn new(object_path: String, connection: Connection)
            -> BluetoothAdvertisingManager {
         BluetoothAdvertisingManager {
-            object_path: object_path,
-            connection: connection,
+            object_path,
+            connection,
         }
     }
 

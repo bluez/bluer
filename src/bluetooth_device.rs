@@ -160,15 +160,9 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     pub fn is_ready_to_receive(&self) -> Option<bool> {
-        let is_connected: bool = match self.is_connected() {
-            Ok(value) => value,
-            Err(_) => false,
-        };
-        let is_paired: bool = match self.is_paired() {
-            Ok(value) => value,
-            Err(_) => false,
-        };
-        Some(is_paired & is_connected)
+        let is_connected: bool = self.is_connected().unwrap_or(false);
+        let is_paired: bool = self.is_paired().unwrap_or(false);
+        Some(is_paired && is_connected)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149

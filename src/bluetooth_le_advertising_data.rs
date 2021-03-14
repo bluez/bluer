@@ -4,7 +4,7 @@ use dbus::arg::messageitem::MessageItem;
 use std::collections::HashMap;
 use std::error::Error;
 
-static LEADVERTISING_DATA_INTERFACE: &'static str = "org.bluez.LEAdvertisement1";
+static LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
 
 #[derive(Clone, Debug)]
 pub struct BluetoothAdvertisingData<'a> {
