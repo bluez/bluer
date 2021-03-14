@@ -1,6 +1,8 @@
 Bluetooth lib for Rust using blueZ/dbus
 =======================================
 
+Pull requests are welcome!
+
 Current state: Experimental
 Required bluez version: 5.44
 
