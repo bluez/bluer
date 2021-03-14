@@ -1,5 +1,4 @@
-use dbus::{BusType, ConnMsgs, Connection};
-
+use dbus::ffidisp::{Connection, BusType, ConnMsgs};
 use std::error::Error;
 
 static BLUEZ_MATCH: &str = "type='signal',sender='org.bluez'";

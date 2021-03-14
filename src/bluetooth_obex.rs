@@ -1,7 +1,7 @@
 extern crate dbus;
 use self::dbus::arg::{Dict, Variant};
 use self::dbus::Path as ObjectPath;
-use self::dbus::{BusType, Connection, Message, MessageItem, Props};
+use self::dbus::Message;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_session::BluetoothSession;
+use dbus::ffidisp::{Connection, BusType};
+use dbus::arg::messageitem::{MessageItem, Props};
 
 const OBEX_BUS: &str = "org.bluez.obex";
 const OBEX_PATH: &str = "/org/bluez/obex";
@@ -76,7 +78,7 @@ impl<'a> BluetoothOBEXSession<'a> {
         let device_address: String = device.get_address()?;
         let mut map = HashMap::new();
         map.insert("Target", Variant(SessionTarget::Opp.as_str()));
-        let args: Dict<&str, Variant<&str>, _> = Dict::new(map);
+        let args = Dict::new(&map);
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "CreateSession")?
             .append2(device_address, args);
 
@@ -94,7 +96,7 @@ impl<'a> BluetoothOBEXSession<'a> {
 
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n35
     pub fn remove_session(&self) -> Result<(), Box<dyn Error>> {
-        let object_path = ObjectPath::new(self.object_path.as_bytes())?;
+        let object_path = ObjectPath::new(self.object_path.as_str())?;
         let m = Message::new_method_call(OBEX_BUS, OBEX_PATH, CLIENT_INTERFACE, "RemoveSession")?
             .append1(object_path);
         let _r = self

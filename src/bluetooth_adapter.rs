@@ -2,7 +2,8 @@ use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::{Message, MessageItem, MessageItemArray, Signature};
+use dbus::Message;
+use dbus::arg::messageitem::MessageItem;
 use hex::FromHex;
 use std::error::Error;
 
@@ -294,21 +295,14 @@ impl<'a> BluetoothAdapter<'a> {
             AddressType::Random => "random",
         };
 
-        let mut m = vec![MessageItem::DictEntry(
-            Box::new("Address".into()),
-            Box::new(MessageItem::Variant(Box::new(address.into()))),
-        )];
-
-        m.push(MessageItem::DictEntry(
-            Box::new("AddressType".into()),
-            Box::new(MessageItem::Variant(Box::new(address_type.into()))),
-        ));
+        let m = MessageItem::new_dict(vec![
+            ("Address".into(), MessageItem::Variant(Box::new(address.into()))),
+            ("AddressType".into(), MessageItem::Variant(Box::new(address_type.into()))),
+        ]).unwrap();
 
         self.call_method(
             "ConnectDevice",
-            Some(&[MessageItem::Array(
-                MessageItemArray::new(m, Signature::from("a{sv}")).unwrap(),
-            )]),
+            Some(&[m]),
             timeout_ms,
         )
     }

@@ -1,4 +1,6 @@
-use dbus::{BusType, Connection, Message, MessageItem, Props};
+use dbus::arg::messageitem::{MessageItem, Props};
+use dbus::ffidisp::{Connection, BusType};
+use dbus::Message;
 use std::error::Error;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
@@ -24,12 +26,10 @@ fn get_managed_objects(c: &Connection) -> Result<Vec<MessageItem>, Box<dyn Error
 pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
     let mut adapters: Vec<String> = Vec::new();
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
-    let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
-    for y in z {
-        let (path, interfaces) = y.inner().unwrap();
-        let x: &[MessageItem] = interfaces.inner().unwrap();
-        for interface in x {
-            let (i, _) = interface.inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    for (path, interfaces) in z {
+        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        for (i, _) in x {
             let name: &str = i.inner().unwrap();
             if name == ADAPTER_INTERFACE {
                 let p: &str = path.inner().unwrap();
@@ -44,12 +44,10 @@ pub fn get_ad_man() -> Result<Vec<String>, Box<dyn Error>> {
     let mut managers: Vec<String> = Vec::new();
     let c = Connection::get_private(BusType::System)?;
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
-    let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
-    for y in z {
-        let (path, interfaces) = y.inner().unwrap();
-        let x: &[MessageItem] = interfaces.inner().unwrap();
-        for interface in x {
-            let (i,_) = interface.inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    for (path, interfaces) in z {
+        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        for (i, _) in x {
             let name: &str = i.inner().unwrap();
             if name == LEADVERTISING_MANAGER_INTERFACE {
                 let p: &str = path.inner().unwrap();
@@ -96,12 +94,10 @@ fn list_item(
 
     let mut v: Vec<String> = Vec::new();
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
-    let z: &[MessageItem] = objects.get(0).unwrap().inner().unwrap();
-    for y in z {
-        let (path, interfaces) = y.inner().unwrap();
-        let x: &[MessageItem] = interfaces.inner().unwrap();
-        for interface in x {
-            let (i, _) = interface.inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    for (path, interfaces) in z {
+        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        for (i, _) in x {
             let name: &str = i.inner().unwrap();
             if name == item_interface {
                 let objpath: &str = path.inner().unwrap();

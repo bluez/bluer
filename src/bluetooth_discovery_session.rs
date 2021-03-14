@@ -1,5 +1,6 @@
 use crate::bluetooth_session::BluetoothSession;
-use dbus::{Message, MessageItem, MessageItemArray, Signature};
+use dbus::Message;
+use dbus::arg::messageitem::MessageItem;
 use std::error::Error;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
@@ -63,32 +64,30 @@ impl<'a> BluetoothDiscoverySession<'a> {
             res
         };
 
-        let mut m = vec![MessageItem::DictEntry(
-            Box::new("UUIDs".into()),
-            Box::new(MessageItem::Variant(Box::new(
+        let mut m = vec![(
+            "UUIDs".into(),
+            MessageItem::Variant(Box::new(
                 MessageItem::new_array(uuids).unwrap(),
-            ))),
+            )),
         )];
 
         if let Some(rssi) = rssi {
-            m.push(MessageItem::DictEntry(
-                Box::new("RSSI".into()),
-                Box::new(MessageItem::Variant(Box::new(rssi.into()))),
+            m.push((
+                "RSSI".into(),
+                MessageItem::Variant(Box::new(rssi.into())),
             ))
         }
 
         if let Some(pathloss) = pathloss {
-            m.push(MessageItem::DictEntry(
-                Box::new("Pathloss".into()),
-                Box::new(MessageItem::Variant(Box::new(pathloss.into()))),
+            m.push((
+                "Pathloss".into(),
+                MessageItem::Variant(Box::new(pathloss.into())),
             ))
         }
 
         self.call_method(
             "SetDiscoveryFilter",
-            Some([MessageItem::Array(
-                MessageItemArray::new(m, Signature::from("a{sv}")).unwrap(),
-            )]),
+            Some([MessageItem::new_dict(m).unwrap()]),
         )
     }
 }

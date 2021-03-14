@@ -1,7 +1,11 @@
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
 use crate::bluetooth_event::BluetoothEvent;
-use dbus::{BusType, Connection, Message, MessageItem, MessageItemArray, OwnedFd, Signature};
+use dbus::{Message, Signature};
+use dbus::arg::Variant;
+use dbus::arg::OwnedFd;
+use dbus::arg::messageitem::{MessageItem, MessageItemArray, MessageItemDict};
+use dbus::ffidisp::{Connection, BusType};
 
 use std::error::Error;
 
@@ -113,16 +117,17 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             GATT_CHARACTERISTIC_INTERFACE,
             "ReadValue"
         )?;
-        m.append_items(&[MessageItem::Array(
-            MessageItemArray::new(
+        m.append_items(&[MessageItem::Dict(
+            MessageItemDict::new(
                 match offset {
-                    Some(o) => vec![MessageItem::DictEntry(
-                        Box::new("offset".into()),
-                        Box::new(MessageItem::Variant(Box::new(o.into()))),
+                    Some(o) => vec![(
+                        "offset".into(),
+                        MessageItem::Variant(Box::new(o.into())),
                     )],
                     None => vec![],
                 },
-                Signature::from("a{sv}"),
+                Signature::make::<String>(),
+                Signature::make::<Variant<u8>>(),
             ).unwrap(),
         )]);
         let reply = c.send_with_reply_and_block(m, 1000)?;
@@ -147,16 +152,17 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             "WriteValue",
             Some(&[
                 MessageItem::new_array(values_msgs).unwrap(),
-                MessageItem::Array(
-                    MessageItemArray::new(
+                MessageItem::Dict(
+                    MessageItemDict::new(
                         match offset {
-                            Some(o) => vec![MessageItem::DictEntry(
-                                Box::new("offset".into()),
-                                Box::new(MessageItem::Variant(Box::new(o.into()))),
+                            Some(o) => vec![(
+                                "offset".into(),
+                                MessageItem::Variant(Box::new(o.into())),
                             )],
                             None => vec![],
                         },
-                        Signature::from("a{sv}"),
+                        Signature::make::<String>(),
+                        Signature::make::<Variant<u8>>(),
                     ).unwrap(),
                 ),
             ]),
@@ -173,6 +179,11 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
     pub fn stop_notify(&self) -> Result<Message, Box<dyn Error>> {
         self.call_method("StopNotify", None, 1000)
+    }
+
+    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n105
+    pub fn confirm(&self) -> Result<Message, Box<dyn Error>> {
+        self.call_method("Confirm", None, 1000)
     }
 
     pub fn acquire_notify(&self) -> Result<(OwnedFd, u16), Box<dyn Error>> {
