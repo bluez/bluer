@@ -37,9 +37,9 @@ pub struct BluetoothDevice<'a> {
 }
 
 impl<'a> BluetoothDevice<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothDevice {
+    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothDevice<'a> {
         BluetoothDevice {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }
@@ -189,7 +189,7 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n161
-    pub fn set_alias(&self, value: String) -> Result<(), Box<dyn Error>> {
+    pub fn set_alias(&self, value: &str) -> Result<(), Box<dyn Error>> {
         self.set_property("Alias", value, 1000)
     }
 
@@ -321,12 +321,12 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n61
-    pub fn connect_profile(&self, uuid: String) -> Result<Message, Box<dyn Error>> {
+    pub fn connect_profile(&self, uuid: &str) -> Result<Message, Box<dyn Error>> {
         self.call_method("ConnectProfile", Some(&[uuid.into()]), 30000)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n73
-    pub fn disconnect_profile(&self, uuid: String) -> Result<Message, Box<dyn Error>> {
+    pub fn disconnect_profile(&self, uuid: &str) -> Result<Message, Box<dyn Error>> {
         self.call_method("DisconnectProfile", Some(&[uuid.into()]), 5000)
     }
 

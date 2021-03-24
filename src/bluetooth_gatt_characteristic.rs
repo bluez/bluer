@@ -18,6 +18,29 @@ pub struct BluetoothGATTCharacteristic<'a> {
     session: &'a BluetoothSession,
 }
 
+/*
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Flags {
+    Broadcast,
+    Read,
+    WriteWithoutResponse,
+    Write,
+    Notify,
+    Indicate,
+    AuthenticatedSignedWrites,
+    ExtendedProperties,
+    ReliableWrite,
+    WritableAuxiliaries,
+    EncryptRead,
+    EncryptWrite,
+    EncryptAuthenticatedRead,
+    EncryptAuthenticatedWrite,
+    SecureRead, // server only
+    SecureWrite, // server only
+    Authorize
+}
+*/
+
 impl<'a> BluetoothGATTCharacteristic<'a> {
     pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTCharacteristic {
         BluetoothGATTCharacteristic {
@@ -88,7 +111,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         Ok(notifying.inner::<bool>().unwrap())
     }
 
-    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n135
+    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n251
     pub fn get_flags(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let flags = self.get_property("Flags")?;
         let z: &[MessageItem] = flags.inner().unwrap();

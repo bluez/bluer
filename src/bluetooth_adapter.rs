@@ -16,9 +16,9 @@ pub struct BluetoothAdapter<'a> {
 }
 
 impl<'a> BluetoothAdapter<'a> {
-    fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothAdapter<'a> {
+    fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothAdapter<'a> {
         BluetoothAdapter {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }
@@ -30,18 +30,18 @@ impl<'a> BluetoothAdapter<'a> {
             return Err(Box::from("Bluetooth adapter not found"));
         }
 
-        Ok(BluetoothAdapter::new(session, adapters[0].clone()))
+        Ok(BluetoothAdapter::new(session, &adapters[0]))
     }
 
     pub fn create_adapter(
-        session: &BluetoothSession,
-        object_path: String,
-    ) -> Result<BluetoothAdapter, Box<dyn Error>> {
+        session: &'a BluetoothSession,
+        object_path: &str,
+    ) -> Result<BluetoothAdapter<'a>, Box<dyn Error>> {
         let adapters = bluetooth_utils::get_adapters(session.get_connection())?;
 
         for adapter in adapters {
             if adapter == object_path {
-                return Ok(BluetoothAdapter::new(session, adapter));
+                return Ok(BluetoothAdapter::new(session, &adapter));
             }
         }
         Err(Box::from("Bluetooth adapter not found"))
@@ -60,7 +60,7 @@ impl<'a> BluetoothAdapter<'a> {
         if devices.is_empty() {
             return Err(Box::from("No device found."));
         }
-        Ok(BluetoothDevice::new(self.session, devices[0].clone()))
+        Ok(BluetoothDevice::new(self.session, &devices[0]))
     }
 
     pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
@@ -138,7 +138,7 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
-    pub fn set_alias(&self, value: String) -> Result<(), Box<dyn Error>> {
+    pub fn set_alias(&self, value: &str) -> Result<(), Box<dyn Error>> {
         self.set_property("Alias", value, 1000)
     }
 
@@ -274,10 +274,10 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
-    pub fn remove_device(&self, device: String) -> Result<(), Box<dyn Error>> {
+    pub fn remove_device(&self, device: &str) -> Result<(), Box<dyn Error>> {
         self.call_method(
             "RemoveDevice",
-            Some(&[MessageItem::ObjectPath(device.into())]),
+            Some(&[MessageItem::ObjectPath(device.to_string().into())]),
             1000,
         )?;
         Ok(())
@@ -286,7 +286,7 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154
     pub fn connect_device(
         &self,
-        address: String,
+        address: &str,
         address_type: AddressType,
         timeout_ms: i32,
     ) -> Result<Message, Box<dyn Error>> {

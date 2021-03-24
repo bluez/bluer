@@ -37,9 +37,9 @@ fn test2() -> Result<(), Box<dyn Error>> {
         return Err(Box::from("No device found"));
     }
     println!("{} device(s) found", devices.len());
-    let mut device: Device = Device::new(bt_session, "".to_string());
+    let mut device: Device = Device::new(bt_session, "");
     'device_loop: for d in devices {
-        device = Device::new(bt_session, d.clone());
+        device = Device::new(bt_session, &d);
         println!("{} {:?}", device.get_id(), device.get_alias());
         let uuids = device.get_uuids()?;
         println!("{:?}", uuids);
