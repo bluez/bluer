@@ -14,14 +14,14 @@ pub struct BluetoothDiscoverySession<'a> {
 impl<'a> BluetoothDiscoverySession<'a> {
     pub fn create_session(
         session: &'a BluetoothSession,
-        adapter: String,
-    ) -> Result<BluetoothDiscoverySession, Box<dyn Error>> {
+        adapter: &str,
+    ) -> Result<BluetoothDiscoverySession<'a>, Box<dyn Error>> {
         Ok(BluetoothDiscoverySession::new(session, adapter))
     }
 
-    fn new(session: &'a BluetoothSession, adapter: String) -> BluetoothDiscoverySession<'a> {
+    fn new(session: &'a BluetoothSession, adapter: &str) -> BluetoothDiscoverySession<'a> {
         BluetoothDiscoverySession {
-            adapter,
+            adapter: adapter.to_string(),
             session,
         }
     }

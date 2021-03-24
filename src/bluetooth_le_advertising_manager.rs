@@ -21,13 +21,13 @@ impl BluetoothAdvertisingManager {
 
         let c = Connection::get_private(BusType::System)?;
         println!("{:?}", c);
-        Ok(BluetoothAdvertisingManager::new(managers[0].clone(), c))
+        Ok(BluetoothAdvertisingManager::new(&managers[0], c))
     }
 
-	pub fn new(object_path: String, connection: Connection)
+	pub fn new(object_path: &str, connection: Connection)
            -> BluetoothAdvertisingManager {
         BluetoothAdvertisingManager {
-            object_path,
+            object_path: object_path.to_string(),
             connection,
         }
     }

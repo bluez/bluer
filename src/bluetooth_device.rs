@@ -54,7 +54,7 @@ impl<'a> BluetoothDevice<'a> {
         if addata.is_empty() {
             return Err(Box::from("No addata found."))
         }
-        Ok(BluetoothAdvertisingData::new(&self.session, addata[0].clone()))
+        Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {

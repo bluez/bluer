@@ -42,9 +42,9 @@ enum Flags {
 */
 
 impl<'a> BluetoothGATTCharacteristic<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTCharacteristic {
+    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTCharacteristic<'a> {
         BluetoothGATTCharacteristic {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }

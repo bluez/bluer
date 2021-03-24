@@ -13,9 +13,9 @@ pub struct BluetoothGATTService<'a> {
 }
 
 impl<'a> BluetoothGATTService<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTService {
+    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTService<'a> {
         BluetoothGATTService {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }

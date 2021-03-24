@@ -75,7 +75,7 @@ impl<'a> BluetoothOBEXSession<'a> {
         session: &'a BluetoothSession,
         device: &BluetoothDevice,
     ) -> Result<BluetoothOBEXSession<'a>, Box<dyn Error>> {
-        let device_address: String = device.get_address()?;
+        let device_address = device.get_address()?;
         let mut map = HashMap::new();
         map.insert("Target", Variant(SessionTarget::Opp.as_str()));
         let args = Dict::new(&map);
@@ -86,7 +86,7 @@ impl<'a> BluetoothOBEXSession<'a> {
             .get_connection()
             .send_with_reply_and_block(m, 1000)?;
         let session_path: ObjectPath = r.read1()?;
-        let session_str: String = session_path.parse()?;
+        let session_str = session_path.parse()?;
         let obex_session = BluetoothOBEXSession {
             session,
             object_path: session_str,
@@ -119,7 +119,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
         session: &'a BluetoothOBEXSession,
         file_path: &str,
     ) -> Result<BluetoothOBEXTransfer<'a>, Box<dyn Error>> {
-        let session_path: String = session.object_path.clone();
+        let session_path = session.object_path.clone();
         let m =
             Message::new_method_call(OBEX_BUS, session_path, OBJECT_PUSH_INTERFACE, "SendFile")?
                 .append1(file_path);
@@ -128,9 +128,9 @@ impl<'a> BluetoothOBEXTransfer<'a> {
             .get_connection()
             .send_with_reply_and_block(m, 1000)?;
         let transfer_path: ObjectPath = r.read1()?;
-        let transfer_str: String = transfer_path.parse()?;
+        let transfer_str = transfer_path.parse()?;
 
-        let file_name: String = match Path::new(file_path).file_name() {
+        let file_name = match Path::new(file_path).file_name() {
             Some(value) => value.to_string_lossy().to_string(),
             None => file_path.to_string(),
         };
@@ -162,7 +162,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
 
     pub fn wait_until_transfer_completed(&self) -> Result<(), Box<dyn Error>> {
         sleep(Duration::from_millis(500));
-        let mut transfer_status: String = self.status()?;
+        let mut transfer_status = self.status()?;
 
         while transfer_status != TransferState::Complete.as_str() {
             sleep(Duration::from_millis(500));

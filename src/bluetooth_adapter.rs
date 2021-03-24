@@ -69,7 +69,7 @@ impl<'a> BluetoothAdapter<'a> {
         if addata.is_empty() {
             return Err(Box::from("No addata found."))
         }
-        Ok(BluetoothAdvertisingData::new(&self.session, addata[0].clone()))
+        Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
 
     pub fn get_device_list(&self) -> Result<Vec<String>, Box<dyn Error>> {

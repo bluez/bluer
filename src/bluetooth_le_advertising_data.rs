@@ -13,10 +13,9 @@ pub struct BluetoothAdvertisingData<'a> {
 }
 
 impl<'a> BluetoothAdvertisingData<'a> {
-	pub fn new(session: &'a BluetoothSession, object_path: String)
-           -> Self {
+	pub fn new(session: &'a BluetoothSession, object_path: &str) -> Self {
         BluetoothAdvertisingData {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }

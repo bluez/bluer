@@ -26,3 +26,4 @@ pub mod bluetooth_gatt_service;
 pub mod bluetooth_obex;
 pub mod bluetooth_session;
 mod bluetooth_utils;
+pub mod ble_gatt_uuids;

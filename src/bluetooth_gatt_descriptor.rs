@@ -18,9 +18,9 @@ pub struct BluetoothGATTDescriptor<'a> {
 }
 
 impl<'a> BluetoothGATTDescriptor<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: String) -> BluetoothGATTDescriptor {
+    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTDescriptor<'a> {
         BluetoothGATTDescriptor {
-            object_path,
+            object_path: object_path.to_string(),
             session,
         }
     }
