@@ -20,7 +20,7 @@ fn test2() -> Result<(), Box<dyn Error>> {
     let adapter: Adapter = Adapter::init(bt_session)?;
     let session = DiscoverySession::create_session(
         &bt_session,
-        adapter.get_id()
+        &adapter.get_id()
     )?;
     session.start_discovery()?;
     //let mut devices = vec!();
@@ -70,16 +70,16 @@ fn test2() -> Result<(), Box<dyn Error>> {
     }
     let services = device.get_gatt_services()?;
     for service in services {
-        let s = Service::new(bt_session, service.clone());
+        let s = Service::new(bt_session, &service);
         println!("{:?}", s);
         let characteristics = s.get_gatt_characteristics()?;
         for characteristic in characteristics {
-            let c = Characteristic::new(bt_session, characteristic.clone());
+            let c = Characteristic::new(bt_session, &characteristic);
             println!("{:?}", c);
             println!("Value: {:?}", c.read_value(None));
             let descriptors = c.get_gatt_descriptors()?;
             for descriptor in descriptors {
-                let d = Descriptor::new(bt_session, descriptor.clone());
+                let d = Descriptor::new(bt_session, &descriptor);
                 println!("{:?}", d);
                 println!("Value: {:?}", d.read_value(None));
             }

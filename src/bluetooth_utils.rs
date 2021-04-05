@@ -1,5 +1,5 @@
 use dbus::arg::messageitem::{MessageItem, Props};
-use dbus::ffidisp::{Connection, BusType};
+use dbus::ffidisp::{BusType, Connection};
 use dbus::Message;
 use std::error::Error;
 
@@ -17,15 +17,15 @@ fn get_managed_objects(c: &Connection) -> Result<Vec<MessageItem>, Box<dyn Error
         SERVICE_NAME,
         "/",
         "org.freedesktop.DBus.ObjectManager",
-        "GetManagedObjects"
+        "GetManagedObjects",
     )?;
     let r = c.send_with_reply_and_block(m, 1000)?;
     Ok(r.get_items())
 }
 
 pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
-    let mut adapters: Vec<String> = Vec::new();
-    let objects: Vec<MessageItem> = get_managed_objects(&c)?;
+    let mut adapters = Vec::new();
+    let objects = get_managed_objects(&c)?;
     let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
     for (path, interfaces) in z {
         let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
@@ -41,9 +41,9 @@ pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
 }
 
 pub fn get_ad_man() -> Result<Vec<String>, Box<dyn Error>> {
-    let mut managers: Vec<String> = Vec::new();
+    let mut managers = Vec::new();
     let c = Connection::get_private(BusType::System)?;
-    let objects: Vec<MessageItem> = get_managed_objects(&c)?;
+    let objects = get_managed_objects(&c)?;
     let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
     for (path, interfaces) in z {
         let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
@@ -78,11 +78,21 @@ pub fn list_descriptors(c: &Connection, device_path: &str) -> Result<Vec<String>
 }
 
 pub fn list_addata_1(c: &Connection, adapter_path: &str) -> Result<Vec<String>, Box<dyn Error>> {
-    list_item(c, LEADVERTISING_DATA_INTERFACE, adapter_path, "Advertisement")
+    list_item(
+        c,
+        LEADVERTISING_DATA_INTERFACE,
+        adapter_path,
+        "Advertisement",
+    )
 }
 
 pub fn list_addata_2(c: &Connection, device_path: &str) -> Result<Vec<String>, Box<dyn Error>> {
-    list_item(c, LEADVERTISING_DATA_INTERFACE, device_path, "Advertisement")
+    list_item(
+        c,
+        LEADVERTISING_DATA_INTERFACE,
+        device_path,
+        "Advertisement",
+    )
 }
 
 fn list_item(
@@ -91,7 +101,6 @@ fn list_item(
     item_path: &str,
     item_property: &str,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-
     let mut v: Vec<String> = Vec::new();
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
     let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
@@ -145,12 +154,7 @@ pub fn call_method(
     param: Option<&[MessageItem]>,
     timeout_ms: i32,
 ) -> Result<Message, Box<dyn Error>> {
-    let mut m = Message::new_method_call(
-        SERVICE_NAME,
-        object_path,
-        interface,
-        method
-    )?;
+    let mut m = Message::new_method_call(SERVICE_NAME, object_path, interface, method)?;
     if let Some(p) = param {
         m.append_items(p);
     }
