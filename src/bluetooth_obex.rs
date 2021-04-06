@@ -1,7 +1,7 @@
 extern crate dbus;
 use self::dbus::arg::{Dict, Variant};
-use self::dbus::Path as ObjectPath;
 use self::dbus::Message;
+use self::dbus::Path as ObjectPath;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_session::BluetoothSession;
-use dbus::ffidisp::{Connection, BusType};
 use dbus::arg::messageitem::{MessageItem, Props};
+use dbus::ffidisp::{BusType, Connection};
 
 const OBEX_BUS: &str = "org.bluez.obex";
 const OBEX_PATH: &str = "/org/bluez/obex";

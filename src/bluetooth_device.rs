@@ -1,12 +1,13 @@
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::Message;
 use dbus::arg::messageitem::MessageItem;
+use dbus::Message;
 use hex::FromHex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::str::FromStr;
+use crate::ok_or_str;
 
 static DEVICE_INTERFACE: &str = "org.bluez.Device1";
 
@@ -49,10 +50,11 @@ impl<'a> BluetoothDevice<'a> {
     }
 
     pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
-        let addata = bluetooth_utils::list_addata_2(self.session.get_connection(), &self.object_path)?;
+        let addata =
+            bluetooth_utils::list_addata_2(self.session.get_connection(), &self.object_path)?;
 
         if addata.is_empty() {
-            return Err(Box::from("No addata found."))
+            return Err(Box::from("No addata found."));
         }
         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
@@ -103,46 +105,46 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n105
     pub fn get_address(&self) -> Result<String, Box<dyn Error>> {
         let address = self.get_property("Address")?;
-        Ok(String::from(address.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(address.inner::<&str>())?))
     }
 
     /// The Bluetooth device Address Type.
     pub fn get_address_type(&self) -> Result<BluetoothAddressType, Box<dyn Error>> {
         let address = self.get_property("AddressType")?;
-        Ok(address.inner::<&str>().unwrap().parse()?)
+        Ok(ok_or_str!(address.inner::<&str>())?.parse()?)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n109
     pub fn get_name(&self) -> Result<String, Box<dyn Error>> {
         let name = self.get_property("Name")?;
-        Ok(String::from(name.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(name.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n121
     pub fn get_icon(&self) -> Result<String, Box<dyn Error>> {
         let icon = self.get_property("Icon")?;
-        Ok(String::from(icon.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(icon.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n126
     pub fn get_class(&self) -> Result<u32, Box<dyn Error>> {
         let class = self.get_property("Class")?;
-        Ok(class.inner::<u32>().unwrap())
+        ok_or_str!(class.inner::<u32>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n126
     pub fn get_appearance(&self) -> Result<u16, Box<dyn Error>> {
         let appearance = self.get_property("Appearance")?;
-        Ok(appearance.inner::<u16>().unwrap())
+        ok_or_str!(appearance.inner::<u16>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n134
     pub fn get_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let uuids = self.get_property("UUIDs")?;
-        let z: &[MessageItem] = uuids.inner().unwrap();
+        let z: &[MessageItem] = ok_or_str!(uuids.inner())?;
         let mut v: Vec<String> = Vec::new();
         for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
+            v.push(String::from(ok_or_str!(y.inner::<&str>())?));
         }
         Ok(v)
     }
@@ -150,13 +152,13 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n139
     pub fn is_paired(&self) -> Result<bool, Box<dyn Error>> {
         let paired = self.get_property("Paired")?;
-        Ok(paired.inner::<bool>().unwrap())
+        ok_or_str!(paired.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n143
     pub fn is_connected(&self) -> Result<bool, Box<dyn Error>> {
         let connected = self.get_property("Connected")?;
-        Ok(connected.inner::<bool>().unwrap())
+        ok_or_str!(connected.inner::<bool>())
     }
 
     pub fn is_ready_to_receive(&self) -> Option<bool> {
@@ -173,19 +175,19 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n149
     pub fn is_trusted(&self) -> Result<bool, Box<dyn Error>> {
         let trusted = self.get_property("Trusted")?;
-        Ok(trusted.inner::<bool>().unwrap())
+        ok_or_str!(trusted.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n185
     pub fn is_blocked(&self) -> Result<bool, Box<dyn Error>> {
         let blocked = self.get_property("Blocked")?;
-        Ok(blocked.inner::<bool>().unwrap())
+        ok_or_str!(blocked.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n161
     pub fn get_alias(&self) -> Result<String, Box<dyn Error>> {
         let alias = self.get_property("Alias")?;
-        Ok(String::from(alias.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(alias.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n161
@@ -196,25 +198,25 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n174
     pub fn get_adapter(&self) -> Result<String, Box<dyn Error>> {
         let adapter = self.get_property("Adapter")?;
-        Ok(String::from(adapter.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(adapter.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n178
     pub fn is_legacy_pairing(&self) -> Result<bool, Box<dyn Error>> {
         let legacy_pairing = self.get_property("LegacyPairing")?;
-        Ok(legacy_pairing.inner::<bool>().unwrap())
+        ok_or_str!(legacy_pairing.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n189
     pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<dyn Error>> {
         let modalias = self.get_property("Modalias")?;
-        let m = modalias.inner::<&str>().unwrap();
+        let m = ok_or_str!(modalias.inner::<&str>())?;
         let ids: Vec<&str> = m.split(':').collect();
 
         let source = String::from(ids[0]);
-        let vendor = Vec::from_hex(ids[1][1..5].to_string()).unwrap();
-        let product = Vec::from_hex(ids[1][6..10].to_string()).unwrap();
-        let device = Vec::from_hex(ids[1][11..15].to_string()).unwrap();
+        let vendor = Vec::from_hex(ids[1][1..5].to_string())?;
+        let product = Vec::from_hex(ids[1][6..10].to_string())?;
+        let device = Vec::from_hex(ids[1][11..15].to_string())?;
 
         Ok((
             source,
@@ -247,32 +249,29 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n230
     pub fn get_rssi(&self) -> Result<i16, Box<dyn Error>> {
         let rssi = self.get_property("RSSI")?;
-        Ok(rssi.inner::<i16>().unwrap())
+        ok_or_str!(rssi.inner::<i16>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n235
     pub fn get_tx_power(&self) -> Result<i16, Box<dyn Error>> {
         let tx_power = self.get_property("TxPower")?;
-        Ok(tx_power.inner::<i16>().unwrap())
+        ok_or_str!(tx_power.inner::<i16>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n240
     pub fn get_manufacturer_data(&self) -> Result<HashMap<u16, Vec<u8>>, Box<dyn Error>> {
         let manufacturer_data_array = self.get_property("ManufacturerData")?;
         let mut m = HashMap::new();
-        let dict_vec = manufacturer_data_array
-            .inner::<&[(MessageItem, MessageItem)]>()
-            .unwrap();
+        let dict_vec = ok_or_str!(manufacturer_data_array
+            .inner::<&[(MessageItem, MessageItem)]>())?;
         for (key, value) in dict_vec {
-            let v = value
-                .inner::<&MessageItem>()
-                .unwrap()
-                .inner::<&Vec<MessageItem>>()
-                .unwrap()
+            let v = ok_or_str!(value
+                .inner::<&MessageItem>()?
+                .inner::<&Vec<MessageItem>>())?
                 .iter()
                 .map(|b| b.inner::<u8>().unwrap_or(0))
                 .collect();
-            m.insert(key.inner::<u16>().unwrap(), v);
+            m.insert(ok_or_str!(key.inner::<u16>())?, v);
         }
         Ok(m)
     }
@@ -281,17 +280,16 @@ impl<'a> BluetoothDevice<'a> {
     pub fn get_service_data(&self) -> Result<HashMap<String, Vec<u8>>, Box<dyn Error>> {
         let service_data_array = self.get_property("ServiceData")?;
         let mut m = HashMap::new();
-        let dict_vec = service_data_array.inner::<&[(MessageItem, MessageItem)]>().unwrap();
+        let dict_vec = ok_or_str!(service_data_array
+            .inner::<&[(MessageItem, MessageItem)]>())?;
         for (key, value) in dict_vec {
-            let v = value
-                .inner::<&MessageItem>()
-                .unwrap()
-                .inner::<&Vec<MessageItem>>()
-                .unwrap()
+            let v = ok_or_str!(value
+                .inner::<&MessageItem>()?
+                .inner::<&Vec<MessageItem>>())?
                 .iter()
                 .map(|b| b.inner::<u8>().unwrap_or(0))
                 .collect();
-            m.insert(key.inner::<&str>().unwrap().to_string(), v);
+            m.insert(ok_or_str!(key.inner::<&str>())?.to_string(), v);
         }
         Ok(m)
     }
@@ -299,7 +297,7 @@ impl<'a> BluetoothDevice<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n251
     pub fn is_services_resolved(&self) -> Result<bool, Box<dyn Error>> {
         let services_resolved = self.get_property("ServicesResolved")?;
-        Ok(services_resolved.inner::<bool>().unwrap())
+        ok_or_str!(services_resolved.inner::<bool>())
     }
 
     pub fn get_gatt_services(&self) -> Result<Vec<String>, Box<dyn Error>> {

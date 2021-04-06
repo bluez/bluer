@@ -1,4 +1,4 @@
-use dbus::ffidisp::{Connection, BusType, ConnMsgs};
+use dbus::ffidisp::{BusType, ConnMsgs, Connection};
 use std::error::Error;
 
 static BLUEZ_MATCH: &str = "type='signal',sender='org.bluez'";
@@ -24,9 +24,7 @@ impl BluetoothSession {
     }
 
     fn new(connection: Connection) -> BluetoothSession {
-        BluetoothSession {
-            connection,
-        }
+        BluetoothSession { connection }
     }
 
     pub fn get_connection(&self) -> &Connection {

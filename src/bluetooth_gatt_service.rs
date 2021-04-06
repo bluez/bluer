@@ -1,5 +1,5 @@
 use crate::bluetooth_session::BluetoothSession;
-use crate::bluetooth_utils;
+use crate::{bluetooth_utils, ok_or_str};
 use dbus::arg::messageitem::MessageItem;
 
 use std::error::Error;
@@ -40,19 +40,19 @@ impl<'a> BluetoothGATTService<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n33
     pub fn get_uuid(&self) -> Result<String, Box<dyn Error>> {
         let uuid = self.get_property("UUID")?;
-        Ok(String::from(uuid.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(uuid.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n37
     pub fn is_primary(&self) -> Result<bool, Box<dyn Error>> {
         let primary = self.get_property("Primary")?;
-        Ok(primary.inner::<bool>().unwrap())
+        ok_or_str!(primary.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n42
     pub fn get_device(&self) -> Result<String, Box<dyn Error>> {
         let device = self.get_property("Device")?;
-        Ok(String::from(device.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(device.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n48

@@ -2,8 +2,9 @@ use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::Message;
+use crate::ok_or_str;
 use dbus::arg::messageitem::MessageItem;
+use dbus::Message;
 use hex::FromHex;
 use std::error::Error;
 
@@ -52,10 +53,8 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub fn get_first_device(&self) -> Result<BluetoothDevice, Box<dyn Error>> {
-        let devices =bluetooth_utils::list_devices(
-            self.session.get_connection(),
-            &self.object_path
-        )?;
+        let devices =
+            bluetooth_utils::list_devices(self.session.get_connection(), &self.object_path)?;
 
         if devices.is_empty() {
             return Err(Box::from("No device found."));
@@ -64,10 +63,11 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
-        let addata = bluetooth_utils::list_addata_1(self.session.get_connection(), &self.object_path)?;
+        let addata =
+            bluetooth_utils::list_addata_1(self.session.get_connection(), &self.object_path)?;
 
         if addata.is_empty() {
-            return Err(Box::from("No addata found."))
+            return Err(Box::from("No addata found."));
         }
         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
@@ -122,19 +122,19 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n108
     pub fn get_address(&self) -> Result<String, Box<dyn Error>> {
         let address = self.get_property("Address")?;
-        Ok(String::from(address.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(address.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n112
     pub fn get_name(&self) -> Result<String, Box<dyn Error>> {
         let name = self.get_property("Name")?;
-        Ok(String::from(name.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(name.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
     pub fn get_alias(&self) -> Result<String, Box<dyn Error>> {
         let alias = self.get_property("Alias")?;
-        Ok(String::from(alias.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(alias.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
@@ -145,13 +145,13 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n139
     pub fn get_class(&self) -> Result<u32, Box<dyn Error>> {
         let class = self.get_property("Class")?;
-        Ok(class.inner::<u32>().unwrap())
+        ok_or_str!(class.inner::<u32>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
     pub fn is_powered(&self) -> Result<bool, Box<dyn Error>> {
         let powered = self.get_property("Powered")?;
-        Ok(powered.inner::<bool>().unwrap())
+        ok_or_str!(powered.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
@@ -162,7 +162,7 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
     pub fn is_discoverable(&self) -> Result<bool, Box<dyn Error>> {
         let discoverable = self.get_property("Discoverable")?;
-        Ok(discoverable.inner::<bool>().unwrap())
+        ok_or_str!(discoverable.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
@@ -173,7 +173,7 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
     pub fn is_pairable(&self) -> Result<bool, Box<dyn Error>> {
         let pairable = self.get_property("Pairable")?;
-        Ok(pairable.inner::<bool>().unwrap())
+        ok_or_str!(pairable.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
@@ -184,7 +184,7 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
     pub fn get_pairable_timeout(&self) -> Result<u32, Box<dyn Error>> {
         let pairable_timeout = self.get_property("PairableTimeout")?;
-        Ok(pairable_timeout.inner::<u32>().unwrap())
+        ok_or_str!(pairable_timeout.inner::<u32>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
@@ -195,7 +195,7 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
     pub fn get_discoverable_timeout(&self) -> Result<u32, Box<dyn Error>> {
         let discoverable_timeout = self.get_property("DiscoverableTimeout")?;
-        Ok(discoverable_timeout.inner::<u32>().unwrap())
+        ok_or_str!(discoverable_timeout.inner::<u32>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
@@ -206,16 +206,16 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n205
     pub fn is_discovering(&self) -> Result<bool, Box<dyn Error>> {
         let discovering = self.get_property("Discovering")?;
-        Ok(discovering.inner::<bool>().unwrap())
+        ok_or_str!(discovering.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n209
     pub fn get_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let uuids = self.get_property("UUIDs")?;
-        let z: &[MessageItem] = uuids.inner().unwrap();
+        let z: &[MessageItem] = ok_or_str!(uuids.inner())?;
         let mut v: Vec<String> = Vec::new();
         for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
+            v.push(String::from(ok_or_str!(y.inner::<&str>())?));
         }
         Ok(v)
     }
@@ -223,13 +223,13 @@ impl<'a> BluetoothAdapter<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n215
     pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<dyn Error>> {
         let modalias = self.get_property("Modalias")?;
-        let m = modalias.inner::<&str>().unwrap();
+        let m = ok_or_str!(modalias.inner::<&str>())?;
         let ids: Vec<&str> = m.split(':').collect();
 
         let source = String::from(ids[0]);
-        let vendor = Vec::from_hex(ids[1][1..5].to_string()).unwrap();
-        let product = Vec::from_hex(ids[1][6..10].to_string()).unwrap();
-        let device = Vec::from_hex(ids[1][11..15].to_string()).unwrap();
+        let vendor = Vec::from_hex(ids[1][1..5].to_string())?;
+        let product = Vec::from_hex(ids[1][6..10].to_string())?;
+        let device = Vec::from_hex(ids[1][11..15].to_string())?;
 
         Ok((
             source,
@@ -295,16 +295,18 @@ impl<'a> BluetoothAdapter<'a> {
             AddressType::Random => "random",
         };
 
-        let m = MessageItem::new_dict(vec![
-            ("Address".into(), MessageItem::Variant(Box::new(address.into()))),
-            ("AddressType".into(), MessageItem::Variant(Box::new(address_type.into()))),
-        ]).unwrap();
+        let m = ok_or_str!(MessageItem::new_dict(vec![
+            (
+                "Address".into(),
+                MessageItem::Variant(Box::new(address.into())),
+            ),
+            (
+                "AddressType".into(),
+                MessageItem::Variant(Box::new(address_type.into())),
+            ),
+        ]))?;
 
-        self.call_method(
-            "ConnectDevice",
-            Some(&[m]),
-            timeout_ms,
-        )
+        self.call_method("ConnectDevice", Some(&[m]), timeout_ms)
     }
 }
 

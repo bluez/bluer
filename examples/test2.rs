@@ -1,7 +1,7 @@
 extern crate blurz;
 
-static BATTERY_SERVICE_UUID: &'static str = "0000180f-0000-1000-8000-00805f9b34fb";
-static COLOR_PICKER_SERVICE_UUID: &'static str = "00001812-0000-1000-8000-00805f9b34fb";
+const BATTERY_SERVICE_UUID: &str = "0000180f-0000-1000-8000-00805f9b34fb";
+const COLOR_PICKER_SERVICE_UUID: &str = "00001812-0000-1000-8000-00805f9b34fb";
 
 use std::error::Error;
 use std::thread;
@@ -18,26 +18,23 @@ use blurz::bluetooth_session::BluetoothSession as Session;
 fn test2() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
     let adapter: Adapter = Adapter::init(bt_session)?;
-    let session = DiscoverySession::create_session(
-        &bt_session,
-        &adapter.get_id()
-    )?;
+    let session = DiscoverySession::create_session(&bt_session, &adapter.get_id())?;
     session.start_discovery()?;
-    //let mut devices = vec!();
+    let mut devices = vec![];
     for _ in 0..5 {
-        let devices = adapter.get_device_list()?;
+        devices = adapter.get_device_list()?;
         if !devices.is_empty() {
             break;
         }
         thread::sleep(Duration::from_millis(1000));
     }
     session.stop_discovery()?;
-    let devices = adapter.get_device_list()?;
     if devices.is_empty() {
         return Err(Box::from("No device found"));
     }
+
     println!("{} device(s) found", devices.len());
-    let mut device: Device = Device::new(bt_session, "");
+    let mut device: Device = Device::new(&bt_session, "");
     'device_loop: for d in devices {
         device = Device::new(bt_session, &d);
         println!("{} {:?}", device.get_id(), device.get_alias());
@@ -62,7 +59,7 @@ fn test2() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        println!("");
+        println!();
     }
     adapter.stop_discovery().ok();
     if !device.is_connected()? {

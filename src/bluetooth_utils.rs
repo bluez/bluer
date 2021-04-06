@@ -1,6 +1,6 @@
 use dbus::arg::messageitem::{MessageItem, Props};
 use dbus::ffidisp::{BusType, Connection};
-use dbus::Message;
+use dbus::{Error as DbusError, Message};
 use std::error::Error;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
@@ -11,6 +11,21 @@ static DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 pub static SERVICE_NAME: &str = "org.bluez";
 static LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
 static LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
+
+#[macro_export]
+macro_rules! ok_or_str {
+    ($e: expr) => {
+        $e.map_err(|e| Box::<dyn Error>::from(format!("{:?}", e)))
+    }
+}
+
+#[macro_export]
+macro_rules! or_else_str {
+    ($e: expr, $message: literal) => {
+        $e.ok_or_else(|| DbusError::new_custom("missing", $message))
+    }
+}
+
 
 fn get_managed_objects(c: &Connection) -> Result<Vec<MessageItem>, Box<dyn Error>> {
     let m = Message::new_method_call(
@@ -26,13 +41,14 @@ fn get_managed_objects(c: &Connection) -> Result<Vec<MessageItem>, Box<dyn Error
 pub fn get_adapters(c: &Connection) -> Result<Vec<String>, Box<dyn Error>> {
     let mut adapters = Vec::new();
     let objects = get_managed_objects(&c)?;
-    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = ok_or_str!(
+        or_else_str!(objects.get(0), "get_adapters couldn't get managed objects")?.inner())?;
     for (path, interfaces) in z {
-        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        let x: &[(MessageItem, MessageItem)] = ok_or_str!(interfaces.inner())?;
         for (i, _) in x {
-            let name: &str = i.inner().unwrap();
+            let name: &str = ok_or_str!(i.inner())?;
             if name == ADAPTER_INTERFACE {
-                let p: &str = path.inner().unwrap();
+                let p: &str = ok_or_str!(path.inner())?;
                 adapters.push(String::from(p));
             }
         }
@@ -44,13 +60,13 @@ pub fn get_ad_man() -> Result<Vec<String>, Box<dyn Error>> {
     let mut managers = Vec::new();
     let c = Connection::get_private(BusType::System)?;
     let objects = get_managed_objects(&c)?;
-    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = ok_or_str!(or_else_str!(objects.get(0), "get_ad_mancouldn't get managed objects")?.inner())?;
     for (path, interfaces) in z {
-        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        let x: &[(MessageItem, MessageItem)] = ok_or_str!(interfaces.inner())?;
         for (i, _) in x {
-            let name: &str = i.inner().unwrap();
+            let name: &str = ok_or_str!(i.inner())?;
             if name == LEADVERTISING_MANAGER_INTERFACE {
-                let p: &str = path.inner().unwrap();
+                let p: &str = ok_or_str!(path.inner())?;
                 managers.push(String::from(p));
             }
         }
@@ -103,15 +119,15 @@ fn list_item(
 ) -> Result<Vec<String>, Box<dyn Error>> {
     let mut v: Vec<String> = Vec::new();
     let objects: Vec<MessageItem> = get_managed_objects(&c)?;
-    let z: &[(MessageItem, MessageItem)] = objects.get(0).unwrap().inner().unwrap();
+    let z: &[(MessageItem, MessageItem)] = ok_or_str!(or_else_str!(objects.get(0), "get_ad_mancouldn't get managed objects")?.inner())?;
     for (path, interfaces) in z {
-        let x: &[(MessageItem, MessageItem)] = interfaces.inner().unwrap();
+        let x: &[(MessageItem, MessageItem)] = ok_or_str!(interfaces.inner())?;
         for (i, _) in x {
-            let name: &str = i.inner().unwrap();
+            let name: &str = ok_or_str!(i.inner())?;
             if name == item_interface {
-                let objpath: &str = path.inner().unwrap();
+                let objpath: &str = ok_or_str!(path.inner())?;
                 let prop = get_property(c, item_interface, objpath, item_property)?;
-                let prop_path = prop.inner::<&str>().unwrap();
+                let prop_path = ok_or_str!(prop.inner::<&str>())?;
                 if prop_path == item_path {
                     v.push(String::from(objpath));
                 }

@@ -1,5 +1,5 @@
-use crate::bluetooth_utils;
 use crate::bluetooth_session::BluetoothSession;
+use crate::{bluetooth_utils, ok_or_str};
 use dbus::arg::messageitem::MessageItem;
 use std::collections::HashMap;
 use std::error::Error;
@@ -13,7 +13,7 @@ pub struct BluetoothAdvertisingData<'a> {
 }
 
 impl<'a> BluetoothAdvertisingData<'a> {
-	pub fn new(session: &'a BluetoothSession, object_path: &str) -> Self {
+    pub fn new(session: &'a BluetoothSession, object_path: &str) -> Self {
         BluetoothAdvertisingData {
             object_path: object_path.to_string(),
             session,
@@ -25,20 +25,25 @@ impl<'a> BluetoothAdvertisingData<'a> {
     }
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
-        bluetooth_utils::get_property(self.session.get_connection(), LEADVERTISING_DATA_INTERFACE, &self.object_path, prop)
+        bluetooth_utils::get_property(
+            self.session.get_connection(),
+            LEADVERTISING_DATA_INTERFACE,
+            &self.object_path,
+            prop,
+        )
     }
 
-/*
- * Properties
- */
+    /*
+     * Properties
+     */
 
     pub fn get_type(&self) -> Result<String, Box<dyn Error>> {
         let type_ = self.get_property("Type")?;
-        Ok(String::from(type_.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(type_.inner::<&str>())?))
     }
 
     pub fn get_service_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
-    	unimplemented!()
+        unimplemented!()
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n204
@@ -47,7 +52,7 @@ impl<'a> BluetoothAdvertisingData<'a> {
     }
 
     pub fn get_solicit_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
-    	unimplemented!()
+        unimplemented!()
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/device-api.txt#n210
@@ -56,7 +61,7 @@ impl<'a> BluetoothAdvertisingData<'a> {
     }
 
     pub fn include_tx_power(&self) -> Result<bool, Box<dyn Error>> {
-         let incl_tx_pow = self.get_property("IncludeTxPower")?;
-         Ok(incl_tx_pow.inner::<bool>().unwrap())
+        let incl_tx_pow = self.get_property("IncludeTxPower")?;
+        ok_or_str!(incl_tx_pow.inner::<bool>())
     }
 }

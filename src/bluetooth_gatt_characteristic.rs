@@ -1,11 +1,10 @@
-use crate::bluetooth_session::BluetoothSession;
-use crate::bluetooth_utils;
 use crate::bluetooth_event::BluetoothEvent;
-use dbus::{Message, Signature};
-use dbus::arg::Variant;
-use dbus::arg::OwnedFd;
+use crate::bluetooth_session::BluetoothSession;
+use crate::{bluetooth_utils, ok_or_str, or_else_str};
 use dbus::arg::messageitem::{MessageItem, MessageItemArray, MessageItemDict};
-use dbus::ffidisp::{Connection, BusType};
+use dbus::arg::{OwnedFd, Variant};
+use dbus::ffidisp::{BusType, Connection};
+use dbus::{Error as DbusError, Message, Signature};
 
 use std::error::Error;
 
@@ -42,7 +41,10 @@ enum Flags {
 */
 
 impl<'a> BluetoothGATTCharacteristic<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTCharacteristic<'a> {
+    pub fn new(
+        session: &'a BluetoothSession,
+        object_path: &str,
+    ) -> BluetoothGATTCharacteristic<'a> {
         BluetoothGATTCharacteristic {
             object_path: object_path.to_string(),
             session,
@@ -85,22 +87,22 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n114
     pub fn get_uuid(&self) -> Result<String, Box<dyn Error>> {
         let uuid = self.get_property("UUID")?;
-        Ok(String::from(uuid.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(uuid.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n118
     pub fn get_service(&self) -> Result<String, Box<dyn Error>> {
         let service = self.get_property("Service")?;
-        Ok(String::from(service.inner::<&str>().unwrap()))
+        Ok(String::from(ok_or_str!(service.inner::<&str>())?))
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n123
     pub fn get_value(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         let value = self.get_property("Value")?;
-        let z: &[MessageItem] = value.inner().unwrap();
+        let z: &[MessageItem] = ok_or_str!(value.inner())?;
         let mut v: Vec<u8> = Vec::new();
         for y in z {
-            v.push(y.inner::<u8>().unwrap());
+            v.push(ok_or_str!(y.inner::<u8>())?);
         }
         Ok(v)
     }
@@ -108,16 +110,16 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n130
     pub fn is_notifying(&self) -> Result<bool, Box<dyn Error>> {
         let notifying = self.get_property("Notifying")?;
-        Ok(notifying.inner::<bool>().unwrap())
+        ok_or_str!(notifying.inner::<bool>())
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n251
     pub fn get_flags(&self) -> Result<Vec<String>, Box<dyn Error>> {
         let flags = self.get_property("Flags")?;
-        let z: &[MessageItem] = flags.inner().unwrap();
+        let z: &[MessageItem] = ok_or_str!(flags.inner())?;
         let mut v: Vec<String> = Vec::new();
         for y in z {
-            v.push(String::from(y.inner::<&str>().unwrap()));
+            v.push(String::from(ok_or_str!(y.inner::<&str>())?));
         }
         Ok(v)
     }
@@ -138,33 +140,32 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             SERVICE_NAME,
             &self.object_path,
             GATT_CHARACTERISTIC_INTERFACE,
-            "ReadValue"
+            "ReadValue",
         )?;
-        m.append_items(&[MessageItem::Dict(
-            MessageItemDict::new(
-                match offset {
-                    Some(o) => vec![(
-                        "offset".into(),
-                        MessageItem::Variant(Box::new(o.into())),
-                    )],
-                    None => vec![],
-                },
-                Signature::make::<String>(),
-                Signature::make::<Variant<u8>>(),
-            ).unwrap(),
-        )]);
+        m.append_items(&[MessageItem::Dict(ok_or_str!(MessageItemDict::new(
+            match offset {
+                Some(o) => vec![("offset".into(), MessageItem::Variant(Box::new(o.into())))],
+                None => vec![],
+            },
+            Signature::make::<String>(),
+            Signature::make::<Variant<u8>>(),
+        ))?)]);
         let reply = c.send_with_reply_and_block(m, 1000)?;
-        let items: MessageItem = reply.get1().unwrap();
-        let z: &[MessageItem] = items.inner().unwrap();
+        let items: MessageItem = or_else_str!(reply.get1(), "read_value couldn't get reply")?;
+        let z: &[MessageItem] = ok_or_str!(items.inner())?;
         let mut v: Vec<u8> = Vec::new();
         for i in z {
-            v.push(i.inner::<u8>().unwrap());
+            v.push(ok_or_str!(i.inner::<u8>())?);
         }
         Ok(v)
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n84
-    pub fn write_value<I: Into<&'a[u8]>>(&self, values: I, offset: Option<u16>) -> Result<Option<BluetoothEvent>, Box<dyn Error>> {
+    pub fn write_value<I: Into<&'a [u8]>>(
+        &self,
+        values: I,
+        offset: Option<u16>,
+    ) -> Result<Option<BluetoothEvent>, Box<dyn Error>> {
         let values_msgs = values
             .into()
             .iter()
@@ -174,20 +175,17 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         let message = self.call_method(
             "WriteValue",
             Some(&[
-                MessageItem::new_array(values_msgs).unwrap(),
-                MessageItem::Dict(
-                    MessageItemDict::new(
-                        match offset {
-                            Some(o) => vec![(
-                                "offset".into(),
-                                MessageItem::Variant(Box::new(o.into())),
-                            )],
-                            None => vec![],
-                        },
-                        Signature::make::<String>(),
-                        Signature::make::<Variant<u8>>(),
-                    ).unwrap(),
-                ),
+                ok_or_str!(MessageItem::new_array(values_msgs))?,
+                MessageItem::Dict(ok_or_str!(MessageItemDict::new(
+                    match offset {
+                        Some(o) => {
+                            vec![("offset".into(), MessageItem::Variant(Box::new(o.into())))]
+                        }
+                        None => vec![],
+                    },
+                    Signature::make::<String>(),
+                    Signature::make::<Variant<u8>>(),
+                ))?),
             ]),
             10000,
         )?;
@@ -216,15 +214,16 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             GATT_CHARACTERISTIC_INTERFACE,
             "AcquireNotify",
         )?;
-        m.append_items(&[MessageItem::Array(
-            MessageItemArray::new(vec![], Signature::from("a{sv}")).unwrap(),
-        )]);
+        m.append_items(&[MessageItem::Array(ok_or_str!(MessageItemArray::new(
+            vec![],
+            Signature::from("a{sv}"),
+        ))?)]);
         let reply = self
             .session
             .get_connection()
             .send_with_reply_and_block(m, 1000)?;
         let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
-        Ok((opt_fd.unwrap(), opt_mtu.unwrap()))
+        Ok((or_else_str!(opt_fd, "acquire_notify couldn't get fd")?, or_else_str!(opt_mtu, "acquire_notify couldn't get mtu")?))
     }
 
     pub fn acquire_write(&self) -> Result<(OwnedFd, u16), Box<dyn Error>> {
@@ -234,14 +233,15 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
             GATT_CHARACTERISTIC_INTERFACE,
             "AcquireWrite",
         )?;
-        m.append_items(&[MessageItem::Array(
-            MessageItemArray::new(vec![], Signature::from("a{sv}")).unwrap(),
-        )]);
+        m.append_items(&[MessageItem::Array(ok_or_str!(MessageItemArray::new(
+            vec![],
+            Signature::from("a{sv}"),
+        ))?)]);
         let reply = self
             .session
             .get_connection()
             .send_with_reply_and_block(m, 1000)?;
         let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
-        Ok((opt_fd.unwrap(), opt_mtu.unwrap()))
+        Ok((or_else_str!(opt_fd, "acquire_write couldn't get fd")?, or_else_str!(opt_mtu, "acquire_write couldn't get mtu")?))
     }
 }

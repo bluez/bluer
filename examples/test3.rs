@@ -14,10 +14,7 @@ fn test3() -> Result<(), Box<dyn Error>> {
     let adapter: Adapter = Adapter::init(bt_session)?;
     adapter.set_powered(true)?;
     loop {
-        let session = DiscoverySession::create_session(
-            &bt_session,
-            adapter.get_id()
-        )?;
+        let session = DiscoverySession::create_session(&bt_session, &adapter.get_id())?;
         thread::sleep(Duration::from_millis(200));
         session.start_discovery()?;
         thread::sleep(Duration::from_millis(800));
@@ -25,14 +22,14 @@ fn test3() -> Result<(), Box<dyn Error>> {
 
         println!("{} device(s) found", devices.len());
         '_device_loop: for d in devices {
-            let device = Device::new(bt_session, d.clone());
+            let device = Device::new(bt_session, &d);
             println!(
                 "{} {:?} {:?}",
                 device.get_id(),
                 device.get_address(),
                 device.get_rssi()
             );
-            adapter.remove_device(device.get_id())?;
+            adapter.remove_device(&device.get_id())?;
         }
         session.stop_discovery()?;
     }

@@ -21,13 +21,14 @@ fn test_obex_file_transfer() -> Result<(), Box<dyn Error>> {
     let filtered_devices = devices
         .iter()
         .filter(|&device_id| {
-            let device = Device::new(session, device_id.to_string());
+            let device = Device::new(session, device_id);
             device.is_ready_to_receive().unwrap()
-        }).cloned()
+        })
+        .cloned()
         .collect::<Vec<String>>();
 
     let device_id: &str = &filtered_devices[0];
-    let device = Device::new(session, device_id.to_string());
+    let device = Device::new(session, device_id);
 
     let session = OBEXSession::new(session, &device)?;
 
