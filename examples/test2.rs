@@ -61,7 +61,7 @@ fn test2() -> Result<(), Box<dyn Error>> {
         }
         println!();
     }
-    adapter.stop_discovery().ok();
+    //adapter.stop_discovery().ok();
     if !device.is_connected()? {
         return Err(Box::from("No connectable device found"));
     }

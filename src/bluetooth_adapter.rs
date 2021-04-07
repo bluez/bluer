@@ -259,19 +259,17 @@ impl<'a> BluetoothAdapter<'a> {
         Ok(device_id)
     }
 
-    /*
-     * Methods
-     */
-
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n12
-    pub fn start_discovery(&self) -> Result<(), Box<dyn Error>> {
-        Err(Box::from("Deprecated, use Discovery Session"))
-    }
+    // Don't use this method, it's just a bomb now.
+    //pub fn start_discovery(&self) -> Result<(), Box<dyn Error>> {
+    //    Err(Box::from("Deprecated, use Discovery Session"))
+    //}
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n27
-    pub fn stop_discovery(&self) -> Result<(), Box<dyn Error>> {
-        Err(Box::from("Deprecated, use Discovery Session"))
-    }
+    // Don't use this method, it's just a bomb now.
+    //pub fn stop_discovery(&self) -> Result<(), Box<dyn Error>> {
+    //    Err(Box::from("Deprecated, use Discovery Session"))
+    //}
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
     pub fn remove_device(&self, device: &str) -> Result<(), Box<dyn Error>> {
