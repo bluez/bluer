@@ -14,7 +14,6 @@ pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
 pub use crate::bluetooth_obex::BluetoothOBEXSession;
 pub use crate::bluetooth_session::BluetoothSession;
 
-pub mod ble_gatt_uuids;
 pub mod bluetooth_adapter;
 pub mod bluetooth_device;
 pub mod bluetooth_discovery_session;
