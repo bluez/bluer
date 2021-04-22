@@ -2,10 +2,13 @@ use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use dbus::{Path, arg::{Append, AppendAll, Arg, Get, ReadAll}};
+use dbus::{
+    arg::{Append, AppendAll, Arg, Get, ReadAll},
+    Path,
+};
 use hex::FromHex;
-use std::error::Error;
 use std::collections::HashMap;
+use std::error::Error;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 
@@ -17,10 +20,7 @@ pub struct BluetoothAdapter<'a> {
 
 impl<'a> BluetoothAdapter<'a> {
     fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothAdapter<'a> {
-        BluetoothAdapter {
-            object_path: object_path.to_string(),
-            session,
-        }
+        BluetoothAdapter { object_path: object_path.to_string(), session }
     }
 
     pub async fn init(session: &BluetoothSession) -> Result<BluetoothAdapter<'_>, Box<dyn Error>> {
@@ -34,8 +34,7 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub async fn create_adapter(
-        session: &'a BluetoothSession,
-        object_path: &str,
+        session: &'a BluetoothSession, object_path: &str,
     ) -> Result<BluetoothAdapter<'a>, Box<dyn Error>> {
         let adapters = bluetooth_utils::get_adapters(&session.get_connection()).await?;
 
@@ -52,8 +51,7 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub async fn get_first_device(&self) -> Result<BluetoothDevice<'_>, Box<dyn Error>> {
-        let devices =
-            bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await?;
+        let devices = bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await?;
 
         if devices.is_empty() {
             return Err(Box::from("No device found."));
@@ -62,8 +60,7 @@ impl<'a> BluetoothAdapter<'a> {
     }
 
     pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>, Box<dyn Error>> {
-        let addata =
-            bluetooth_utils::list_addata_1(&self.session.get_connection(), &self.object_path).await?;
+        let addata = bluetooth_utils::list_addata_1(&self.session.get_connection(), &self.object_path).await?;
 
         if addata.is_empty() {
             return Err(Box::from("No addata found."));
@@ -75,50 +72,7 @@ impl<'a> BluetoothAdapter<'a> {
         bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await
     }
 
-    async fn get_property<R>(&self, prop: &str) -> Result<R, Box<dyn Error>> 
-    where R: for<'b> Get<'b> + 'static
-
-    {
-        bluetooth_utils::get_property(
-            &self.session.get_connection(),
-            ADAPTER_INTERFACE,
-            &self.object_path,
-            prop,
-        ).await
-    }
-
-    async fn set_property<T>(&self, prop: &str, value: T, timeout_ms: i32) -> Result<(), Box<dyn Error>>
-    where
-        T: Arg + Append,
-    {
-        bluetooth_utils::set_property(
-            &self.session.get_connection(),
-            ADAPTER_INTERFACE,
-            &self.object_path,
-            prop,
-            value,
-            timeout_ms,
-        ).await
-    }
-
-    async fn call_method<A, R>(
-        &self,
-        method: &str,
-        param: A,
-        timeout_ms: i32,
-    ) -> Result<R, Box<dyn Error>> 
-    where A: AppendAll, R: ReadAll + 'static
-
-    {
-        bluetooth_utils::call_method(
-            &self.session.get_connection(),
-            ADAPTER_INTERFACE,
-            &self.object_path,
-            method,
-            param,
-            timeout_ms,
-        ).await
-    }
+    dbus_methods!(ADAPTER_INTERFACE);
 
     /*
      * Properties
@@ -261,27 +215,23 @@ impl<'a> BluetoothAdapter<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
     pub async fn remove_device(&self, device: &str) -> Result<(), Box<dyn Error>> {
-        self.call_method(
-            "RemoveDevice",
-            (Path::from(device),),
-            1000,
-        ).await?;
+        self.call_method("RemoveDevice", (Path::from(device),), 1000).await?;
         Ok(())
     }
 
     // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154
     pub async fn connect_device(
-        &self,
-        address: &str,
-        address_type: AddressType,
-        timeout_ms: i32,
+        &self, address: &str, address_type: AddressType, timeout_ms: i32,
     ) -> Result<Path<'static>, Box<dyn Error>> {
         let mut m = HashMap::new();
         m.insert("Address", address);
-        m.insert("AddressType", match address_type {
-            AddressType::Public => "public",
-            AddressType::Random => "random",
-        });
+        m.insert(
+            "AddressType",
+            match address_type {
+                AddressType::Public => "public",
+                AddressType::Random => "random",
+            },
+        );
 
         let (path,): (Path,) = self.call_method("ConnectDevice", (m,), timeout_ms).await?;
         Ok(path)

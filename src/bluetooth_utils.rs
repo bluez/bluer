@@ -5,7 +5,8 @@ use dbus::{
 };
 use dbus::{Error as DbusError, Message};
 use core::time;
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, str::FromStr, time::Duration};
+use hex::FromHex;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 static DEVICE_INTERFACE: &str = "org.bluez.Device1";
@@ -29,6 +30,9 @@ macro_rules! or_else_str {
         $e.ok_or_else(|| DbusError::new_custom("missing", $message))
     };
 }
+
+
+
 
 async fn get_managed_objects(c: &SyncConnection) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>, Box<dyn Error>> {
     let p = Proxy::new(SERVICE_NAME, "/", Duration::from_secs(1), c);
@@ -137,4 +141,37 @@ pub async fn call_method<A, R>(
 {
     let p = Proxy::new(SERVICE_NAME, object_path, Duration::from_millis(timeout_ms as _), c);
     Ok(p.method_call(interface, method, param).await?)
+}
+
+
+/// Linux kernel modalias information.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Modalias {
+    pub source: String,
+    pub vendor: u32,
+    pub product: u32,
+    pub device: u32,
+}
+
+impl FromStr for Modalias {
+    type Err = String;
+
+    fn from_str(m: &str) -> Result<Self, Self::Err> {
+        fn do_parse(m: &str) -> Option<Modalias> {
+            let ids: Vec<&str> = m.split(':').collect();
+    
+            let source = ids.get(0)?;
+            let vendor = Vec::from_hex(ids.get(1)?.get(1..5)?).ok()?;
+            let product = Vec::from_hex(ids.get(1)?.get(6..10)?).ok()?;
+            let device = Vec::from_hex(ids.get(1)?.get(11..15)?).ok()?;
+
+            Some(Modalias {
+                source: source.to_string(),
+                vendor: (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
+                product: (product[0] as u32) * 16 * 16 + (product[1] as u32),
+                device: (device[0] as u32) * 16 * 16 + (device[1] as u32),
+            })    
+        }
+        do_parse(m).ok_or_else(|| format!("invalid modalias: {}", m))
+    }
 }
