@@ -2,11 +2,10 @@ use crate::bluetooth_device::BluetoothDevice;
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::bluetooth_session::BluetoothSession;
 use crate::bluetooth_utils;
-use crate::ok_or_str;
-use dbus::arg::messageitem::MessageItem;
-use dbus::Message;
+use dbus::{Path, arg::{Append, AppendAll, Arg, Get, ReadAll}};
 use hex::FromHex;
 use std::error::Error;
+use std::collections::HashMap;
 
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 
@@ -24,8 +23,8 @@ impl<'a> BluetoothAdapter<'a> {
         }
     }
 
-    pub fn init(session: &BluetoothSession) -> Result<BluetoothAdapter, Box<dyn Error>> {
-        let adapters = bluetooth_utils::get_adapters(session.get_connection())?;
+    pub async fn init(session: &BluetoothSession) -> Result<BluetoothAdapter<'_>, Box<dyn Error>> {
+        let adapters = bluetooth_utils::get_adapters(&session.get_connection()).await?;
 
         if adapters.is_empty() {
             return Err(Box::from("Bluetooth adapter not found"));
@@ -34,11 +33,11 @@ impl<'a> BluetoothAdapter<'a> {
         Ok(BluetoothAdapter::new(session, &adapters[0]))
     }
 
-    pub fn create_adapter(
+    pub async fn create_adapter(
         session: &'a BluetoothSession,
         object_path: &str,
     ) -> Result<BluetoothAdapter<'a>, Box<dyn Error>> {
-        let adapters = bluetooth_utils::get_adapters(session.get_connection())?;
+        let adapters = bluetooth_utils::get_adapters(&session.get_connection()).await?;
 
         for adapter in adapters {
             if adapter == object_path {
@@ -52,9 +51,9 @@ impl<'a> BluetoothAdapter<'a> {
         self.object_path.clone()
     }
 
-    pub fn get_first_device(&self) -> Result<BluetoothDevice, Box<dyn Error>> {
+    pub async fn get_first_device(&self) -> Result<BluetoothDevice<'_>, Box<dyn Error>> {
         let devices =
-            bluetooth_utils::list_devices(self.session.get_connection(), &self.object_path)?;
+            bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await?;
 
         if devices.is_empty() {
             return Err(Box::from("No device found."));
@@ -62,9 +61,9 @@ impl<'a> BluetoothAdapter<'a> {
         Ok(BluetoothDevice::new(self.session, &devices[0]))
     }
 
-    pub fn get_addata(&self) -> Result<BluetoothAdvertisingData, Box<dyn Error>> {
+    pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>, Box<dyn Error>> {
         let addata =
-            bluetooth_utils::list_addata_1(self.session.get_connection(), &self.object_path)?;
+            bluetooth_utils::list_addata_1(&self.session.get_connection(), &self.object_path).await?;
 
         if addata.is_empty() {
             return Err(Box::from("No addata found."));
@@ -72,47 +71,53 @@ impl<'a> BluetoothAdapter<'a> {
         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
 
-    pub fn get_device_list(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        bluetooth_utils::list_devices(self.session.get_connection(), &self.object_path)
+    pub async fn get_device_list(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await
     }
 
-    fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
+    async fn get_property<R>(&self, prop: &str) -> Result<R, Box<dyn Error>> 
+    where R: for<'b> Get<'b> + 'static
+
+    {
         bluetooth_utils::get_property(
-            self.session.get_connection(),
+            &self.session.get_connection(),
             ADAPTER_INTERFACE,
             &self.object_path,
             prop,
-        )
+        ).await
     }
 
-    fn set_property<T>(&self, prop: &str, value: T, timeout_ms: i32) -> Result<(), Box<dyn Error>>
+    async fn set_property<T>(&self, prop: &str, value: T, timeout_ms: i32) -> Result<(), Box<dyn Error>>
     where
-        T: Into<MessageItem>,
+        T: Arg + Append,
     {
         bluetooth_utils::set_property(
-            self.session.get_connection(),
+            &self.session.get_connection(),
             ADAPTER_INTERFACE,
             &self.object_path,
             prop,
             value,
             timeout_ms,
-        )
+        ).await
     }
 
-    fn call_method(
+    async fn call_method<A, R>(
         &self,
         method: &str,
-        param: Option<&[MessageItem]>,
+        param: A,
         timeout_ms: i32,
-    ) -> Result<Message, Box<dyn Error>> {
+    ) -> Result<R, Box<dyn Error>> 
+    where A: AppendAll, R: ReadAll + 'static
+
+    {
         bluetooth_utils::call_method(
-            self.session.get_connection(),
+            &self.session.get_connection(),
             ADAPTER_INTERFACE,
             &self.object_path,
             method,
             param,
             timeout_ms,
-        )
+        ).await
     }
 
     /*
@@ -120,111 +125,94 @@ impl<'a> BluetoothAdapter<'a> {
      */
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n108
-    pub fn get_address(&self) -> Result<String, Box<dyn Error>> {
-        let address = self.get_property("Address")?;
-        Ok(String::from(ok_or_str!(address.inner::<&str>())?))
+    pub async fn get_address(&self) -> Result<String, Box<dyn Error>> {
+        self.get_property("Address").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n112
-    pub fn get_name(&self) -> Result<String, Box<dyn Error>> {
-        let name = self.get_property("Name")?;
-        Ok(String::from(ok_or_str!(name.inner::<&str>())?))
+    pub async fn get_name(&self) -> Result<String, Box<dyn Error>> {
+        self.get_property("Name").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
-    pub fn get_alias(&self) -> Result<String, Box<dyn Error>> {
-        let alias = self.get_property("Alias")?;
-        Ok(String::from(ok_or_str!(alias.inner::<&str>())?))
+    pub async fn get_alias(&self) -> Result<String, Box<dyn Error>> {
+        self.get_property("Alias").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n120
-    pub fn set_alias(&self, value: &str) -> Result<(), Box<dyn Error>> {
-        self.set_property("Alias", value, 1000)
+    pub async fn set_alias(&self, value: &str) -> Result<(), Box<dyn Error>> {
+        self.set_property("Alias", value, 1000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n139
-    pub fn get_class(&self) -> Result<u32, Box<dyn Error>> {
-        let class = self.get_property("Class")?;
-        ok_or_str!(class.inner::<u32>())
+    pub async fn get_class(&self) -> Result<u32, Box<dyn Error>> {
+        self.get_property("Class").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
-    pub fn is_powered(&self) -> Result<bool, Box<dyn Error>> {
-        let powered = self.get_property("Powered")?;
-        ok_or_str!(powered.inner::<bool>())
+    pub async fn is_powered(&self) -> Result<bool, Box<dyn Error>> {
+        self.get_property("Powered").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n147
-    pub fn set_powered(&self, value: bool) -> Result<(), Box<dyn Error>> {
-        self.set_property("Powered", value, 10000)
+    pub async fn set_powered(&self, value: bool) -> Result<(), Box<dyn Error>> {
+        self.set_property("Powered", value, 10000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
-    pub fn is_discoverable(&self) -> Result<bool, Box<dyn Error>> {
-        let discoverable = self.get_property("Discoverable")?;
-        ok_or_str!(discoverable.inner::<bool>())
+    pub async fn is_discoverable(&self) -> Result<bool, Box<dyn Error>> {
+        self.get_property("Discoverable").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n156
-    pub fn set_discoverable(&self, value: bool) -> Result<(), Box<dyn Error>> {
-        self.set_property("Discoverable", value, 1000)
+    pub async fn set_discoverable(&self, value: bool) -> Result<(), Box<dyn Error>> {
+        self.set_property("Discoverable", value, 1000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
-    pub fn is_pairable(&self) -> Result<bool, Box<dyn Error>> {
-        let pairable = self.get_property("Pairable")?;
-        ok_or_str!(pairable.inner::<bool>())
+    pub async fn is_pairable(&self) -> Result<bool, Box<dyn Error>> {
+        self.get_property("Pairable").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n176
-    pub fn set_pairable(&self, value: bool) -> Result<(), Box<dyn Error>> {
-        self.set_property("Pairable", value, 1000)
+    pub async fn set_pairable(&self, value: bool) -> Result<(), Box<dyn Error>> {
+        self.set_property("Pairable", value, 1000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
-    pub fn get_pairable_timeout(&self) -> Result<u32, Box<dyn Error>> {
-        let pairable_timeout = self.get_property("PairableTimeout")?;
-        ok_or_str!(pairable_timeout.inner::<u32>())
+    pub async fn get_pairable_timeout(&self) -> Result<u32, Box<dyn Error>> {
+        self.get_property("PairableTimeout").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n187
-    pub fn set_pairable_timeout(&self, value: u32) -> Result<(), Box<dyn Error>> {
-        self.set_property("PairableTimeout", value, 1000)
+    pub async fn set_pairable_timeout(&self, value: u32) -> Result<(), Box<dyn Error>> {
+        self.set_property("PairableTimeout", value, 1000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
-    pub fn get_discoverable_timeout(&self) -> Result<u32, Box<dyn Error>> {
-        let discoverable_timeout = self.get_property("DiscoverableTimeout")?;
-        ok_or_str!(discoverable_timeout.inner::<u32>())
+    pub async fn get_discoverable_timeout(&self) -> Result<u32, Box<dyn Error>> {
+        self.get_property("DiscoverableTimeout").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n196
-    pub fn set_discoverable_timeout(&self, value: u32) -> Result<(), Box<dyn Error>> {
-        self.set_property("DiscoverableTimeout", value, 1000)
+    pub async fn set_discoverable_timeout(&self, value: u32) -> Result<(), Box<dyn Error>> {
+        self.set_property("DiscoverableTimeout", value, 1000).await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n205
-    pub fn is_discovering(&self) -> Result<bool, Box<dyn Error>> {
-        let discovering = self.get_property("Discovering")?;
-        ok_or_str!(discovering.inner::<bool>())
+    pub async fn is_discovering(&self) -> Result<bool, Box<dyn Error>> {
+        self.get_property("Discovering").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n209
-    pub fn get_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        let uuids = self.get_property("UUIDs")?;
-        let z: &[MessageItem] = ok_or_str!(uuids.inner())?;
-        let mut v: Vec<String> = Vec::new();
-        for y in z {
-            v.push(String::from(ok_or_str!(y.inner::<&str>())?));
-        }
-        Ok(v)
+    pub async fn get_uuids(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        self.get_property("UUIDs").await
     }
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n215
-    pub fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<dyn Error>> {
-        let modalias = self.get_property("Modalias")?;
-        let m = ok_or_str!(modalias.inner::<&str>())?;
-        let ids: Vec<&str> = m.split(':').collect();
+    pub async fn get_modalias(&self) -> Result<(String, u32, u32, u32), Box<dyn Error>> {
+        let modalias: String = self.get_property("Modalias").await?;
+        let ids: Vec<&str> = modalias.split(':').collect();
 
         let source = String::from(ids[0]);
         let vendor = Vec::from_hex(ids[1][1..5].to_string())?;
@@ -239,23 +227,23 @@ impl<'a> BluetoothAdapter<'a> {
         ))
     }
 
-    pub fn get_vendor_id_source(&self) -> Result<String, Box<dyn Error>> {
-        let (vendor_id_source, _, _, _) = self.get_modalias()?;
+    pub async fn get_vendor_id_source(&self) -> Result<String, Box<dyn Error>> {
+        let (vendor_id_source, _, _, _) = self.get_modalias().await?;
         Ok(vendor_id_source)
     }
 
-    pub fn get_vendor_id(&self) -> Result<u32, Box<dyn Error>> {
-        let (_, vendor_id, _, _) = self.get_modalias()?;
+    pub async fn get_vendor_id(&self) -> Result<u32, Box<dyn Error>> {
+        let (_, vendor_id, _, _) = self.get_modalias().await?;
         Ok(vendor_id)
     }
 
-    pub fn get_product_id(&self) -> Result<u32, Box<dyn Error>> {
-        let (_, _, product_id, _) = self.get_modalias()?;
+    pub async fn get_product_id(&self) -> Result<u32, Box<dyn Error>> {
+        let (_, _, product_id, _) = self.get_modalias().await?;
         Ok(product_id)
     }
 
-    pub fn get_device_id(&self) -> Result<u32, Box<dyn Error>> {
-        let (_, _, _, device_id) = self.get_modalias()?;
+    pub async fn get_device_id(&self) -> Result<u32, Box<dyn Error>> {
+        let (_, _, _, device_id) = self.get_modalias().await?;
         Ok(device_id)
     }
 
@@ -272,39 +260,31 @@ impl<'a> BluetoothAdapter<'a> {
     //}
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
-    pub fn remove_device(&self, device: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn remove_device(&self, device: &str) -> Result<(), Box<dyn Error>> {
         self.call_method(
             "RemoveDevice",
-            Some(&[MessageItem::ObjectPath(device.to_string().into())]),
+            (Path::from(device),),
             1000,
-        )?;
+        ).await?;
         Ok(())
     }
 
     // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154
-    pub fn connect_device(
+    pub async fn connect_device(
         &self,
         address: &str,
         address_type: AddressType,
         timeout_ms: i32,
-    ) -> Result<Message, Box<dyn Error>> {
-        let address_type = match address_type {
+    ) -> Result<Path<'static>, Box<dyn Error>> {
+        let mut m = HashMap::new();
+        m.insert("Address", address);
+        m.insert("AddressType", match address_type {
             AddressType::Public => "public",
             AddressType::Random => "random",
-        };
+        });
 
-        let m = ok_or_str!(MessageItem::new_dict(vec![
-            (
-                "Address".into(),
-                MessageItem::Variant(Box::new(address.into())),
-            ),
-            (
-                "AddressType".into(),
-                MessageItem::Variant(Box::new(address_type.into())),
-            ),
-        ]))?;
-
-        self.call_method("ConnectDevice", Some(&[m]), timeout_ms)
+        let (path,): (Path,) = self.call_method("ConnectDevice", (m,), timeout_ms).await?;
+        Ok(path)
     }
 }
 

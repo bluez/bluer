@@ -1,15 +1,24 @@
-use dbus::ffidisp::{BusType, ConnMsgs, Connection};
-use std::error::Error;
+use std::fmt::Debug;
+use std::{error::Error, fmt::Formatter, sync::Arc};
+
+use dbus::nonblock::SyncConnection;
+use dbus_tokio::connection;
 
 static BLUEZ_MATCH: &str = "type='signal',sender='org.bluez'";
 
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct BluetoothSession {
-    connection: Connection,
+    connection: Arc<SyncConnection>,
+}
+
+impl Debug for BluetoothSession {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "BluetoothSession")
+    }
 }
 
 impl BluetoothSession {
-    pub fn create_session(path: Option<&str>) -> Result<BluetoothSession, Box<dyn Error>> {
+    pub async fn create_session(path: Option<&str>) -> Result<BluetoothSession, Box<dyn Error>> {
         let rule = {
             if let Some(path) = path {
                 format!("{},path='{}'", BLUEZ_MATCH, path)
@@ -18,20 +27,18 @@ impl BluetoothSession {
             }
         };
 
-        let c = Connection::get_private(BusType::System)?;
-        c.add_match(rule.as_str())?;
-        Ok(BluetoothSession::new(c))
+        let (resource, connection) = connection::new_system_sync()?;
+        tokio::spawn(resource);
+
+        //c.add_match(rule.as_str()).await?;
+        Ok(BluetoothSession { connection })
     }
 
-    fn new(connection: Connection) -> BluetoothSession {
-        BluetoothSession { connection }
+    pub fn get_connection(&self) -> Arc<SyncConnection> {
+        self.connection.clone()
     }
 
-    pub fn get_connection(&self) -> &Connection {
-        &self.connection
-    }
-
-    pub fn incoming(&self, timeout_ms: u32) -> ConnMsgs<&Connection> {
-        self.connection.incoming(timeout_ms)
-    }
+    // pub fn incoming(&self, timeout_ms: u32) -> ConnMsgs<&Connection> {
+    //     self.connection.incoming(timeout_ms)
+    // }
 }
