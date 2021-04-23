@@ -11,7 +11,7 @@ use blurz::bluetooth_device::BluetoothDevice as Device;
 use blurz::bluetooth_obex::{
     BluetoothOBEXSession as OBEXSession, BluetoothOBEXTransfer as OBEXTransfer,
 };
-use blurz::bluetooth_session::BluetoothSession as Session;
+use blurz::bluetooth_session::Session as Session;
 
 fn test_obex_file_transfer() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(None)?;

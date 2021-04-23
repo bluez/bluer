@@ -1,43 +1,23 @@
-use crate::{bluetooth_le_advertising_data::BluetoothAdvertisingData, bluetooth_utils::Modalias};
-use crate::bluetooth_session::BluetoothSession;
+use crate::{AddressType, bluetooth_le_advertising_data::BluetoothAdvertisingData, bluetooth_utils::Modalias};
+use crate::session::Session;
 use crate::bluetooth_utils;
-use crate::ok_or_str;
+use crate::{Error, Result};
 use dbus::arg::messageitem::MessageItem;
 use dbus::Message;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use std::error::Error;
 use std::str::FromStr;
 
-static DEVICE_INTERFACE: &str = "org.bluez.Device1";
 
-/// Bluetooth device address type.
-#[derive(Clone, Debug)]
-pub enum BluetoothAddressType {
-    /// Public address
-    Public,
-    /// Random address
-    Random,
-}
-
-impl FromStr for BluetoothAddressType {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "public" => Ok(Self::Public),
-            "random" => Ok(Self::Random),
-            _ => Err(format!("unknown address type: {}", &s)),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct BluetoothDevice<'a> {
     object_path: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 impl<'a> BluetoothDevice<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothDevice<'a> {
+    pub fn new(session: &'a Session, object_path: &str) -> BluetoothDevice<'a> {
         BluetoothDevice { object_path: object_path.to_string(), session }
     }
 
@@ -45,8 +25,8 @@ impl<'a> BluetoothDevice<'a> {
         self.object_path.clone()
     }
 
-    pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>, Box<dyn Error>> {
-        let addata = bluetooth_utils::list_addata_2(&self.session.get_connection(), &self.object_path).await?;
+    pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
+        let addata = bluetooth_utils::list_addata_2(&self.session.connection(), &self.object_path).await?;
 
         if addata.is_empty() {
             return Err(Box::from("No addata found."));
@@ -54,7 +34,7 @@ impl<'a> BluetoothDevice<'a> {
         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     }
 
-    dbus_methods!(DEVICE_INTERFACE);
+    dbus_interface!("org.bluez.Device1");
 
     // ===========================================================================================
     // Properties
@@ -72,7 +52,7 @@ impl<'a> BluetoothDevice<'a> {
     /// uses privacy than before pairing this represents address
     /// type used for connection and Identity Address after
     /// pairing.
-    pub async fn address_type(&self) -> Result<BluetoothAddressType, Box<dyn Error>> {
+    pub async fn address_type(&self) -> Result<AddressType> {
         let address_type: String = self.get_property("AddressType").await?;
         Ok(address_type.parse()?)
     }
@@ -89,33 +69,40 @@ impl<'a> BluetoothDevice<'a> {
         ///
 		///	If the Alias property is unset, it will reflect
 		///	this value which makes it more convenient.
-        name, "Name" => String);
+        name, "Name" => String
+    );
 
     define_property!(
         /// Proposed icon name according to the freedesktop.org
         /// icon naming specification.
-        icon, "Icon" => String);
+        icon, "Icon" => String
+    );
 
     define_property!(
         ///	The Bluetooth class of device of the remote device.
-        class, "Class" => u32);
+        class, "Class" => u32
+    );
 
     define_property!(
         ///	External appearance of device, as found on GAP service.
-        appearance, "Appearance" => u32);
+        appearance, "Appearance" => u32
+    );
 
     define_property!(
         ///	List of 128-bit UUIDs that represents the available
 	    /// remote services.
-        uuids, "UUIDs" => Vec<String>);
+        uuids, "UUIDs" => Vec<String>
+    );
 
     define_property!(
         ///	Indicates if the remote device is paired.
-        is_paired, "Paired " => bool);
+        is_paired, "Paired " => bool
+    );
 
     define_property!(
         ///	Indicates if the remote device is paired.
-        is_connected, "Connected " => bool);
+        is_connected, "Connected " => bool
+    );
 
     /// True, when connected and paired.
     pub async fn is_ready_to_receive(&self) -> bool {
@@ -127,7 +114,8 @@ impl<'a> BluetoothDevice<'a> {
     define_property!(
         ///	Indicates if the remote is seen as trusted. This
 		/// setting can be changed by the application.
-        is_trusted, set_trusted, "Trusted " => bool);
+        is_trusted, set_trusted, "Trusted " => bool
+    );
 
     define_property!(
         /// If set to true any incoming connections from the
@@ -136,12 +124,14 @@ impl<'a> BluetoothDevice<'a> {
         /// Any device
         /// drivers will also be removed and no new ones will
         /// be probed as long as the device is blocked.
-        is_blocked, set_blocked, "Blocked " => bool);
+        is_blocked, set_blocked, "Blocked " => bool
+    );
     
     define_property!(
         /// If set to true this device will be allowed to wake the
 		/// host from system suspend.
-        is_wake_allowed, set_wake_allowed, "WakeAllowed" => bool);
+        is_wake_allowed, set_wake_allowed, "WakeAllowed" => bool
+    );
 
     define_property!(
         /// The name alias for the remote device. 
@@ -156,11 +146,13 @@ impl<'a> BluetoothDevice<'a> {
         /// 
         /// When resetting the alias with an empty string, the
         /// property will default back to the remote name.
-        alias, set_alias, "Alias" => String);
+        alias, set_alias, "Alias" => String
+    );
 
     define_property!(
         /// The object path of the adapter the device belongs to.
-        adapter, "Adapter" => String);
+        adapter, "Adapter" => String
+    );
 
     define_property!(
         /// Set to true if the device only supports the pre-2.1
@@ -173,11 +165,12 @@ impl<'a> BluetoothDevice<'a> {
         /// Note that this property can exhibit false-positives
         /// in the case of Bluetooth 2.1 (or newer) devices that
         /// have disabled Extended Inquiry Response support.
-        is_legacy_pairing, "LegacyPairing" => String);
+        is_legacy_pairing, "LegacyPairing" => String
+    );
 
      /// Remote Device ID information in modalias format
      /// used by the kernel and udev.
-    pub async fn modalias(&self) -> Result<Modalias, Box<dyn Error>> {
+    pub async fn modalias(&self) -> Result<Modalias> {
         let modalias: String = self.get_property("Modalias").await?;
         Ok(modalias.parse()?)
     }
@@ -185,12 +178,14 @@ impl<'a> BluetoothDevice<'a> {
     define_property!(
         /// Received Signal Strength Indicator of the remote
         ///	device (inquiry or advertising).
-        rssi, "RSSI" => i16);
+        rssi, "RSSI" => i16
+    );
 
     define_property!(
         /// Advertised transmitted power level (inquiry or
 		/// advertising).
-        tx_power, "TxPower" => i16);
+        tx_power, "TxPower" => i16
+    );
 
     define_property!(
         /// Manufacturer specific advertisement data. 
@@ -198,22 +193,25 @@ impl<'a> BluetoothDevice<'a> {
         /// Keys are
         /// 16 bits Manufacturer ID followed by its byte array
         /// value.
-        manufacturer_data, "ManufacturerData" => HashMap<u16, Vec<u8>>);
+        manufacturer_data, "ManufacturerData" => HashMap<u16, Vec<u8>>
+    );
 
     define_property!(
         /// Service advertisement data. 
         ///
         /// Keys are the UUIDs in
         /// string format followed by its byte array value.
-        service_data, "ServiceData" => HashMap<String, Vec<u8>>);
+        service_data, "ServiceData" => HashMap<String, Vec<u8>>
+    );
 
     define_property!(
         /// Indicate whether or not service discovery has been
 		/// resolved.
-        is_services_resolved, "ServicesResolved " => bool);
+        is_services_resolved, "ServicesResolved " => bool
+    );
 
-    pub async fn get_gatt_services(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        bluetooth_utils::list_services(&self.session.get_connection(), &self.object_path).await
+    pub async fn get_gatt_services(&self) -> Result<Vec<String>> {
+        bluetooth_utils::list_services(&self.session.connection(), &self.object_path).await
     }
 
     // ===========================================================================================
@@ -245,8 +243,8 @@ impl<'a> BluetoothDevice<'a> {
     ///     3. Connect last seen bearer, in case the
     ///     timestamps are the same BR/EDR takes
     ///     precedence.
-    pub async fn connect(&self, timeout_ms: i32) -> Result<(), Box<dyn Error>> {
-        self.call_method("Connect", (), timeout_ms).await
+    pub async fn connect(&self, timeout_ms: i32) -> Result<()> {
+        self.call_method("Connect", (), Duration::from_secs(60)).await
     }
 
     /// This method gracefully disconnects all connected
@@ -262,14 +260,14 @@ impl<'a> BluetoothDevice<'a> {
     /// For non-trusted devices connected over LE bearer calling
     /// this method will disable incoming connections until
     /// Connect method is called again.
-    pub async fn disconnect(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn disconnect(&self) -> Result<()> {
         self.call_method("Disconnect", (), 5000).await
     }
 
     /// This method connects a specific profile of this
     /// device. The UUID provided is the remote service
     /// UUID for the profile.
-    pub async fn connect_profile(&self, uuid: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn connect_profile(&self, uuid: &str) -> Result<()> {
         self.call_method("ConnectProfile", (uuid,), 30000).await
     }
 
@@ -282,7 +280,7 @@ impl<'a> BluetoothDevice<'a> {
     /// There is no connection tracking for a profile, so
     /// as long as the profile is registered this will always
     /// succeed.
-    pub async fn disconnect_profile(&self, uuid: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn disconnect_profile(&self, uuid: &str) -> Result<()> {
         self.call_method("DisconnectProfile", (uuid,), 5000).await
     }
 
@@ -301,13 +299,13 @@ impl<'a> BluetoothDevice<'a> {
     /// 
     /// In case there is no application agent and also
     /// no default agent present, this method will fail.
-    pub async fn pair(&self, timeout_ms: i32) -> Result<(), Box<dyn Error>> {
+    pub async fn pair(&self, timeout_ms: i32) -> Result<()> {
         self.call_method("Pair", (), timeout_ms).await
     }
 
     /// This method can be used to cancel a pairing
     /// operation initiated by the Pair method.
-    pub async fn cancel_pairing(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn cancel_pairing(&self) -> Result<()> {
         self.call_method("CancelPairing", (), 5000).await
     }
 }

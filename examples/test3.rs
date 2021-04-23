@@ -7,7 +7,7 @@ use std::time::Duration;
 use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
 use blurz::bluetooth_device::BluetoothDevice as Device;
 use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
-use blurz::bluetooth_session::BluetoothSession as Session;
+use blurz::bluetooth_session::Session as Session;
 
 fn test3() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;

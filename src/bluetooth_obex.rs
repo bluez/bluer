@@ -9,7 +9,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::bluetooth_device::BluetoothDevice;
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use dbus::arg::messageitem::{MessageItem, Props};
 use dbus::ffidisp::{BusType, Connection};
 
@@ -65,14 +65,14 @@ pub fn open_bus_connection() -> Result<Connection, Box<dyn Error>> {
 }
 
 pub struct BluetoothOBEXSession<'a> {
-    session: &'a BluetoothSession,
+    session: &'a Session,
     object_path: String,
 }
 
 impl<'a> BluetoothOBEXSession<'a> {
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n12
     pub fn new(
-        session: &'a BluetoothSession,
+        session: &'a Session,
         device: &BluetoothDevice,
     ) -> Result<BluetoothOBEXSession<'a>, Box<dyn Error>> {
         let device_address = device.get_address()?;
@@ -83,7 +83,7 @@ impl<'a> BluetoothOBEXSession<'a> {
             .append2(device_address, args);
 
         let r = session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         let session_path: ObjectPath = r.read1()?;
         let session_str = session_path.parse()?;
@@ -101,7 +101,7 @@ impl<'a> BluetoothOBEXSession<'a> {
             .append1(object_path);
         let _r = self
             .session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         Ok(())
     }
@@ -125,7 +125,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
                 .append1(file_path);
         let r = session
             .session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         let transfer_path: ObjectPath = r.read1()?;
         let transfer_str = transfer_path.parse()?;
@@ -147,7 +147,7 @@ impl<'a> BluetoothOBEXTransfer<'a> {
     pub fn status(&self) -> Result<String, Box<dyn Error>> {
         let transfer_path = self.object_path.clone();
         let p = Props::new(
-            &self.session.session.get_connection(),
+            &self.session.session.connection(),
             OBEX_BUS,
             transfer_path,
             TRANSFER_INTERFACE,

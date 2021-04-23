@@ -1,5 +1,5 @@
 use crate::bluetooth_event::BluetoothEvent;
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use crate::{bluetooth_utils, ok_or_str, or_else_str};
 use dbus::arg::messageitem::{MessageItem, MessageItemArray, MessageItemDict};
 use dbus::arg::{OwnedFd, Variant};
@@ -14,7 +14,7 @@ static GATT_CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 #[derive(Clone, Debug)]
 pub struct BluetoothGATTCharacteristic<'a> {
     object_path: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 /*
@@ -42,7 +42,7 @@ enum Flags {
 
 impl<'a> BluetoothGATTCharacteristic<'a> {
     pub fn new(
-        session: &'a BluetoothSession,
+        session: &'a Session,
         object_path: &str,
     ) -> BluetoothGATTCharacteristic<'a> {
         BluetoothGATTCharacteristic {
@@ -57,7 +57,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
         bluetooth_utils::get_property(
-            self.session.get_connection(),
+            self.session.connection(),
             GATT_CHARACTERISTIC_INTERFACE,
             &self.object_path,
             prop,
@@ -71,7 +71,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         timeout_ms: i32,
     ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
-            self.session.get_connection(),
+            self.session.connection(),
             GATT_CHARACTERISTIC_INTERFACE,
             &self.object_path,
             method,
@@ -126,7 +126,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
 
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/gatt-api.txt#n156
     pub fn get_gatt_descriptors(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        bluetooth_utils::list_descriptors(self.session.get_connection(), &self.object_path)
+        bluetooth_utils::list_descriptors(self.session.connection(), &self.object_path)
     }
 
     /*
@@ -220,7 +220,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         ))?)]);
         let reply = self
             .session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
         Ok((or_else_str!(opt_fd, "acquire_notify couldn't get fd")?, or_else_str!(opt_mtu, "acquire_notify couldn't get mtu")?))
@@ -239,7 +239,7 @@ impl<'a> BluetoothGATTCharacteristic<'a> {
         ))?)]);
         let reply = self
             .session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         let (opt_fd, opt_mtu) = reply.get2::<OwnedFd, u16>();
         Ok((or_else_str!(opt_fd, "acquire_write couldn't get fd")?, or_else_str!(opt_mtu, "acquire_write couldn't get mtu")?))

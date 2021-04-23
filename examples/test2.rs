@@ -13,7 +13,7 @@ use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySe
 use blurz::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as Characteristic;
 use blurz::bluetooth_gatt_descriptor::BluetoothGATTDescriptor as Descriptor;
 use blurz::bluetooth_gatt_service::BluetoothGATTService as Service;
-use blurz::bluetooth_session::BluetoothSession as Session;
+use blurz::bluetooth_session::Session as Session;
 
 fn test2() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;

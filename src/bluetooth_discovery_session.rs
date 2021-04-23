@@ -1,4 +1,4 @@
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use crate::ok_or_str;
 use dbus::arg::messageitem::MessageItem;
 use dbus::Message;
@@ -9,18 +9,18 @@ static SERVICE_NAME: &str = "org.bluez";
 
 pub struct BluetoothDiscoverySession<'a> {
     adapter: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 impl<'a> BluetoothDiscoverySession<'a> {
     pub fn create_session(
-        session: &'a BluetoothSession,
+        session: &'a Session,
         adapter: &str,
     ) -> Result<BluetoothDiscoverySession<'a>, Box<dyn Error>> {
         Ok(BluetoothDiscoverySession::new(session, adapter))
     }
 
-    fn new(session: &'a BluetoothSession, adapter: &str) -> BluetoothDiscoverySession<'a> {
+    fn new(session: &'a Session, adapter: &str) -> BluetoothDiscoverySession<'a> {
         BluetoothDiscoverySession {
             adapter: adapter.to_string(),
             session,
@@ -38,7 +38,7 @@ impl<'a> BluetoothDiscoverySession<'a> {
             m.append_items(&p);
         }
         self.session
-            .get_connection()
+            .connection()
             .send_with_reply_and_block(m, 1000)?;
         Ok(())
     }

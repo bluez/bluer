@@ -1,5 +1,5 @@
 use crate::bluetooth_event::BluetoothEvent;
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use crate::bluetooth_utils;
 use crate::{ok_or_str, or_else_str};
 use dbus::arg::messageitem::{MessageItem, MessageItemDict};
@@ -15,11 +15,11 @@ static GATT_DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 #[derive(Clone, Debug)]
 pub struct BluetoothGATTDescriptor<'a> {
     object_path: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 impl<'a> BluetoothGATTDescriptor<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTDescriptor<'a> {
+    pub fn new(session: &'a Session, object_path: &str) -> BluetoothGATTDescriptor<'a> {
         BluetoothGATTDescriptor {
             object_path: object_path.to_string(),
             session,
@@ -32,7 +32,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
         bluetooth_utils::get_property(
-            self.session.get_connection(),
+            self.session.connection(),
             GATT_DESCRIPTOR_INTERFACE,
             &self.object_path,
             prop,
@@ -46,7 +46,7 @@ impl<'a> BluetoothGATTDescriptor<'a> {
         timeout_ms: i32,
     ) -> Result<Message, Box<dyn Error>> {
         bluetooth_utils::call_method(
-            self.session.get_connection(),
+            self.session.connection(),
             GATT_DESCRIPTOR_INTERFACE,
             &self.object_path,
             method,

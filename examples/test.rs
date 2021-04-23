@@ -4,7 +4,7 @@ use std::error::Error;
 
 use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
 use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_session::BluetoothSession as Session;
+use blurz::bluetooth_session::Session as Session;
 
 fn test() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(None).unwrap();

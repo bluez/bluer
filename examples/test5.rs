@@ -3,7 +3,7 @@ extern crate blurz;
 use std::error::Error;
 
 use blurz::bluetooth_event::BluetoothEvent;
-use blurz::bluetooth_session::BluetoothSession as Session;
+use blurz::bluetooth_session::Session as Session;
 
 fn test5() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(Some("/org/bluez/hci0")).unwrap();

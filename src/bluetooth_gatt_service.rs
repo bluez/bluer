@@ -1,4 +1,4 @@
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use crate::{bluetooth_utils, ok_or_str};
 use dbus::arg::messageitem::MessageItem;
 
@@ -9,11 +9,11 @@ static GATT_SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 #[derive(Clone, Debug)]
 pub struct BluetoothGATTService<'a> {
     object_path: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 impl<'a> BluetoothGATTService<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: &str) -> BluetoothGATTService<'a> {
+    pub fn new(session: &'a Session, object_path: &str) -> BluetoothGATTService<'a> {
         BluetoothGATTService {
             object_path: object_path.to_string(),
             session,
@@ -26,7 +26,7 @@ impl<'a> BluetoothGATTService<'a> {
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
         bluetooth_utils::get_property(
-            self.session.get_connection(),
+            self.session.connection(),
             GATT_SERVICE_INTERFACE,
             &self.object_path,
             prop,
@@ -61,6 +61,6 @@ impl<'a> BluetoothGATTService<'a> {
     }
 
     pub fn get_gatt_characteristics(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        bluetooth_utils::list_characteristics(self.session.get_connection(), &self.object_path)
+        bluetooth_utils::list_characteristics(self.session.connection(), &self.object_path)
     }
 }

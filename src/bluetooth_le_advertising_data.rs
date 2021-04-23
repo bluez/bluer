@@ -1,4 +1,4 @@
-use crate::bluetooth_session::BluetoothSession;
+use crate::session::Session;
 use crate::{bluetooth_utils, ok_or_str};
 use dbus::arg::messageitem::MessageItem;
 use std::collections::HashMap;
@@ -9,11 +9,11 @@ static LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
 #[derive(Clone, Debug)]
 pub struct BluetoothAdvertisingData<'a> {
     object_path: String,
-    session: &'a BluetoothSession,
+    session: &'a Session,
 }
 
 impl<'a> BluetoothAdvertisingData<'a> {
-    pub fn new(session: &'a BluetoothSession, object_path: &str) -> Self {
+    pub fn new(session: &'a Session, object_path: &str) -> Self {
         BluetoothAdvertisingData {
             object_path: object_path.to_string(),
             session,
@@ -26,7 +26,7 @@ impl<'a> BluetoothAdvertisingData<'a> {
 
     fn get_property(&self, prop: &str) -> Result<MessageItem, Box<dyn Error>> {
         bluetooth_utils::get_property(
-            self.session.get_connection(),
+            self.session.connection(),
             LEADVERTISING_DATA_INTERFACE,
             &self.object_path,
             prop,

@@ -11,7 +11,7 @@ use blurz::bluetooth_device::BluetoothDevice;
 use blurz::bluetooth_discovery_session::BluetoothDiscoverySession;
 use blurz::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use blurz::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
-use blurz::bluetooth_session::BluetoothSession;
+use blurz::bluetooth_session::Session;
 
 //const LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 const LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";
@@ -19,7 +19,7 @@ const BATTERY_SERVICE_UUID: &str = "0000180f-0000-1000-8000-00805f9b34fb";
 const COLOR_PICKER_SERVICE_UUID: &str = "00001812-0000-1000-8000-00805f9b34fb";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let bt_session = BluetoothSession::create_session(None)?;
+    let bt_session = Session::create_session(None)?;
     let adapter = BluetoothAdapter::init(&bt_session)?;
     let session = BluetoothDiscoverySession::create_session(&bt_session, &adapter.get_id())?;
     session.start_discovery()?;
