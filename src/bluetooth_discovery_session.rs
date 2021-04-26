@@ -7,6 +7,13 @@ use std::error::Error;
 static ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 static SERVICE_NAME: &str = "org.bluez";
 
+// So how do we implement that?
+// We should provide a property and object change watch.
+// This could easily be implemented using a msg_stream with appropriate mapping.
+// For properties we will need to create an enum or we just notify that something changed, is probably enough for us.
+// So we notify of adapter added/removed, device added/removed and property changes.
+
+
 pub struct BluetoothDiscoverySession<'a> {
     adapter: String,
     session: &'a Session,

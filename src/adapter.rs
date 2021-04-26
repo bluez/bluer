@@ -1,21 +1,20 @@
-use crate::{Address, AddressType, SERVICE_NAME, TIMEOUT, bluetooth_device::BluetoothDevice, bluetooth_utils::Modalias};
+use crate::{Address, AddressType, SERVICE_NAME, TIMEOUT, device::Device, bluetooth_utils::Modalias};
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::session::Session;
-use crate::bluetooth_utils;
-use crate::{Result, Error};
-use dbus::{Path, nonblock::{Proxy, SyncConnection}};
-use hex::FromHex;
-use std::{collections::HashMap, fmt::Formatter, u32};
+use crate::{Result, Error, device};
+use dbus::{Path, nonblock::{Proxy, SyncConnection, stdintf::org_freedesktop_dbus::ObjectManager}};
+use std::{collections::HashMap, fmt::Formatter, sync::Arc, u32};
 use std::fmt::Debug;
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";
 
-/// An interface to a Bluetooth adapter.
+/// Interface to a Bluetooth adapter.
 #[derive(Clone)]
 pub struct Adapter<'a> {
     session: &'a Session,
     proxy: Proxy<'static, &'a SyncConnection>,
+    name: Arc<String>,
 }
 
 impl<'a> Debug for Adapter<'a> {
@@ -31,7 +30,8 @@ impl<'a> Adapter<'a> {
         let path = PREFIX.to_string() + name;
         Self {
             session,
-            proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection())
+            proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()),
+            name: Arc::new(name.to_string())
         }
     }
 
@@ -46,7 +46,7 @@ impl<'a> Adapter<'a> {
     ///
     /// For example hci0.
     pub fn name(&self) -> &str {
-        &self.dbus_path().strip_prefix(PREFIX).unwrap()
+        &self.name
     }
 
     /// Bluetooth session.
@@ -78,11 +78,25 @@ impl<'a> Adapter<'a> {
 
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
-        
+        let prefix = format!("{}/dev_", self.dbus_path());
+        let mut addrs = Vec::new();
+        let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, self.session().connection());
+        for (path, interfaces) in p.get_managed_objects().await? {
+            match path.strip_prefix(&prefix) {
+                Some(addr) if interfaces.contains_key(device::INTERFACE) => {
+                    let addr = addr.replace('_', ":");
+                    let addr: Address = addr.parse()?;
+                    addrs.push(addr);
+                }
+                _ => (),
+            }
+        }
+        Ok(addrs)
     }
 
-    pub async fn get_device_list(&self) -> Result<Vec<String>> {
-        bluetooth_utils::list_devices(&self.session.connection(), &self.object_path).await
+    /// Get interface to Bluetooth device of specified address.
+    pub fn device(&self, address: Address) -> Device {
+        Device::new(self.session(), self.name.clone(), address)
     }
 
     dbus_interface!(INTERFACE);
@@ -236,6 +250,10 @@ impl<'a> Adapter<'a> {
         Ok(modalias.parse()?)
     }
 
+    // ===========================================================================================
+    // Methods
+    // ===========================================================================================
+
     // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n12
     // Don't use this method, it's just a bomb now.
     //pub fn start_discovery(&self) -> Result<()> {
@@ -248,32 +266,49 @@ impl<'a> Adapter<'a> {
     //    Err(Box::from("Deprecated, use Discovery Session"))
     //}
 
-    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n40
+    /// This removes the remote device object at the given
+    /// path.
+    ///
+    /// It will remove also the pairing information.
     pub async fn remove_device(&self, device: &str) -> Result<()> {
-        self.call_method("RemoveDevice", (Path::from(device),), 1000).await?;
+        self.call_method("RemoveDevice", (Path::from(device),)).await?;
         Ok(())
     }
 
-    // http://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/adapter-api.txt#n154
+    /// This method connects to device without need of
+    /// performing General Discovery. 
+    ///
+    /// Connection mechanism is
+    /// similar to Connect method from Device1 interface with
+    /// exception that this method returns success when physical
+    /// connection is established. After this method returns,
+    /// services discovery will continue and any supported
+    /// profile will be connected. There is no need for calling
+    /// Connect on Device1 after this call. If connection was
+    /// successful this method returns object path to created
+    /// device object.
+    ///
+    /// Parameters that may be set in the filter dictionary
+    /// include the following:    
+    ///
+    ///  `address` -
+    ///     The Bluetooth device address of the remote
+    ///     device. This parameter is mandatory.
+    ///
+    /// `address_type` -
+    ///     The Bluetooth device Address Type. This is
+    ///     address type that should be used for initial
+    ///     connection. If this parameter is not present
+    ///     BR/EDR device is created.    
     pub async fn connect_device(
-        &self, address: &str, address_type: AddressType, timeout_ms: i32,
+        &self, address: Address, address_type: Option<AddressType>,
     ) -> Result<Path<'static>> {
         let mut m = HashMap::new();
-        m.insert("Address", address);
-        m.insert(
-            "AddressType",
-            match address_type {
-                AddressType::Public => "public",
-                AddressType::Random => "random",
-            },
-        );
-
+        m.insert("Address", address.to_string());
+        if let Some(address_type) = address_type {
+            m.insert("AddressType", address_type.to_string());
+        }
         let (path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
         Ok(path)
     }
-}
-
-pub enum AddressType {
-    Public,
-    Random,
 }

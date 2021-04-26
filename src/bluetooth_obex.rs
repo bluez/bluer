@@ -8,7 +8,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-use crate::bluetooth_device::BluetoothDevice;
+use crate::device::Device;
 use crate::session::Session;
 use dbus::arg::messageitem::{MessageItem, Props};
 use dbus::ffidisp::{BusType, Connection};
@@ -73,7 +73,7 @@ impl<'a> BluetoothOBEXSession<'a> {
     // https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/obex-api.txt#n12
     pub fn new(
         session: &'a Session,
-        device: &BluetoothDevice,
+        device: &Device,
     ) -> Result<BluetoothOBEXSession<'a>, Box<dyn Error>> {
         let device_address = device.get_address()?;
         let mut map = HashMap::new();

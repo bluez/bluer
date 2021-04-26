@@ -1,12 +1,7 @@
-use std::{
-    convert::TryInto,
-    fmt::{Debug, Display, Formatter},
-    str::FromStr,
-    time::Duration,
-};
+use std::{convert::TryInto, fmt::{self, Debug, Display, Formatter}, str::FromStr, time::Duration};
 
 pub use crate::adapter::Adapter;
-pub use crate::bluetooth_device::BluetoothDevice;
+pub use crate::device::Device;
 pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
 pub use crate::bluetooth_event::BluetoothEvent;
 pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
@@ -80,7 +75,7 @@ macro_rules! define_property {
 }
 
 mod adapter;
-mod bluetooth_device;
+mod device;
 mod bluetooth_discovery_session;
 mod bluetooth_event;
 mod bluetooth_gatt_characteristic;
@@ -176,7 +171,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Address([u8; 6]);
 
 impl Display for Address {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(
             f,
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
@@ -186,7 +181,7 @@ impl Display for Address {
 }
 
 impl Debug for Address {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
@@ -210,6 +205,15 @@ pub enum AddressType {
     Public,
     /// Random address
     Random,
+}
+
+impl Display for AddressType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::Public => write!(f, "public"),
+            Self::Random => write!(f, "random"),
+        }
+    }
 }
 
 impl FromStr for AddressType {
