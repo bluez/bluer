@@ -2,7 +2,9 @@ use crate::{Address, AddressType, SERVICE_NAME, TIMEOUT, device::Device, bluetoo
 use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::session::Session;
 use crate::{Result, Error, device};
-use dbus::{Path, nonblock::{Proxy, SyncConnection, stdintf::org_freedesktop_dbus::ObjectManager}};
+use dbus::{Path, nonblock::{Proxy, SyncConnection, stdintf::org_freedesktop_dbus::{ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved}}};
+use futures::{Stream, StreamExt, stream};
+use tokio::sync::mpsc;
 use std::{collections::HashMap, fmt::Formatter, sync::Arc, u32};
 use std::fmt::Debug;
 
@@ -21,6 +23,15 @@ impl<'a> Debug for Adapter<'a> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "Adapter {{ session: {:?}, name: {} }}", self.session(), self.name())
     }
+}
+
+/// Bluetooth device event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DeviceEvent {
+    /// Device added.
+    Added (Address),
+    /// Device removed.
+    Removed (Address)
 }
 
 impl<'a> Adapter<'a> {
@@ -97,6 +108,34 @@ impl<'a> Adapter<'a> {
     /// Get interface to Bluetooth device of specified address.
     pub fn device(&self, address: Address) -> Device {
         Device::new(self.session(), self.name.clone(), address)
+    }
+
+    pub async fn device_events(&self) -> Result<impl Stream<Item=DeviceEvent>> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        use dbus::message::SignalArgs;
+        let conn = self.session().connection();
+        let rule = ObjectManagerInterfacesAdded::match_rule(Some(&SERVICE_NAME.into()), Some(self.dbus_path()));
+        let msg_match = conn.add_match(rule).await?;
+        let rule2 = ObjectManagerInterfacesRemoved::match_rule(Some(&SERVICE_NAME.into()), Some(self.dbus_path()));
+        let msg_match2 = conn.add_match(rule2).await?;
+
+        tokio::spawn(async move {
+            let (_, stream) = msg_match.msg_stream();
+            let (_, stream2) = msg_match2.msg_stream();
+            let stream = stream::select(stream, stream2);
+
+            while let Some(msg) = stream.next().await {
+                if let Some(added) = ObjectManagerInterfacesAdded::from_message(&msg) {
+                } else if let Some(removed) = ObjectManagerInterfacesRemoved::from_message(&msg) {
+
+                }
+// can we do better?
+// general matching method on org.bluez?
+// maybe watch prefix method?
+            }
+    
+        });
+        Ok(rx)
     }
 
     dbus_interface!(INTERFACE);

@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 dbus = {version="0.9", features = ["futures"]}
 dbus-tokio = "0.7"
-tokio = {version="1", features=["rt"]}
+futures = "0.3"
+tokio = {version="1", features=["macros", "rt"]}
 hex = "0.4"
 thiserror = "1"

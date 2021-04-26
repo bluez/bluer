@@ -52,4 +52,6 @@ impl Session {
     pub fn adapter(&self, adapter_name: &str) -> Adapter {
         Adapter::new(self, adapter_name)
     }
+
+    pub(crate) async fn watch_prefix(&self, : )
 }
