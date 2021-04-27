@@ -1,12 +1,24 @@
-use crate::{Address, AddressType, SERVICE_NAME, TIMEOUT, device::Device, bluetooth_utils::Modalias};
-use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-use crate::session::Session;
-use crate::{Result, Error, device};
-use dbus::{Path, nonblock::{Proxy, SyncConnection, stdintf::org_freedesktop_dbus::{ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved}}};
-use futures::{Stream, StreamExt, stream};
-use tokio::sync::mpsc;
-use std::{collections::HashMap, fmt::Formatter, sync::Arc, u32};
-use std::fmt::Debug;
+use crate::{device::Device, session::ObjectEvent, Address, AddressType, Modalias, SERVICE_NAME, TIMEOUT};
+//use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
+use crate::{device, session::Session, Error, Result};
+use dbus::{
+    nonblock::{
+        stdintf::org_freedesktop_dbus::{
+            ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved,
+        },
+        Proxy, SyncConnection,
+    },
+    Path,
+};
+use futures::{stream, Stream, StreamExt};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    sync::Arc,
+    u32,
+};
+use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";
@@ -29,20 +41,19 @@ impl<'a> Debug for Adapter<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeviceEvent {
     /// Device added.
-    Added (Address),
+    Added(Address),
     /// Device removed.
-    Removed (Address)
+    Removed(Address),
 }
 
 impl<'a> Adapter<'a> {
-
     /// Create Bluetooth adapter interface for adapter with specified name.
     pub(crate) fn new(session: &'a Session, name: &str) -> Self {
         let path = PREFIX.to_string() + name;
         Self {
             session,
             proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()),
-            name: Arc::new(name.to_string())
+            name: Arc::new(name.to_string()),
         }
     }
 
@@ -65,19 +76,6 @@ impl<'a> Adapter<'a> {
         self.session
     }
 
-    // pub fn get_id(&self) -> String {
-    //     self.object_path.clone()
-    // }
-
-    // pub async fn get_first_device(&self) -> Result<BluetoothDevice<'_>> {
-    //     let devices = bluetooth_utils::list_devices(&self.session.get_connection(), &self.object_path).await?;
-    //
-    //     if devices.is_empty() {
-    //         return Err(Box::from("No device found."));
-    //     }
-    //     Ok(BluetoothDevice::new(self.session, &devices[0]))
-    // }
-
     // pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
     //     let addata = bluetooth_utils::list_addata_1(&self.session.get_connection(), &self.object_path).await?;
     //
@@ -87,18 +85,24 @@ impl<'a> Adapter<'a> {
     //     Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     // }
 
+    fn parse_device_dbus_path(adapter_path: &Path, path: &Path<'static>) -> Option<Address> {
+        let prefix = format!("{}/dev_", adapter_path);
+        match path.strip_prefix(&prefix) {
+            Some(addr) => {
+                let addr = addr.replace('_', ":");
+                addr.parse().ok()
+            }
+            None => None,
+        }
+    }
+
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
-        let prefix = format!("{}/dev_", self.dbus_path());
         let mut addrs = Vec::new();
         let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, self.session().connection());
         for (path, interfaces) in p.get_managed_objects().await? {
-            match path.strip_prefix(&prefix) {
-                Some(addr) if interfaces.contains_key(device::INTERFACE) => {
-                    let addr = addr.replace('_', ":");
-                    let addr: Address = addr.parse()?;
-                    addrs.push(addr);
-                }
+            match Self::parse_device_dbus_path(self.dbus_path(), &path) {
+                Some(addr) if interfaces.contains_key(device::INTERFACE) => addrs.push(addr),
                 _ => (),
             }
         }
@@ -110,32 +114,30 @@ impl<'a> Adapter<'a> {
         Device::new(self.session(), self.name.clone(), address)
     }
 
-    pub async fn device_events(&self) -> Result<impl Stream<Item=DeviceEvent>> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        use dbus::message::SignalArgs;
-        let conn = self.session().connection();
-        let rule = ObjectManagerInterfacesAdded::match_rule(Some(&SERVICE_NAME.into()), Some(self.dbus_path()));
-        let msg_match = conn.add_match(rule).await?;
-        let rule2 = ObjectManagerInterfacesRemoved::match_rule(Some(&SERVICE_NAME.into()), Some(self.dbus_path()));
-        let msg_match2 = conn.add_match(rule2).await?;
-
-        tokio::spawn(async move {
-            let (_, stream) = msg_match.msg_stream();
-            let (_, stream2) = msg_match2.msg_stream();
-            let stream = stream::select(stream, stream2);
-
-            while let Some(msg) = stream.next().await {
-                if let Some(added) = ObjectManagerInterfacesAdded::from_message(&msg) {
-                } else if let Some(removed) = ObjectManagerInterfacesRemoved::from_message(&msg) {
-
+    /// Stream device added and removed events.
+    pub async fn device_events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
+        let adapter_path = self.dbus_path().clone().into_static();
+        let obj_events = self.session.object_events(Some(adapter_path.clone())).await?;
+        let obj_events = UnboundedReceiverStream::new(obj_events);
+        let events = obj_events.filter_map(move |evt| {
+            let adapter_path = adapter_path.clone();
+            async move {
+                match evt {
+                    ObjectEvent::Added(added) => match Self::parse_device_dbus_path(&adapter_path, &added.object)
+                    {
+                        Some(address) => Some(DeviceEvent::Added(address)),
+                        None => None,
+                    },
+                    ObjectEvent::Removed(removed) => {
+                        match Self::parse_device_dbus_path(&adapter_path, &removed.object) {
+                            Some(address) => Some(DeviceEvent::Removed(address)),
+                            None => None,
+                        }
+                    }
                 }
-// can we do better?
-// general matching method on org.bluez?
-// maybe watch prefix method?
             }
-    
         });
-        Ok(rx)
+        Ok(events)
     }
 
     dbus_interface!(INTERFACE);
@@ -163,7 +165,7 @@ impl<'a> Adapter<'a> {
 
     define_property!(
         ///	The Bluetooth system name (pretty hostname).
-        /// 
+        ///
         /// This property is either a static system default
         /// or controlled by an external daemon providing
         /// access to the pretty hostname configuration.
@@ -171,17 +173,17 @@ impl<'a> Adapter<'a> {
     );
 
     define_property!(
-        /// The Bluetooth friendly name. 
+        /// The Bluetooth friendly name.
         ///
         /// This value can be changed.
-        /// 
+        ///
         /// In case no alias is set, it will return the system
         /// provided name. Setting an empty string as alias will
         /// convert it back to the system provided name.
-        /// 
+        ///
         /// When resetting the alias with an empty string, the
         /// property will default back to system name.
-        /// 
+        ///
         /// On a well configured system, this property never
         /// needs to be changed since it defaults to the system
         /// name and provides the pretty hostname. Only if the
@@ -194,16 +196,16 @@ impl<'a> Adapter<'a> {
     define_property!(
         /// The Bluetooth class of device.
         ///
-		///	This property represents the value that is either
-		///	automatically configured by DMI/ACPI information
-		///	or provided as static configuration.
+        ///	This property represents the value that is either
+        ///	automatically configured by DMI/ACPI information
+        ///	or provided as static configuration.
         class, "Class" => u32
     );
 
     define_property!(
         /// Switch an adapter on or off. This will also set the
         /// appropriate connectable state of the controller.
-        /// 
+        ///
         /// The value of this property is not persistent. After
         /// restart or unplugging of the adapter it will reset
         /// back to false.
@@ -212,60 +214,60 @@ impl<'a> Adapter<'a> {
 
     define_property!(
         /// Switch an adapter to discoverable or non-discoverable
-        /// to either make it visible or hide it. 
-        /// 
+        /// to either make it visible or hide it.
+        ///
         /// This is a global
         /// setting and should only be used by the settings
         /// application.
-        /// 
+        ///
         /// If the DiscoverableTimeout is set to a non-zero
         /// value then the system will set this value back to
         /// false after the timer expired.
-        /// 
+        ///
         /// In case the adapter is switched off, setting this
         /// value will fail.
-        /// 
+        ///
         /// When changing the Powered property the new state of
         /// this property will be updated via a PropertiesChanged
         /// signal.
-        /// 
-        /// For any new adapter this settings defaults to false.        
+        ///
+        /// For any new adapter this settings defaults to false.
         is_discoverable, set_discoverable, "Discoverable" => bool
     );
 
     define_property!(
-        /// Switch an adapter to pairable or non-pairable. 
+        /// Switch an adapter to pairable or non-pairable.
         ///
         /// This is
         /// a global setting and should only be used by the
         /// settings application.
-        /// 
+        ///
         /// Note that this property only affects incoming pairing
         /// requests.
-        /// 
-        /// For any new adapter this settings defaults to true.        
+        ///
+        /// For any new adapter this settings defaults to true.
         is_pairable, set_pairable, "Pairable" => bool
     );
 
     define_property!(
-        /// The pairable timeout in seconds. 
+        /// The pairable timeout in seconds.
         ///
         /// A value of zero
         /// means that the timeout is disabled and it will stay in
         /// pairable mode forever.
-        /// 
+        ///
         /// The default value for pairable timeout should be
         /// disabled (value 0).
         pairable_timeout, set_pairable_timeout, "PairableTimeout" => u32
     );
 
     define_property!(
-        /// The discoverable timeout in seconds. 
+        /// The discoverable timeout in seconds.
         ///
         /// A value of zero
         /// means that the timeout is disabled and it will stay in
         /// discoverable/limited mode forever.
-        /// 
+        ///
         /// The default value for the discoverable timeout should
         /// be 180 seconds (3 minutes).
         discoverable_timeout, set_discoverable_timeout, "DiscoverableTimeout" => u32
@@ -278,12 +280,12 @@ impl<'a> Adapter<'a> {
 
     define_property!(
         /// List of 128-bit UUIDs that represents the available
-		/// lcal services.
+        /// lcal services.
         uuids, "UUIDs" => Vec<String>
     );
 
     /// Local Device ID information in modalias format
-	/// used by the kernel and udev.
+    /// used by the kernel and udev.
     pub async fn modalias(&self) -> Result<Modalias> {
         let modalias: String = self.get_property("Modalias").await?;
         Ok(modalias.parse()?)
@@ -315,7 +317,7 @@ impl<'a> Adapter<'a> {
     }
 
     /// This method connects to device without need of
-    /// performing General Discovery. 
+    /// performing General Discovery.
     ///
     /// Connection mechanism is
     /// similar to Connect method from Device1 interface with

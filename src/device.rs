@@ -2,14 +2,9 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use std::{collections::HashMap, sync::Arc, fmt};
+use std::{collections::HashMap, fmt, sync::Arc};
 
-use crate::session::Session;
-use crate::Result;
-use crate::{adapter,
-    bluetooth_le_advertising_data::BluetoothAdvertisingData, bluetooth_utils::Modalias, Address, AddressType,
-};
-use crate::{SERVICE_NAME, TIMEOUT};
+use crate::{adapter, session::Session, Address, AddressType, Modalias, Result, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
 
@@ -24,7 +19,13 @@ pub struct Device<'a> {
 
 impl<'a> fmt::Debug for Device<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Device {{ session: {:?}, adapter_name: {}, address: {} }}", self.session(), self.adapter_name(), self.address())
+        write!(
+            f,
+            "Device {{ session: {:?}, adapter_name: {}, address: {} }}",
+            self.session(),
+            self.adapter_name(),
+            self.address()
+        )
     }
 }
 
@@ -32,7 +33,12 @@ impl<'a> Device<'a> {
     /// Create Bluetooth device interface for adapter with specified name.
     pub(crate) fn new(session: &'a Session, adapter_name: Arc<String>, address: Address) -> Self {
         let path = format!("{}{}/dev_{}", adapter::PREFIX, adapter_name, address.to_string().replace(':', "_"));
-        Self { session, proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()), adapter_name, address }
+        Self {
+            session,
+            proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()),
+            adapter_name,
+            address,
+        }
     }
 
     /// Bluetooth session.
@@ -56,7 +62,6 @@ impl<'a> Device<'a> {
     pub fn address(&self) -> Address {
         self.address
     }
-
 
     //     pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
     //         let addata = bluetooth_utils::list_addata_2(&self.session.connection(), &self.object_path).await?;

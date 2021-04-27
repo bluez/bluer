@@ -1,15 +1,12 @@
 extern crate blurz;
 
-use std::error::Error;
-use std::thread;
-use std::time::Duration;
+use std::{error::Error, thread, time::Duration};
 
-use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
-use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
-use blurz::bluetooth_session::Session as Session;
-use blurz::BluetoothGATTCharacteristic;
-use blurz::BluetoothGATTService;
+use blurz::{
+    bluetooth_adapter::BluetoothAdapter as Adapter, bluetooth_device::BluetoothDevice as Device,
+    bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession, bluetooth_session::Session,
+    BluetoothGATTCharacteristic, BluetoothGATTService,
+};
 
 fn test6() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
@@ -69,8 +66,7 @@ fn test6() -> Result<(), Box<dyn Error>> {
                     match gatt_service.get_gatt_characteristics() {
                         Ok(ref gat_chars) => {
                             for characteristics in gat_chars {
-                                let gatt_char =
-                                    BluetoothGATTCharacteristic::new(bt_session, characteristics);
+                                let gatt_char = BluetoothGATTCharacteristic::new(bt_session, characteristics);
 
                                 println!(
                                     "    Characteristic Name: {} UUID: {:?} Flags: {:?}",

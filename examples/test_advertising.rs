@@ -2,16 +2,14 @@ extern crate blurz;
 extern crate dbus;
 
 use dbus::arg::messageitem::MessageItem;
-use std::error::Error;
-use std::thread;
-use std::time::Duration;
+use std::{error::Error, thread, time::Duration};
 
-use blurz::bluetooth_adapter::BluetoothAdapter;
-use blurz::bluetooth_device::BluetoothDevice;
-use blurz::bluetooth_discovery_session::BluetoothDiscoverySession;
-use blurz::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-use blurz::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
-use blurz::bluetooth_session::Session;
+use blurz::{
+    bluetooth_adapter::BluetoothAdapter, bluetooth_device::BluetoothDevice,
+    bluetooth_discovery_session::BluetoothDiscoverySession,
+    bluetooth_le_advertising_data::BluetoothAdvertisingData,
+    bluetooth_le_advertising_manager::BluetoothAdvertisingManager, bluetooth_session::Session,
+};
 
 //const LEADVERTISING_MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 const LEADVERTISING_DATA_INTERFACE: &str = "org.bluez.LEAdvertisement1";

@@ -1,13 +1,11 @@
 extern crate blurz;
 
-use std::error::Error;
-use std::thread;
-use std::time::Duration;
+use std::{error::Error, thread, time::Duration};
 
-use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
-use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
-use blurz::bluetooth_session::Session as Session;
+use blurz::{
+    bluetooth_adapter::BluetoothAdapter as Adapter, bluetooth_device::BluetoothDevice as Device,
+    bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession, bluetooth_session::Session,
+};
 
 fn test3() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;
@@ -23,12 +21,7 @@ fn test3() -> Result<(), Box<dyn Error>> {
         println!("{} device(s) found", devices.len());
         '_device_loop: for d in devices {
             let device = Device::new(bt_session, &d);
-            println!(
-                "{} {:?} {:?}",
-                device.get_id(),
-                device.get_address(),
-                device.get_rssi()
-            );
+            println!("{} {:?} {:?}", device.get_id(), device.get_address(), device.get_rssi());
             adapter.remove_device(&device.get_id())?;
         }
         session.stop_discovery()?;

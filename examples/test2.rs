@@ -3,17 +3,15 @@ extern crate blurz;
 const BATTERY_SERVICE_UUID: &str = "0000180f-0000-1000-8000-00805f9b34fb";
 const COLOR_PICKER_SERVICE_UUID: &str = "00001812-0000-1000-8000-00805f9b34fb";
 
-use std::error::Error;
-use std::thread;
-use std::time::Duration;
+use std::{error::Error, thread, time::Duration};
 
-use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
-use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession;
-use blurz::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as Characteristic;
-use blurz::bluetooth_gatt_descriptor::BluetoothGATTDescriptor as Descriptor;
-use blurz::bluetooth_gatt_service::BluetoothGATTService as Service;
-use blurz::bluetooth_session::Session as Session;
+use blurz::{
+    bluetooth_adapter::BluetoothAdapter as Adapter, bluetooth_device::BluetoothDevice as Device,
+    bluetooth_discovery_session::BluetoothDiscoverySession as DiscoverySession,
+    bluetooth_gatt_characteristic::BluetoothGATTCharacteristic as Characteristic,
+    bluetooth_gatt_descriptor::BluetoothGATTDescriptor as Descriptor,
+    bluetooth_gatt_service::BluetoothGATTService as Service, bluetooth_session::Session,
+};
 
 fn test2() -> Result<(), Box<dyn Error>> {
     let bt_session = &Session::create_session(None)?;

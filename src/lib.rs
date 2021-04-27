@@ -1,15 +1,20 @@
-use std::{convert::TryInto, fmt::{self, Debug, Display, Formatter}, str::FromStr, time::Duration};
+use hex::FromHex;
+use std::{
+    convert::TryInto,
+    fmt::{self, Debug, Display, Formatter},
+    str::FromStr,
+    time::Duration,
+};
 
-pub use crate::adapter::Adapter;
-pub use crate::device::Device;
-pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
-pub use crate::bluetooth_event::BluetoothEvent;
-pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
-pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
-pub use crate::bluetooth_gatt_service::BluetoothGATTService;
-pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
-pub use crate::bluetooth_obex::BluetoothOBEXSession;
+pub use crate::{adapter::Adapter, device::Device};
+// pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
+// pub use crate::bluetooth_event::BluetoothEvent;
+// pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
+// pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
+// pub use crate::bluetooth_gatt_service::BluetoothGATTService;
+// pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
+// pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
+// pub use crate::bluetooth_obex::BluetoothOBEXSession;
 pub use crate::session::Session;
 
 use thiserror::Error;
@@ -76,15 +81,15 @@ macro_rules! define_property {
 
 mod adapter;
 mod device;
-mod bluetooth_discovery_session;
-mod bluetooth_event;
-mod bluetooth_gatt_characteristic;
-mod bluetooth_gatt_descriptor;
-mod bluetooth_gatt_service;
-mod bluetooth_le_advertising_data;
-mod bluetooth_le_advertising_manager;
-mod bluetooth_obex;
-mod bluetooth_utils;
+//mod bluetooth_discovery_session;
+//mod bluetooth_event;
+//mod bluetooth_gatt_characteristic;
+//mod bluetooth_gatt_descriptor;
+//mod bluetooth_gatt_service;
+//mod bluetooth_le_advertising_data;
+//mod bluetooth_le_advertising_manager;
+//mod bluetooth_obex;
+//mod bluetooth_utils;
 mod session;
 
 /// Bluetooth error.
@@ -224,5 +229,37 @@ impl FromStr for AddressType {
             "random" => Ok(Self::Random),
             _ => Err(other_err!("unknown address type: {}", &s)),
         }
+    }
+}
+
+/// Linux kernel modalias information.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Modalias {
+    pub source: String,
+    pub vendor: u32,
+    pub product: u32,
+    pub device: u32,
+}
+
+impl FromStr for Modalias {
+    type Err = Error;
+
+    fn from_str(m: &str) -> Result<Self> {
+        fn do_parse(m: &str) -> Option<Modalias> {
+            let ids: Vec<&str> = m.split(':').collect();
+
+            let source = ids.get(0)?;
+            let vendor = Vec::from_hex(ids.get(1)?.get(1..5)?).ok()?;
+            let product = Vec::from_hex(ids.get(1)?.get(6..10)?).ok()?;
+            let device = Vec::from_hex(ids.get(1)?.get(11..15)?).ok()?;
+
+            Some(Modalias {
+                source: source.to_string(),
+                vendor: (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
+                product: (product[0] as u32) * 16 * 16 + (product[1] as u32),
+                device: (device[0] as u32) * 16 * 16 + (device[1] as u32),
+            })
+        }
+        do_parse(m).ok_or_else(|| other_err!("invalid modalias: {}", m))
     }
 }

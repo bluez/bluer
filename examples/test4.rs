@@ -1,17 +1,13 @@
 extern crate blurz;
 
-use std::error::Error;
-use std::fs;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+use std::{error::Error, fs, fs::File, io::Write, path::Path};
 
-use blurz::bluetooth_adapter::BluetoothAdapter as Adapter;
-use blurz::bluetooth_device::BluetoothDevice as Device;
-use blurz::bluetooth_obex::{
-    BluetoothOBEXSession as OBEXSession, BluetoothOBEXTransfer as OBEXTransfer,
+use blurz::{
+    bluetooth_adapter::BluetoothAdapter as Adapter,
+    bluetooth_device::BluetoothDevice as Device,
+    bluetooth_obex::{BluetoothOBEXSession as OBEXSession, BluetoothOBEXTransfer as OBEXTransfer},
+    bluetooth_session::Session,
 };
-use blurz::bluetooth_session::Session as Session;
 
 fn test_obex_file_transfer() -> Result<(), Box<dyn Error>> {
     let session = &Session::create_session(None)?;
