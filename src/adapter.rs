@@ -322,9 +322,12 @@ impl Adapter {
 
     /// Local Device ID information in modalias format
     /// used by the kernel and udev.
-    pub async fn modalias(&self) -> Result<Modalias> {
-        let modalias: String = self.get_property("Modalias").await?;
-        Ok(modalias.parse()?)
+    pub async fn modalias(&self) -> Result<Option<Modalias>> {
+        let modalias: String = match self.get_opt_property("Modalias").await? {
+            Some(modalias) => modalias,
+            None => return Ok(None),
+        };
+        Ok(Some(modalias.parse()?))
     }
 
     // ===========================================================================================
