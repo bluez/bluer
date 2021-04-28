@@ -283,7 +283,7 @@ impl Device {
     ///     3. Connect last seen bearer, in case the
     ///     timestamps are the same BR/EDR takes
     ///     precedence.
-    pub async fn connect(&self, timeout_ms: i32) -> Result<()> {
+    pub async fn connect(&self) -> Result<()> {
         self.call_method("Connect", ()).await
     }
 

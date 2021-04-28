@@ -77,7 +77,7 @@ macro_rules! define_property {
         }
         $(#[$outer])*
         pub async fn $setter_name(&self, value: $type) -> crate::Result<()> {
-            self.set_property($dbus_name, value).await;
+            self.set_property($dbus_name, value).await?;
             Ok(())
         }
     };
