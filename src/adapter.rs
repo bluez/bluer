@@ -1,24 +1,23 @@
-use crate::{
-    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, SERVICE_NAME, TIMEOUT,
-};
-//use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-use crate::{device, session::Session, Error, Result};
 use dbus::{
-    nonblock::{
-        stdintf::org_freedesktop_dbus::{
-            ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved,
-        },
-        Proxy, SyncConnection,
-    },
+    arg::{RefArg, Variant},
+    nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{stream, Stream, StreamExt};
+use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
 use std::{
-    collections::HashMap,
-    fmt::{Debug, Formatter},
+    collections::{HashMap, HashSet},
+    fmt::{self, Debug, Formatter},
     sync::Arc,
     u32,
 };
+use uuid::Uuid;
+
+use crate::{
+    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, SERVICE_NAME,
+    TIMEOUT,
+};
+//use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
+use crate::{device, Error, Result};
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";
@@ -29,6 +28,7 @@ pub struct Adapter {
     connection: Arc<SyncConnection>,
     dbus_path: Path<'static>,
     name: Arc<String>,
+    discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
 }
 
 impl Debug for Adapter {
@@ -48,11 +48,17 @@ pub enum DeviceEvent {
 
 impl Adapter {
     /// Create Bluetooth adapter interface for adapter with specified name.
-    pub(crate) fn new(connection: Arc<SyncConnection>, name: &str) -> Result<Self> {
+    pub(crate) fn new(
+        connection: Arc<SyncConnection>,
+        name: &str,
+        discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
+    ) -> Result<Self> {
         Ok(Self {
             connection,
-            dbus_path: Path::new(PREFIX.to_string() + name).map_err(|_| Error::InvalidName(name.to_string()))?,
+            dbus_path: Path::new(PREFIX.to_string() + name)
+                .map_err(|_| Error::InvalidName(name.to_string()))?,
             name: Arc::new(name.to_string()),
+            discovery_slots,
         })
     }
 
@@ -85,7 +91,9 @@ impl Adapter {
         let mut addrs = Vec::new();
         for (path, interfaces) in all_dbus_objects(&*self.connection).await? {
             match Device::parse_dbus_path(&path) {
-                Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(device::INTERFACE) => {
+                Some((adapter, addr))
+                    if adapter == *self.name && interfaces.contains_key(device::INTERFACE) =>
+                {
                     addrs.push(addr)
                 }
                 _ => (),
@@ -102,7 +110,8 @@ impl Adapter {
     /// Stream device added and removed events.
     pub async fn device_events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let adapter_path = self.dbus_path.clone().into_static();
-        let obj_events = ObjectEvent::stream(self.connection.clone(), Some(adapter_path.clone())).await?;
+        let obj_events =
+            ObjectEvent::stream(self.connection.clone(), Some(adapter_path.clone())).await?;
 
         let my_name = self.name.clone();
         let events = obj_events.filter_map(move |evt| {
@@ -110,17 +119,61 @@ impl Adapter {
             async move {
                 match evt {
                     ObjectEvent::Added { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Added(address)),
+                        Some((adapter, address)) if adapter == *my_name => {
+                            Some(DeviceEvent::Added(address))
+                        }
                         _ => None,
                     },
                     ObjectEvent::Removed { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Removed(address)),
+                        Some((adapter, address)) if adapter == *my_name => {
+                            Some(DeviceEvent::Removed(address))
+                        }
                         _ => None,
                     },
                 }
             }
         });
         Ok(events)
+    }
+
+    /// This method starts the device discovery session.
+    ///
+    /// This
+    /// includes an inquiry procedure and remote device name
+    /// resolving.
+    ///
+    /// This process will start creating Device objects as
+    /// new devices are discovered.
+    /// During discovery RSSI delta-threshold is imposed.    
+    ///
+    /// When multiple clients create discovery sessions, their
+    /// filters are internally merged, and notifications about
+    /// new devices are sent to all clients. Therefore, each
+    /// client must check that device updates actually match
+    /// its filter.    
+    ///
+    /// Only one discovery session may be active per Bluetooth adapter.
+    /// Use the `device_events` method to get notified when a device is discovered.
+    /// Drop the `DeviceDiscovery` to stop the discovery process.
+    pub async fn discover_devices(&self, filter: DiscoveryFilter) -> Result<DeviceDiscovery> {
+        let mut discovery_slots = self.discovery_slots.lock().await;
+        if let Some(mut rx) = discovery_slots.remove(&*self.name) {
+            if let Ok(None) = rx.try_recv() {
+                discovery_slots.insert((*self.name).clone(), rx);
+                return Err(Error::AnotherDiscoveryInProgress);
+            }
+        }
+        let (done_tx, done_rx) = oneshot::channel();
+        discovery_slots.insert((*self.name).clone(), done_rx);
+
+        DeviceDiscovery::new(
+            self.connection.clone(),
+            self.dbus_path.clone(),
+            self.name.clone(),
+            filter,
+            done_tx,
+        )
+        .await
     }
 
     dbus_interface!(INTERFACE);
@@ -278,24 +331,13 @@ impl Adapter {
     // Methods
     // ===========================================================================================
 
-    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n12
-    // Don't use this method, it's just a bomb now.
-    //pub fn start_discovery(&self) -> Result<()> {
-    //    Err(Box::from("Deprecated, use Discovery Session"))
-    //}
-
-    // http://git.kernel.org/cgit/bluetooth/bluez.git/tree/doc/adapter-api.txt#n27
-    // Don't use this method, it's just a bomb now.
-    //pub fn stop_discovery(&self) -> Result<()> {
-    //    Err(Box::from("Deprecated, use Discovery Session"))
-    //}
-
     /// This removes the remote device object at the given
     /// path.
     ///
     /// It will remove also the pairing information.
     pub async fn remove_device(&self, device: &str) -> Result<()> {
-        self.call_method("RemoveDevice", (Path::from(device),)).await?;
+        self.call_method("RemoveDevice", (Path::from(device),))
+            .await?;
         Ok(())
     }
 
@@ -324,8 +366,12 @@ impl Adapter {
     ///     address type that should be used for initial
     ///     connection. If this parameter is not present
     ///     BR/EDR device is created.    
+    ///
+    /// This method is experimental.
     pub async fn connect_device(
-        &self, address: Address, address_type: Option<AddressType>,
+        &self,
+        address: Address,
+        address_type: Option<AddressType>,
     ) -> Result<Path<'static>> {
         let mut m = HashMap::new();
         m.insert("Address", address.to_string());
@@ -334,5 +380,210 @@ impl Adapter {
         }
         let (path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
         Ok(path)
+    }
+}
+
+/// Transport parameter determines the type of scan.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum DiscoveryTransport {
+    /// interleaved scan
+    Auto,
+    /// BR/EDR inquiry
+    BrEdr,
+    /// LE scan only
+    Le,
+}
+
+impl Default for DiscoveryTransport {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+impl fmt::Display for DiscoveryTransport {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::BrEdr => write!(f, "bredr"),
+            Self::Le => write!(f, "le"),
+        }
+    }
+}
+
+/// Bluetooth device discovery filter.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoveryFilter {
+    ///  Filter by service UUIDs, empty means match
+    ///  _any_ UUID.
+    ///
+    ///  When a remote device is found that advertises
+    ///  any UUID from UUIDs, it will be reported if:
+    ///  - Pathloss and RSSI are both empty.
+    ///  - only Pathloss param is set, device advertise
+    ///    TX pwer, and computed pathloss is less than
+    ///    Pathloss param.
+    ///  - only RSSI param is set, and received RSSI is
+    ///    higher than RSSI param.    
+    pub uuids: HashSet<Uuid>,
+    /// RSSI threshold value.
+    ///
+    /// PropertiesChanged signals will be emitted
+    /// for already existing Device objects, with
+    /// updated RSSI value. If one or more discovery
+    /// filters have been set, the RSSI delta-threshold,
+    /// that is imposed by StartDiscovery by default,
+    /// will not be applied.
+    pub rssi: Option<i16>,
+    /// Pathloss threshold value.
+    ///
+    /// PropertiesChanged signals will be emitted
+    /// for already existing Device objects, with
+    /// updated Pathloss value.
+    pub pathloss: Option<u16>,
+    /// Transport parameter determines the type of
+    /// scan.
+    ///
+    /// Possible values:
+    ///     "auto"	- interleaved scan
+    ///     "bredr"	- BR/EDR inquiry
+    ///     "le"	- LE scan only
+    ///
+    /// If "le" or "bredr" Transport is requested,
+    /// and the controller doesn't support it,
+    /// org.bluez.Error.Failed error will be returned.
+    ///
+    /// If "auto" transport is requested, scan will use
+    /// LE, BREDR, or both, depending on what's
+    /// currently enabled on the controller.
+    pub transport: DiscoveryTransport,
+    /// Disables duplicate detection of advertisement data.
+    ///
+    /// When enabled PropertiesChanged signals will be
+    /// generated for either ManufacturerData and
+    /// ServiceData everytime they are discovered.
+    pub duplicate_data: bool,
+    /// Make adapter discoverable while discovering.
+    ///
+    /// If the adapter is already discoverable setting
+    /// this filter won't do anything.
+    pub discoverable: bool,
+    /// Discover devices where the pattern matches
+    /// either the prefix of the address or
+    /// device name which is convenient way to limited
+    /// the number of device objects created during a
+    /// discovery.
+    ///
+    ///	When set disregards device discoverable flags.
+    ///
+    /// Note: The pattern matching is ignored if there
+    /// are other client that don't set any pattern as
+    /// it work as a logical OR, also setting empty
+    /// string "" pattern will match any device found.
+    pub pattern: Option<String>,
+}
+
+impl Default for DiscoveryFilter {
+    fn default() -> Self {
+        Self {
+            uuids: Default::default(),
+            rssi: Default::default(),
+            pathloss: Default::default(),
+            transport: Default::default(),
+            duplicate_data: true,
+            discoverable: false,
+            pattern: Default::default(),
+        }
+    }
+}
+
+impl DiscoveryFilter {
+    fn to_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
+        let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
+        let Self {
+            uuids,
+            rssi,
+            pathloss,
+            transport,
+            duplicate_data,
+            discoverable,
+            pattern,
+        } = self;
+        hm.insert(
+            "UUIDs",
+            Variant(Box::new(
+                uuids
+                    .into_iter()
+                    .map(|uuid| uuid.to_string())
+                    .collect::<Vec<_>>(),
+            )),
+        );
+        if let Some(rssi) = rssi {
+            hm.insert("RSSI", Variant(Box::new(rssi)));
+        }
+        if let Some(pathloss) = pathloss {
+            hm.insert("Pathloss", Variant(Box::new(pathloss)));
+        }
+        hm.insert("Transport", Variant(Box::new(transport.to_string())));
+        hm.insert("DuplicateData", Variant(Box::new(duplicate_data)));
+        hm.insert("Discoverable", Variant(Box::new(discoverable)));
+        if let Some(pattern) = pattern {
+            hm.insert("Pattern", Variant(Box::new(pattern)));
+        }
+        hm
+    }
+}
+
+/// Device discovery session.
+///
+/// Drop to stop discovery.
+pub struct DeviceDiscovery {
+    adapter_name: Arc<String>,
+    _term_tx: oneshot::Sender<()>,
+}
+
+impl Debug for DeviceDiscovery {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "DeviceDiscovery {{ adapter_name: {} }}",
+            self.adapter_name
+        )
+    }
+}
+
+impl DeviceDiscovery {
+    pub(crate) async fn new<'a>(
+        connection: Arc<SyncConnection>,
+        dbus_path: Path<'static>,
+        adapter_name: Arc<String>,
+        filter: DiscoveryFilter,
+        done_tx: oneshot::Sender<()>,
+    ) -> Result<Self> {
+        let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+        proxy
+            .method_call(INTERFACE, "SetDiscoveryFilter", (filter.to_dict(),))
+            .await?;
+        proxy.method_call(INTERFACE, "StartDiscovery", ()).await?;
+
+        let (term_tx, term_rx) = oneshot::channel();
+        tokio::spawn(async move {
+            let _done_tx = done_tx;
+            let _ = term_rx.await;
+
+            let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+            let _: std::result::Result<(), dbus::Error> =
+                proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
+        });
+
+        Ok(Self {
+            adapter_name,
+            _term_tx: term_tx,
+        })
+    }
+}
+
+impl Drop for DeviceDiscovery {
+    fn drop(&mut self) {
+        // required for drop order
     }
 }

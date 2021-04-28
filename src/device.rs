@@ -2,7 +2,12 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+};
+use uuid::Uuid;
 
 use crate::{adapter, Address, AddressType, Error, Modalias, Result, SERVICE_NAME, TIMEOUT};
 
@@ -19,14 +24,21 @@ pub struct Device {
 
 impl fmt::Debug for Device {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Device {{ adapter_name: {}, address: {} }}", self.adapter_name(), self.address())
+        write!(
+            f,
+            "Device {{ adapter_name: {}, address: {} }}",
+            self.adapter_name(),
+            self.address()
+        )
     }
 }
 
 impl Device {
     /// Create Bluetooth device interface for device of specified address connected to specified adapater.
     pub(crate) fn new(
-        connection: Arc<SyncConnection>, adapter_name: Arc<String>, address: Address,
+        connection: Arc<SyncConnection>,
+        adapter_name: Arc<String>,
+        address: Address,
     ) -> Result<Self> {
         Ok(Self {
             connection,
@@ -109,52 +121,63 @@ impl Device {
         ///
         ///	If the Alias property is unset, it will reflect
         ///	this value which makes it more convenient.
-        name, "Name" => String
+        name, "Name" => Option<String>
     );
 
     define_property!(
         /// Proposed icon name according to the freedesktop.org
         /// icon naming specification.
-        icon, "Icon" => String
+        icon, "Icon" => Option<String>
     );
 
     define_property!(
         ///	The Bluetooth class of device of the remote device.
-        class, "Class" => u32
+        class, "Class" => Option<u32>
     );
 
     define_property!(
         ///	External appearance of device, as found on GAP service.
-        appearance, "Appearance" => u32
+        appearance, "Appearance" => Option<u32>
     );
 
-    define_property!(
-        ///	List of 128-bit UUIDs that represents the available
-        /// remote services.
-        uuids, "UUIDs" => Vec<String>
-    );
-
-    define_property!(
-        ///	Indicates if the remote device is paired.
-        is_paired, "Paired " => bool
-    );
-
-    define_property!(
-        ///	Indicates if the remote device is paired.
-        is_connected, "Connected " => bool
-    );
-
-    /// True, when connected and paired.
-    pub async fn is_ready_to_receive(&self) -> bool {
-        let is_connected: bool = self.is_connected().await.unwrap_or(false);
-        let is_paired: bool = self.is_paired().await.unwrap_or(false);
-        is_paired && is_connected
+    ///	List of 128-bit UUIDs that represents the available
+    /// remote services.    
+    pub async fn uuids(&self) -> Result<Option<HashSet<Uuid>>> {
+        let uuids: Vec<String> = match self.get_opt_property("UUIDs").await? {
+            Some(uuids) => uuids,
+            None => return Ok(None),
+        };
+        let uuids: HashSet<Uuid> = uuids
+            .into_iter()
+            .map(|uuid| {
+                uuid.parse()
+                    .map_err(|_| Error::InvalidUuid(uuid.to_string()))
+            })
+            .collect::<Result<HashSet<Uuid>>>()?;
+        Ok(Some(uuids))
     }
+
+    define_property!(
+        ///	Indicates if the remote device is paired.
+        is_paired, "Paired" => bool
+    );
+
+    define_property!(
+        ///	Indicates if the remote device is paired.
+        is_connected, "Connected" => bool
+    );
+
+    // /// True, when connected and paired.
+    // pub async fn is_ready_to_receive(&self) -> bool {
+    //     let is_connected: bool = self.is_connected().await.unwrap_or(false);
+    //     let is_paired: bool = self.is_paired().await.unwrap_or(false);
+    //     is_paired && is_connected
+    // }
 
     define_property!(
         ///	Indicates if the remote is seen as trusted. This
         /// setting can be changed by the application.
-        is_trusted, set_trusted, "Trusted " => bool
+        is_trusted, set_trusted, "Trusted" => bool
     );
 
     define_property!(
@@ -164,7 +187,7 @@ impl Device {
         /// Any device
         /// drivers will also be removed and no new ones will
         /// be probed as long as the device is blocked.
-        is_blocked, set_blocked, "Blocked " => bool
+        is_blocked, set_blocked, "Blocked" => bool
     );
 
     define_property!(
@@ -189,10 +212,10 @@ impl Device {
         alias, set_alias, "Alias" => String
     );
 
-    define_property!(
-        /// The object path of the adapter the device belongs to.
-        adapter, "Adapter" => String
-    );
+    // define_property!(
+    //     /// The object path of the adapter the device belongs to.
+    //     adapter, "Adapter" => String
+    // );
 
     define_property!(
         /// Set to true if the device only supports the pre-2.1
@@ -210,21 +233,24 @@ impl Device {
 
     /// Remote Device ID information in modalias format
     /// used by the kernel and udev.
-    pub async fn modalias(&self) -> Result<Modalias> {
-        let modalias: String = self.get_property("Modalias").await?;
-        Ok(modalias.parse()?)
+    pub async fn modalias(&self) -> Result<Option<Modalias>> {
+        let modalias: String = match self.get_opt_property("Modalias").await? {
+            Some(modalias) => modalias,
+            None => return Ok(None),
+        };
+        Ok(Some(modalias.parse()?))
     }
 
     define_property!(
         /// Received Signal Strength Indicator of the remote
         ///	device (inquiry or advertising).
-        rssi, "RSSI" => i16
+        rssi, "RSSI" => Option<i16>
     );
 
     define_property!(
         /// Advertised transmitted power level (inquiry or
         /// advertising).
-        tx_power, "TxPower" => i16
+        tx_power, "TxPower" => Option<i16>
     );
 
     define_property!(
@@ -233,7 +259,7 @@ impl Device {
         /// Keys are
         /// 16 bits Manufacturer ID followed by its byte array
         /// value.
-        manufacturer_data, "ManufacturerData" => HashMap<u16, Vec<u8>>
+        manufacturer_data, "ManufacturerData" => Option<HashMap<u16, Vec<u8>>>
     );
 
     define_property!(
@@ -241,13 +267,26 @@ impl Device {
         ///
         /// Keys are the UUIDs in
         /// string format followed by its byte array value.
-        service_data, "ServiceData" => HashMap<String, Vec<u8>>
+        service_data, "ServiceData" => Option<HashMap<String, Vec<u8>>>
     );
 
     define_property!(
         /// Indicate whether or not service discovery has been
         /// resolved.
         is_services_resolved, "ServicesResolved " => bool
+    );
+
+    define_property!(
+        /// The Advertising Data Flags of the remote device.
+        advertising_flags, "AdvertisingFlags" => Vec<u8>
+    );
+
+    define_property!(
+        /// The Advertising Data of the remote device.
+        ///
+        /// Note: Only types considered safe to be handled by
+        /// application are exposed.
+        advertising_data, "AdvertisingData" => HashMap<u8, Vec<u8>>
     );
 
     // pub async fn get_gatt_services(&self) -> Result<Vec<String>> {

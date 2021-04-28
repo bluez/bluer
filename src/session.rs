@@ -1,22 +1,19 @@
-use dbus::{
-    nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
-    strings::BusName,
-    Path,
-};
+use dbus::nonblock::SyncConnection;
 use dbus_tokio::connection;
-use futures::{stream, Stream, StreamExt};
+use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
 use std::{
+    collections::HashMap,
     fmt::{Debug, Formatter},
     sync::Arc,
 };
 use tokio::task::spawn_blocking;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
-use crate::{adapter, all_dbus_objects, Adapter, ObjectEvent, Result, SERVICE_NAME, TIMEOUT};
+use crate::{adapter, all_dbus_objects, Adapter, ObjectEvent, Result};
 
 /// Bluetooth session.
 pub struct Session {
     connection: Arc<SyncConnection>,
+    discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
 }
 
 impl Debug for Session {
@@ -39,7 +36,10 @@ impl Session {
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            discovery_slots: Arc::new(Mutex::new(HashMap::new())),
+        })
     }
 
     /// Enumerate connected Bluetooth adapters and return their names.
@@ -58,7 +58,11 @@ impl Session {
 
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
-        Adapter::new(self.connection.clone(), adapter_name)
+        Adapter::new(
+            self.connection.clone(),
+            adapter_name,
+            self.discovery_slots.clone(),
+        )
     }
 
     /// Stream adapter added and removed events.

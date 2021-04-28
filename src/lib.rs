@@ -35,6 +35,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 /// Define D-Bus interface methods.
 macro_rules! dbus_interface {
     ($interface:expr) => {
+        #[allow(dead_code)]
         async fn get_property<R>(&self, name: &str) -> crate::Result<R>
         where
             R: for<'b> dbus::arg::Get<'b> + 'static,
@@ -43,6 +44,22 @@ macro_rules! dbus_interface {
             Ok(self.proxy().get($interface, name).await?)
         }
 
+        #[allow(dead_code)]
+        async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
+        where
+            R: for<'b> dbus::arg::Get<'b> + 'static,
+        {
+            use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
+            match self.proxy().get($interface, name).await {
+                Ok(v) => Ok(Some(v)),
+                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
+                    Ok(None)
+                }
+                Err(err) => Err(err.into()),
+            }
+        }
+
+        #[allow(dead_code)]
         async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
         where
             T: dbus::arg::Arg + dbus::arg::Append,
@@ -52,6 +69,7 @@ macro_rules! dbus_interface {
             Ok(())
         }
 
+        #[allow(dead_code)]
         async fn call_method<A, R>(&self, name: &str, args: A) -> crate::Result<R>
         where
             A: dbus::arg::AppendAll,
@@ -63,6 +81,13 @@ macro_rules! dbus_interface {
 }
 
 macro_rules! define_property {
+    ($(#[$outer:meta])* $getter_name:ident, $dbus_name:expr => Option<$type:ty>) => {
+        $(#[$outer])*
+        pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
+            self.get_opt_property($dbus_name).await
+        }
+    };
+
     ($(#[$outer:meta])* $getter_name:ident, $dbus_name:expr => $type:ty) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<$type> {
@@ -96,7 +121,9 @@ mod device;
 //mod bluetooth_utils;
 mod session;
 
-pub use crate::{adapter::Adapter, device::Device};
+pub use crate::adapter::*;
+pub use crate::device::*;
+pub use crate::session::*;
 // pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
 // pub use crate::bluetooth_event::BluetoothEvent;
 // pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
@@ -105,7 +132,6 @@ pub use crate::{adapter::Adapter, device::Device};
 // pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 // pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
 // pub use crate::bluetooth_obex::BluetoothOBEXSession;
-pub use crate::session::Session;
 
 /// Bluetooth error.
 #[derive(Clone, Debug, Error)]
@@ -150,13 +176,20 @@ pub enum Error {
     InvalidAddress(String),
     #[error("Invalid Bluetooth adapter name: {0}")]
     InvalidName(String),
+    #[error("Invalid UUID: {0}")]
+    InvalidUuid(String),
+    #[error("Another Bluetooth device discovery is in progress")]
+    AnotherDiscoveryInProgress,
     #[error("Bluetooth error: {0}")]
     Other(String),
 }
 
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
-        match err.name().and_then(|name| name.strip_prefix("org.bluez.Error.")) {
+        match err
+            .name()
+            .and_then(|name| name.strip_prefix("org.bluez.Error."))
+        {
             Some("AlreadyConnected") => Self::AlreadyConnected,
             Some("AlreadyExists") => Self::AlreadyExists,
             Some("AuthenticationCanceled") => Self::AuthenticationCanceled,
@@ -216,7 +249,11 @@ impl FromStr for Address {
             .split(':')
             .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::InvalidAddress(s.to_string())))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self(fields.try_into().map_err(|_| Error::InvalidAddress(s.to_string()))?))
+        Ok(Self(
+            fields
+                .try_into()
+                .map_err(|_| Error::InvalidAddress(s.to_string()))?,
+        ))
     }
 }
 
@@ -284,20 +321,28 @@ impl FromStr for Modalias {
 /// D-Bus object event.
 pub(crate) enum ObjectEvent {
     /// Object or object interfaces added.
-    Added { object: Path<'static>, interfaces: Vec<String> },
+    Added {
+        object: Path<'static>,
+        interfaces: Vec<String>,
+    },
     /// Object or object interfaces removed.
-    Removed { object: Path<'static>, interfaces: Vec<String> },
+    Removed {
+        object: Path<'static>,
+        interfaces: Vec<String>,
+    },
 }
 
 impl ObjectEvent {
     /// Stream D-Bus object events starting with specified path prefix.
     pub(crate) async fn stream(
-        connection: Arc<SyncConnection>, path_prefix: Option<Path<'static>>,
+        connection: Arc<SyncConnection>,
+        path_prefix: Option<Path<'static>>,
     ) -> Result<mpsc::UnboundedReceiver<Self>> {
         use dbus::message::SignalArgs;
         lazy_static! {
             static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
-            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
+            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> =
+                Some(&SERVICE_NAME_BUS);
         }
 
         let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None);
@@ -319,19 +364,24 @@ impl ObjectEvent {
         tokio::spawn(async move {
             while let Some(msg) = stream.next().await {
                 let to_send = {
-                    if let Some(ObjectManagerInterfacesAdded { object, interfaces, .. }) =
-                        ObjectManagerInterfacesAdded::from_message(&msg)
+                    if let Some(ObjectManagerInterfacesAdded {
+                        object, interfaces, ..
+                    }) = ObjectManagerInterfacesAdded::from_message(&msg)
                     {
                         if has_prefix(&object) {
                             Some(ObjectEvent::Added {
                                 object,
-                                interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                                interfaces: interfaces
+                                    .into_iter()
+                                    .map(|(interface, _)| interface)
+                                    .collect(),
                             })
                         } else {
                             None
                         }
-                    } else if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) =
-                        ObjectManagerInterfacesRemoved::from_message(&msg)
+                    } else if let Some(ObjectManagerInterfacesRemoved {
+                        object, interfaces, ..
+                    }) = ObjectManagerInterfacesRemoved::from_message(&msg)
                     {
                         if has_prefix(&object) {
                             Some(ObjectEvent::Removed { object, interfaces })

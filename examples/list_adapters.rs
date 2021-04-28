@@ -8,7 +8,10 @@ async fn main() -> blurz::Result<()> {
         println!("    Address:         {}", adapter.address().await?);
         println!("    Address type:    {}", adapter.address_type().await?);
         println!("    Friendly name:   {}", adapter.alias().await?);
-        println!("    Discoverabe:     {:?}", adapter.is_discoverable().await?);
+        println!(
+            "    Discoverabe:     {:?}",
+            adapter.is_discoverable().await?
+        );
         println!();
     }
     Ok(())
