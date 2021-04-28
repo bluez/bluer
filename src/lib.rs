@@ -1,20 +1,27 @@
-use dbus::{Path, nonblock::SyncConnection};
+use dbus::{
+    arg::PropMap,
+    nonblock::{
+        stdintf::org_freedesktop_dbus::{
+            ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved,
+        },
+        Proxy, SyncConnection,
+    },
+    strings::BusName,
+    Path,
+};
+use futures::{channel::mpsc, stream, SinkExt, StreamExt};
 use hex::FromHex;
-use std::{convert::TryInto, fmt::{self, Debug, Display, Formatter}, str::FromStr, sync::Arc, time::Duration};
-
-pub use crate::{adapter::Adapter, device::Device};
-// pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
-// pub use crate::bluetooth_event::BluetoothEvent;
-// pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
-// pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
-// pub use crate::bluetooth_gatt_service::BluetoothGATTService;
-// pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-// pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
-// pub use crate::bluetooth_obex::BluetoothOBEXSession;
-pub use crate::session::Session;
-
+use lazy_static::lazy_static;
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    fmt::{self, Debug, Display, Formatter},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 use thiserror::Error;
-use tokio::{sync::mpsc::UnboundedReceiver, task::JoinError};
+use tokio::task::JoinError;
 
 macro_rules! other_err {
     ($($e:tt)*) => {
@@ -25,6 +32,7 @@ macro_rules! other_err {
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Define D-Bus interface methods.
 macro_rules! dbus_interface {
     ($interface:expr) => {
         async fn get_property<R>(&self, name: &str) -> crate::Result<R>
@@ -32,7 +40,7 @@ macro_rules! dbus_interface {
             R: for<'b> dbus::arg::Get<'b> + 'static,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            Ok(self.proxy.get($interface, name).await?)
+            Ok(self.proxy().get($interface, name).await?)
         }
 
         async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
@@ -40,7 +48,7 @@ macro_rules! dbus_interface {
             T: dbus::arg::Arg + dbus::arg::Append,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            self.proxy.set($interface, name, value).await?;
+            self.proxy().set($interface, name, value).await?;
             Ok(())
         }
 
@@ -49,7 +57,7 @@ macro_rules! dbus_interface {
             A: dbus::arg::AppendAll,
             R: dbus::arg::ReadAll + 'static,
         {
-            Ok(self.proxy.method_call($interface, name, args).await?)
+            Ok(self.proxy().method_call($interface, name, args).await?)
         }
     };
 }
@@ -87,6 +95,17 @@ mod device;
 //mod bluetooth_obex;
 //mod bluetooth_utils;
 mod session;
+
+pub use crate::{adapter::Adapter, device::Device};
+// pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
+// pub use crate::bluetooth_event::BluetoothEvent;
+// pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
+// pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
+// pub use crate::bluetooth_gatt_service::BluetoothGATTService;
+// pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
+// pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
+// pub use crate::bluetooth_obex::BluetoothOBEXSession;
+pub use crate::session::Session;
 
 /// Bluetooth error.
 #[derive(Clone, Debug, Error)]
@@ -129,6 +148,8 @@ pub enum Error {
     JoinError(String),
     #[error("Invalid Bluetooth address: {0}")]
     InvalidAddress(String),
+    #[error("Invalid Bluetooth adapter name: {0}")]
+    InvalidName(String),
     #[error("Bluetooth error: {0}")]
     Other(String),
 }
@@ -263,22 +284,21 @@ impl FromStr for Modalias {
 /// D-Bus object event.
 pub(crate) enum ObjectEvent {
     /// Object or object interfaces added.
-    Added(ObjectManagerInterfacesAdded),
+    Added { object: Path<'static>, interfaces: Vec<String> },
     /// Object or object interfaces removed.
-    Removed(ObjectManagerInterfacesRemoved),
+    Removed { object: Path<'static>, interfaces: Vec<String> },
 }
 
-
+impl ObjectEvent {
     /// Stream D-Bus object events starting with specified path prefix.
-    pub(crate) async fn object_events(
+    pub(crate) async fn stream(
         connection: Arc<SyncConnection>, path_prefix: Option<Path<'static>>,
-    ) -> Result<UnboundedReceiver<ObjectEvent>> {
+    ) -> Result<mpsc::UnboundedReceiver<Self>> {
         use dbus::message::SignalArgs;
         lazy_static! {
             static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
             static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
         }
-        let connection = self.connection.clone();
 
         let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None);
         let msg_match_add = connection.add_match(rule_add).await?;
@@ -295,20 +315,37 @@ pub(crate) enum ObjectEvent {
             None => true,
         };
 
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (mut tx, rx) = mpsc::unbounded();
         tokio::spawn(async move {
             while let Some(msg) = stream.next().await {
-                if let Some(added) = ObjectManagerInterfacesAdded::from_message(&msg) {
-                    if has_prefix(&added.object) {
-                        if tx.send(ObjectEvent::Added(added)).is_err() {
-                            break;
+                let to_send = {
+                    if let Some(ObjectManagerInterfacesAdded { object, interfaces, .. }) =
+                        ObjectManagerInterfacesAdded::from_message(&msg)
+                    {
+                        if has_prefix(&object) {
+                            Some(ObjectEvent::Added {
+                                object,
+                                interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                            })
+                        } else {
+                            None
                         }
+                    } else if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) =
+                        ObjectManagerInterfacesRemoved::from_message(&msg)
+                    {
+                        if has_prefix(&object) {
+                            Some(ObjectEvent::Removed { object, interfaces })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
                     }
-                } else if let Some(removed) = ObjectManagerInterfacesRemoved::from_message(&msg) {
-                    if has_prefix(&removed.object) {
-                        if tx.send(ObjectEvent::Removed(removed)).is_err() {
-                            break;
-                        }
+                };
+
+                if let Some(msg) = to_send {
+                    if tx.send(msg).await.is_err() {
+                        break;
                     }
                 }
             }
@@ -319,3 +356,12 @@ pub(crate) enum ObjectEvent {
 
         Ok(rx)
     }
+}
+
+/// Gets all D-Bus objects from the bluez service.
+async fn all_dbus_objects(
+    connection: &SyncConnection,
+) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
+    let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
+    Ok(p.get_managed_objects().await?)
+}

@@ -1,4 +1,6 @@
-use crate::{device::Device, session::ObjectEvent, Address, AddressType, Modalias, SERVICE_NAME, TIMEOUT};
+use crate::{
+    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, SERVICE_NAME, TIMEOUT,
+};
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::{device, session::Session, Error, Result};
 use dbus::{
@@ -17,23 +19,21 @@ use std::{
     sync::Arc,
     u32,
 };
-use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";
 
 /// Interface to a Bluetooth adapter.
 #[derive(Clone)]
-pub struct Adapter<'a> {
-    session: &'a Session,
-    proxy: Proxy<'static, &'a SyncConnection>,
+pub struct Adapter {
+    connection: Arc<SyncConnection>,
+    dbus_path: Path<'static>,
     name: Arc<String>,
 }
 
-impl<'a> Debug for Adapter<'a> {
+impl Debug for Adapter {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Adapter {{ session: {:?}, name: {} }}", self.session(), self.name())
+        write!(f, "Adapter {{ name: {} }}", self.name())
     }
 }
 
@@ -46,22 +46,22 @@ pub enum DeviceEvent {
     Removed(Address),
 }
 
-impl<'a> Adapter<'a> {
+impl Adapter {
     /// Create Bluetooth adapter interface for adapter with specified name.
-    pub(crate) fn new(session: &'a Session, name: &str) -> Self {
-        let path = PREFIX.to_string() + name;
-        Self {
-            session,
-            proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()),
+    pub(crate) fn new(connection: Arc<SyncConnection>, name: &str) -> Result<Self> {
+        Ok(Self {
+            connection,
+            dbus_path: Path::new(PREFIX.to_string() + name).map_err(|_| Error::InvalidName(name.to_string()))?,
             name: Arc::new(name.to_string()),
-        }
+        })
     }
 
-    /// The Bluetooth adaper D-Bus path.
-    ///
-    /// For example: /org/bluez/hci0
-    pub(crate) fn dbus_path(&self) -> &Path {
-        &self.proxy.path
+    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
+        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.connection)
+    }
+
+    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
+        path.strip_prefix(PREFIX)
     }
 
     /// The Bluetooth adapter name.
@@ -69,11 +69,6 @@ impl<'a> Adapter<'a> {
     /// For example hci0.
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Bluetooth session.
-    pub fn session(&self) -> &Session {
-        self.session
     }
 
     // pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
@@ -85,24 +80,14 @@ impl<'a> Adapter<'a> {
     //     Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     // }
 
-    fn parse_device_dbus_path(adapter_path: &Path, path: &Path<'static>) -> Option<Address> {
-        let prefix = format!("{}/dev_", adapter_path);
-        match path.strip_prefix(&prefix) {
-            Some(addr) => {
-                let addr = addr.replace('_', ":");
-                addr.parse().ok()
-            }
-            None => None,
-        }
-    }
-
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
-        let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, self.session().connection());
-        for (path, interfaces) in p.get_managed_objects().await? {
-            match Self::parse_device_dbus_path(self.dbus_path(), &path) {
-                Some(addr) if interfaces.contains_key(device::INTERFACE) => addrs.push(addr),
+        for (path, interfaces) in all_dbus_objects(&*self.connection).await? {
+            match Device::parse_dbus_path(&path) {
+                Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(device::INTERFACE) => {
+                    addrs.push(addr)
+                }
                 _ => (),
             }
         }
@@ -110,30 +95,28 @@ impl<'a> Adapter<'a> {
     }
 
     /// Get interface to Bluetooth device of specified address.
-    pub fn device(&self, address: Address) -> Device {
-        Device::new(self.session(), self.name.clone(), address)
+    pub fn device(&self, address: Address) -> Result<Device> {
+        Device::new(self.connection.clone(), self.name.clone(), address)
     }
 
     /// Stream device added and removed events.
     pub async fn device_events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
-        let adapter_path = self.dbus_path().clone().into_static();
-        let obj_events = self.session.object_events(Some(adapter_path.clone())).await?;
-        let obj_events = UnboundedReceiverStream::new(obj_events);
+        let adapter_path = self.dbus_path.clone().into_static();
+        let obj_events = ObjectEvent::stream(self.connection.clone(), Some(adapter_path.clone())).await?;
+
+        let my_name = self.name.clone();
         let events = obj_events.filter_map(move |evt| {
-            let adapter_path = adapter_path.clone();
+            let my_name = my_name.clone();
             async move {
                 match evt {
-                    ObjectEvent::Added(added) => match Self::parse_device_dbus_path(&adapter_path, &added.object)
-                    {
-                        Some(address) => Some(DeviceEvent::Added(address)),
-                        None => None,
+                    ObjectEvent::Added { object, .. } => match Device::parse_dbus_path(&object) {
+                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Added(address)),
+                        _ => None,
                     },
-                    ObjectEvent::Removed(removed) => {
-                        match Self::parse_device_dbus_path(&adapter_path, &removed.object) {
-                            Some(address) => Some(DeviceEvent::Removed(address)),
-                            None => None,
-                        }
-                    }
+                    ObjectEvent::Removed { object, .. } => match Device::parse_dbus_path(&object) {
+                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Removed(address)),
+                        _ => None,
+                    },
                 }
             }
         });

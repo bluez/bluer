@@ -4,53 +4,59 @@ use dbus::{
 };
 use std::{collections::HashMap, fmt, sync::Arc};
 
-use crate::{adapter, session::Session, Address, AddressType, Modalias, Result, SERVICE_NAME, TIMEOUT};
+use crate::{adapter, Address, AddressType, Error, Modalias, Result, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
 
 /// Interface to a Bluetooth device.
 #[derive(Clone)]
-pub struct Device<'a> {
-    session: &'a Session,
-    proxy: Proxy<'static, &'a SyncConnection>,
+pub struct Device {
+    connection: Arc<SyncConnection>,
+    dbus_path: Path<'static>,
     adapter_name: Arc<String>,
     address: Address,
 }
 
-impl<'a> fmt::Debug for Device<'a> {
+impl fmt::Debug for Device {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Device {{ session: {:?}, adapter_name: {}, address: {} }}",
-            self.session(),
-            self.adapter_name(),
-            self.address()
-        )
+        write!(f, "Device {{ adapter_name: {}, address: {} }}", self.adapter_name(), self.address())
     }
 }
 
-impl<'a> Device<'a> {
-    /// Create Bluetooth device interface for adapter with specified name.
-    pub(crate) fn new(session: &'a Session, adapter_name: Arc<String>, address: Address) -> Self {
-        let path = format!("{}{}/dev_{}", adapter::PREFIX, adapter_name, address.to_string().replace(':', "_"));
-        Self {
-            session,
-            proxy: Proxy::new(SERVICE_NAME, path, TIMEOUT, session.connection()),
+impl Device {
+    /// Create Bluetooth device interface for device of specified address connected to specified adapater.
+    pub(crate) fn new(
+        connection: Arc<SyncConnection>, adapter_name: Arc<String>, address: Address,
+    ) -> Result<Self> {
+        Ok(Self {
+            connection,
+            dbus_path: Path::new(format!(
+                "{}{}/dev_{}",
+                adapter::PREFIX,
+                adapter_name,
+                address.to_string().replace(':', "_")
+            ))
+            .map_err(|_| Error::InvalidName((*adapter_name).clone()))?,
             adapter_name,
             address,
+        })
+    }
+
+    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
+        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.connection)
+    }
+
+    pub(crate) fn parse_dbus_path(path: &Path<'static>) -> Option<(String, Address)> {
+        match path.strip_prefix(adapter::PREFIX) {
+            Some(adapter_dev) => match adapter_dev.split("/dev_").collect::<Vec<_>>().as_slice() {
+                &[adapater, dev] => match dev.replace('_', ":").parse() {
+                    Ok(addr) => (Some((adapater.to_string(), addr))),
+                    Err(_) => None,
+                },
+                _ => None,
+            },
+            None => None,
         }
-    }
-
-    /// Bluetooth session.
-    pub fn session(&self) -> &Session {
-        self.session
-    }
-
-    /// The Bluetooth device D-Bus path.
-    ///
-    /// For example: /org/bluez/hci0/dev_B8_27_EB_B9_36_4E
-    pub(crate) fn dbus_path(&self) -> &Path {
-        &self.proxy.path
     }
 
     /// The Bluetooth adapter name.
