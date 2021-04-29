@@ -458,6 +458,7 @@ impl PropertyEvent {
                         .map(|(name, _)| name)
                         .collect(),
                 };
+                dbg!(&evt);
 
                 if tx.send(evt).await.is_err() {
                     break;
