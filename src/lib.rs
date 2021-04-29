@@ -3,6 +3,7 @@ use dbus::{
     nonblock::{
         stdintf::org_freedesktop_dbus::{
             ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved,
+            PropertiesPropertiesChanged,
         },
         Proxy, SyncConnection,
     },
@@ -319,6 +320,7 @@ impl FromStr for Modalias {
 }
 
 /// D-Bus object event.
+#[derive(Debug, Clone)]
 pub(crate) enum ObjectEvent {
     /// Object or object interfaces added.
     Added {
@@ -345,11 +347,15 @@ impl ObjectEvent {
                 Some(&SERVICE_NAME_BUS);
         }
 
-        let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None);
+        //let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, path_prefix.as_ref()).static_clone();
+        let rule_add =
+            ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None).static_clone();
         let msg_match_add = connection.add_match(rule_add).await?;
         let (msg_match_add, stream_add) = msg_match_add.msg_stream();
 
-        let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None);
+        //let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, path_prefix.as_ref()).static_clone();
+        let rule_removed =
+            ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None).static_clone();
         let msg_match_removed = connection.add_match(rule_removed).await?;
         let (msg_match_removed, stream_removed) = msg_match_removed.msg_stream();
 
@@ -369,7 +375,7 @@ impl ObjectEvent {
                     }) = ObjectManagerInterfacesAdded::from_message(&msg)
                     {
                         if has_prefix(&object) {
-                            Some(ObjectEvent::Added {
+                            Some(Self::Added {
                                 object,
                                 interfaces: interfaces
                                     .into_iter()
@@ -384,7 +390,7 @@ impl ObjectEvent {
                     }) = ObjectManagerInterfacesRemoved::from_message(&msg)
                     {
                         if has_prefix(&object) {
-                            Some(ObjectEvent::Removed { object, interfaces })
+                            Some(Self::Removed { object, interfaces })
                         } else {
                             None
                         }
@@ -402,6 +408,63 @@ impl ObjectEvent {
 
             let _ = connection.remove_match(msg_match_add.token()).await;
             let _ = connection.remove_match(msg_match_removed.token()).await;
+        });
+
+        Ok(rx)
+    }
+}
+
+/// D-Bus property changed event.
+#[derive(Debug, Clone)]
+pub(crate) struct PropertyEvent {
+    pub interface: String,
+    pub changed: Vec<String>,
+}
+
+impl PropertyEvent {
+    /// Stream D-Bus property changed events.
+    pub async fn stream(
+        connection: Arc<SyncConnection>,
+        path: Path<'static>,
+    ) -> Result<mpsc::UnboundedReceiver<Self>> {
+        use dbus::message::SignalArgs;
+        lazy_static! {
+            static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
+            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> =
+                Some(&SERVICE_NAME_BUS);
+        }
+
+        // dbg!(&path);
+        let rule =
+            PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, Some(&path)).static_clone();
+        let msg_match = connection.add_match(rule).await?;
+        let (msg_match, mut stream) = msg_match.stream();
+
+        let (mut tx, rx) = mpsc::unbounded();
+        tokio::spawn(async move {
+            while let Some((
+                _,
+                PropertiesPropertiesChanged {
+                    interface_name,
+                    changed_properties,
+                    ..
+                },
+            )) = stream.next().await
+            {
+                let evt = Self {
+                    interface: interface_name,
+                    changed: changed_properties
+                        .into_iter()
+                        .map(|(name, _)| name)
+                        .collect(),
+                };
+
+                if tx.send(evt).await.is_err() {
+                    break;
+                }
+            }
+
+            let _ = connection.remove_match(msg_match.token()).await;
         });
 
         Ok(rx)

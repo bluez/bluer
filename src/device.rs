@@ -2,6 +2,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
+use futures::{Stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -9,7 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{adapter, Address, AddressType, Error, Modalias, Result, SERVICE_NAME, TIMEOUT};
+use crate::{
+    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SERVICE_NAME, TIMEOUT,
+};
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
 
@@ -89,6 +92,12 @@ impl Device {
     //         }
     //         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     //     }
+
+    /// Streams device property change events.
+    pub async fn change_events(&self) -> Result<impl Stream<Item = ()>> {
+        let strm = PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
+        Ok(strm.map(|_| ()))
+    }
 
     dbus_interface!(INTERFACE);
 
@@ -346,8 +355,9 @@ impl Device {
     /// This method connects a specific profile of this
     /// device. The UUID provided is the remote service
     /// UUID for the profile.
-    pub async fn connect_profile(&self, uuid: &str) -> Result<()> {
-        self.call_method("ConnectProfile", (uuid,)).await
+    pub async fn connect_profile(&self, uuid: &Uuid) -> Result<()> {
+        self.call_method("ConnectProfile", (uuid.to_string(),))
+            .await
     }
 
     /// This method disconnects a specific profile of
@@ -359,8 +369,9 @@ impl Device {
     /// There is no connection tracking for a profile, so
     /// as long as the profile is registered this will always
     /// succeed.
-    pub async fn disconnect_profile(&self, uuid: &str) -> Result<()> {
-        self.call_method("DisconnectProfile", (uuid,)).await
+    pub async fn disconnect_profile(&self, uuid: &Uuid) -> Result<()> {
+        self.call_method("DisconnectProfile", (uuid.to_string(),))
+            .await
     }
 
     /// This method will connect to the remote device,

@@ -13,8 +13,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, SERVICE_NAME,
-    TIMEOUT,
+    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, PropertyEvent,
+    SERVICE_NAME, TIMEOUT,
 };
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::{device, Error, Result};
@@ -176,6 +176,12 @@ impl Adapter {
         .await
     }
 
+    /// Streams adapter property change events.
+    pub async fn change_events(&self) -> Result<impl Stream<Item = ()>> {
+        let strm = PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
+        Ok(strm.map(|_| ()))
+    }
+
     dbus_interface!(INTERFACE);
 
     // ===========================================================================================
@@ -314,11 +320,22 @@ impl Adapter {
         is_discovering, "Discovering" => bool
     );
 
-    define_property!(
-        /// List of 128-bit UUIDs that represents the available
-        /// lcal services.
-        uuids, "UUIDs" => Vec<String>
-    );
+    /// List of 128-bit UUIDs that represents the available
+    /// lcal services.    
+    pub async fn uuids(&self) -> Result<Option<HashSet<Uuid>>> {
+        let uuids: Vec<String> = match self.get_opt_property("UUIDs").await? {
+            Some(uuids) => uuids,
+            None => return Ok(None),
+        };
+        let uuids: HashSet<Uuid> = uuids
+            .into_iter()
+            .map(|uuid| {
+                uuid.parse()
+                    .map_err(|_| Error::InvalidUuid(uuid.to_string()))
+            })
+            .collect::<Result<HashSet<Uuid>>>()?;
+        Ok(Some(uuids))
+    }
 
     /// Local Device ID information in modalias format
     /// used by the kernel and udev.

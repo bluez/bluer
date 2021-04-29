@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use blurz::{Adapter, Address, DeviceEvent, DiscoveryFilter};
-use futures::{pin_mut, StreamExt};
+use futures::{pin_mut, stream::SelectAll, StreamExt};
 use tokio::time::sleep;
 
 async fn query_device(adapter: &Adapter, addr: Address) -> blurz::Result<()> {
@@ -43,20 +43,38 @@ async fn main() -> blurz::Result<()> {
     let device_events = adapter.device_events().await?;
     pin_mut!(device_events);
 
-    while let Some(event) = device_events.next().await {
-        match event {
-            DeviceEvent::Added(addr) => {
-                println!("Device added: {}", addr);
+    let mut all_change_events = SelectAll::new();
+
+    loop {
+        tokio::select! {
+            Some(device_event) = device_events.next() => {
+                match device_event {
+                    DeviceEvent::Added(addr) => {
+                        println!("Device added: {}", addr);
+                        sleep(Duration::from_millis(100)).await;
+                        if let Err(err) = query_device(&adapter, addr).await {
+                            println!("    Error: {}", &err);
+                        }
+
+                        let device = adapter.device(addr)?;
+                        let change_events = device.change_events().await?.map(move |_| addr);
+                        all_change_events.push(change_events);
+                    }
+                    DeviceEvent::Removed(addr) => {
+                        println!("Device removed: {}", addr);
+                    }
+                }
+                println!();
+            }
+            Some(addr) = all_change_events.next() => {
+                println!("Device changed: {}", addr);
                 sleep(Duration::from_millis(100)).await;
                 if let Err(err) = query_device(&adapter, addr).await {
                     println!("    Error: {}", &err);
                 }
             }
-            DeviceEvent::Removed(addr) => {
-                println!("Device removed: {}", addr);
-            }
+            else => break
         }
-        println!();
     }
 
     Ok(())
