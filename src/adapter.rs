@@ -3,7 +3,11 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
+use futures::{
+    channel::{mpsc, oneshot},
+    lock::Mutex,
+    SinkExt, Stream, StreamExt,
+};
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Debug, Formatter},
@@ -108,7 +112,7 @@ impl Adapter {
     }
 
     /// Stream device added and removed events.
-    pub async fn device_events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
+    pub async fn device_changes(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let adapter_path = self.dbus_path.clone().into_static();
         let obj_events =
             ObjectEvent::stream(self.connection.clone(), Some(adapter_path.clone())).await?;
@@ -176,188 +180,46 @@ impl Adapter {
         .await
     }
 
-    /// Streams adapter property change events.
-    pub async fn change_events(&self) -> Result<impl Stream<Item = ()>> {
-        let strm = PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
-        Ok(strm.map(|_| ()))
-    }
-
     dbus_interface!(INTERFACE);
 
-    // ===========================================================================================
-    // Properties
-    // ===========================================================================================
+    /// Streams adapter property changes.
+    pub async fn changes(&self) -> Result<impl Stream<Item = AdapterChanged>> {
+        let mut events =
+            PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
 
-    define_property!(
-        /// The Bluetooth device address.
-        address, "Address" => String
-    );
+        let (mut tx, rx) = mpsc::unbounded();
+        let name = self.name.clone();
+        tokio::spawn(async move {
+            while let Some(event) = events.next().await {
+                for property in AdapterProperty::from_prop_map(event.changed) {
+                    if tx
+                        .send(AdapterChanged {
+                            name: name.clone(),
+                            property,
+                        })
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        });
 
-    /// The Bluetooth Address Type.
-    ///
-    /// For dual-mode and BR/EDR
-    /// only adapter this defaults to "public". Single mode LE
-    /// adapters may have either value. With privacy enabled
-    /// this contains type of Identity Address and not type of
-    /// address used for connection.
-    pub async fn address_type(&self) -> Result<AddressType> {
-        let address_type: String = self.get_property("AddressType").await?;
-        Ok(address_type.parse()?)
-    }
-
-    define_property!(
-        ///	The Bluetooth system name (pretty hostname).
-        ///
-        /// This property is either a static system default
-        /// or controlled by an external daemon providing
-        /// access to the pretty hostname configuration.
-        system_name, "Name" => String
-    );
-
-    define_property!(
-        /// The Bluetooth friendly name.
-        ///
-        /// This value can be changed.
-        ///
-        /// In case no alias is set, it will return the system
-        /// provided name. Setting an empty string as alias will
-        /// convert it back to the system provided name.
-        ///
-        /// When resetting the alias with an empty string, the
-        /// property will default back to system name.
-        ///
-        /// On a well configured system, this property never
-        /// needs to be changed since it defaults to the system
-        /// name and provides the pretty hostname. Only if the
-        /// local name needs to be different from the pretty
-        /// hostname, this property should be used as last
-        /// resort.
-        alias, set_alias, "Alias" => String
-    );
-
-    define_property!(
-        /// The Bluetooth class of device.
-        ///
-        ///	This property represents the value that is either
-        ///	automatically configured by DMI/ACPI information
-        ///	or provided as static configuration.
-        class, "Class" => u32
-    );
-
-    define_property!(
-        /// Switch an adapter on or off. This will also set the
-        /// appropriate connectable state of the controller.
-        ///
-        /// The value of this property is not persistent. After
-        /// restart or unplugging of the adapter it will reset
-        /// back to false.
-        is_powered, set_powered, "Powered" => bool
-    );
-
-    define_property!(
-        /// Switch an adapter to discoverable or non-discoverable
-        /// to either make it visible or hide it.
-        ///
-        /// This is a global
-        /// setting and should only be used by the settings
-        /// application.
-        ///
-        /// If the DiscoverableTimeout is set to a non-zero
-        /// value then the system will set this value back to
-        /// false after the timer expired.
-        ///
-        /// In case the adapter is switched off, setting this
-        /// value will fail.
-        ///
-        /// When changing the Powered property the new state of
-        /// this property will be updated via a PropertiesChanged
-        /// signal.
-        ///
-        /// For any new adapter this settings defaults to false.
-        is_discoverable, set_discoverable, "Discoverable" => bool
-    );
-
-    define_property!(
-        /// Switch an adapter to pairable or non-pairable.
-        ///
-        /// This is
-        /// a global setting and should only be used by the
-        /// settings application.
-        ///
-        /// Note that this property only affects incoming pairing
-        /// requests.
-        ///
-        /// For any new adapter this settings defaults to true.
-        is_pairable, set_pairable, "Pairable" => bool
-    );
-
-    define_property!(
-        /// The pairable timeout in seconds.
-        ///
-        /// A value of zero
-        /// means that the timeout is disabled and it will stay in
-        /// pairable mode forever.
-        ///
-        /// The default value for pairable timeout should be
-        /// disabled (value 0).
-        pairable_timeout, set_pairable_timeout, "PairableTimeout" => u32
-    );
-
-    define_property!(
-        /// The discoverable timeout in seconds.
-        ///
-        /// A value of zero
-        /// means that the timeout is disabled and it will stay in
-        /// discoverable/limited mode forever.
-        ///
-        /// The default value for the discoverable timeout should
-        /// be 180 seconds (3 minutes).
-        discoverable_timeout, set_discoverable_timeout, "DiscoverableTimeout" => u32
-    );
-
-    define_property!(
-        ///	Indicates that a device discovery procedure is active.
-        is_discovering, "Discovering" => bool
-    );
-
-    /// List of 128-bit UUIDs that represents the available
-    /// lcal services.    
-    pub async fn uuids(&self) -> Result<Option<HashSet<Uuid>>> {
-        let uuids: Vec<String> = match self.get_opt_property("UUIDs").await? {
-            Some(uuids) => uuids,
-            None => return Ok(None),
-        };
-        let uuids: HashSet<Uuid> = uuids
-            .into_iter()
-            .map(|uuid| {
-                uuid.parse()
-                    .map_err(|_| Error::InvalidUuid(uuid.to_string()))
-            })
-            .collect::<Result<HashSet<Uuid>>>()?;
-        Ok(Some(uuids))
-    }
-
-    /// Local Device ID information in modalias format
-    /// used by the kernel and udev.
-    pub async fn modalias(&self) -> Result<Option<Modalias>> {
-        let modalias: String = match self.get_opt_property("Modalias").await? {
-            Some(modalias) => modalias,
-            None => return Ok(None),
-        };
-        Ok(Some(modalias.parse()?))
+        Ok(rx)
     }
 
     // ===========================================================================================
     // Methods
     // ===========================================================================================
 
-    /// This removes the remote device object at the given
-    /// path.
+    /// This removes the remote device object for the given
+    /// device address.
     ///
     /// It will remove also the pairing information.
-    pub async fn remove_device(&self, device: &str) -> Result<()> {
-        self.call_method("RemoveDevice", (Path::from(device),))
-            .await?;
+    pub async fn remove_device(&self, address: Address) -> Result<()> {
+        let path = Device::dbus_path(self.name(), address)?;
+        self.call_method("RemoveDevice", ((path),)).await?;
         Ok(())
     }
 
@@ -401,6 +263,203 @@ impl Adapter {
         let (path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
         Ok(path)
     }
+}
+
+define_properties!(
+    Adapter, AdapterProperty => {
+        /// The Bluetooth device address.
+        property(
+            Address, Address,
+            dbus: ("Address", String, MANDATORY),
+            get: (address, v => { v.parse()? }),
+        );
+
+        /// The Bluetooth Address Type.
+        ///
+        /// For dual-mode and BR/EDR
+        /// only adapter this defaults to "public". Single mode LE
+        /// adapters may have either value. With privacy enabled
+        /// this contains type of Identity Address and not type of
+        /// address used for connection.
+        property(
+            AddressType, AddressType,
+            dbus: ("AddressType", String, MANDATORY),
+            get: (address_type, v => {v.parse()?}),
+        );
+
+        ///	The Bluetooth system name (pretty hostname).
+        ///
+        /// This property is either a static system default
+        /// or controlled by an external daemon providing
+        /// access to the pretty hostname configuration.
+        property(
+            SystemName, String,
+            dbus: ("Name", String, MANDATORY),
+            get: (system_name, v => {v}),
+        );
+
+        /// The Bluetooth friendly name.
+        ///
+        /// This value can be changed.
+        ///
+        /// In case no alias is set, it will return the system
+        /// provided name. Setting an empty string as alias will
+        /// convert it back to the system provided name.
+        ///
+        /// When resetting the alias with an empty string, the
+        /// property will default back to system name.
+        ///
+        /// On a well configured system, this property never
+        /// needs to be changed since it defaults to the system
+        /// name and provides the pretty hostname. Only if the
+        /// local name needs to be different from the pretty
+        /// hostname, this property should be used as last
+        /// resort.
+        property(
+            Alias, String,
+            dbus: ("Alias", String, MANDATORY),
+            get: (alias, v => {v}),
+            set: (set_alias, v => {v}),
+        );
+
+        /// The Bluetooth class of device.
+        ///
+        ///	This property represents the value that is either
+        ///	automatically configured by DMI/ACPI information
+        ///	or provided as static configuration.
+        property(
+            Class, u32,
+            dbus: ("Class", u32, MANDATORY),
+            get: (class, v => {v}),
+        );
+
+        /// Switch an adapter on or off. This will also set the
+        /// appropriate connectable state of the controller.
+        ///
+        /// The value of this property is not persistent. After
+        /// restart or unplugging of the adapter it will reset
+        /// back to false.
+        property(
+            Powered, bool,
+            dbus: ("Powered", bool, MANDATORY),
+            get: (is_powered, v => {v}),
+            set: (set_powered, v => {v}),
+        );
+
+        /// Switch an adapter to discoverable or non-discoverable
+        /// to either make it visible or hide it.
+        ///
+        /// This is a global
+        /// setting and should only be used by the settings
+        /// application.
+        ///
+        /// If the DiscoverableTimeout is set to a non-zero
+        /// value then the system will set this value back to
+        /// false after the timer expired.
+        ///
+        /// In case the adapter is switched off, setting this
+        /// value will fail.
+        ///
+        /// When changing the Powered property the new state of
+        /// this property will be updated via a PropertiesChanged
+        /// signal.
+        ///
+        /// For any new adapter this settings defaults to false.
+        property(
+            Discoverable, bool,
+            dbus: ("Discoverable", bool, MANDATORY),
+            get: (is_discoverable, v => {v}),
+            set: (set_discoverable, v => {v}),
+        );
+
+        /// Switch an adapter to pairable or non-pairable.
+        ///
+        /// This is
+        /// a global setting and should only be used by the
+        /// settings application.
+        ///
+        /// Note that this property only affects incoming pairing
+        /// requests.
+        ///
+        /// For any new adapter this settings defaults to true.
+        property(
+            Pairable, bool,
+            dbus: ("Pairable", bool, MANDATORY),
+            get: (is_pairable, v => {v}),
+            set: (set_pairable, v => {v}),
+        );
+
+        /// The pairable timeout in seconds.
+        ///
+        /// A value of zero
+        /// means that the timeout is disabled and it will stay in
+        /// pairable mode forever.
+        ///
+        /// The default value for pairable timeout should be
+        /// disabled (value 0).
+        property(
+            PairableTimeout, u32,
+            dbus: ("PairableTimeout", u32, MANDATORY),
+            get: (pairable_timeout, v => {v}),
+            set: (set_pairable_timeout, v => {v}),
+        );
+
+        /// The discoverable timeout in seconds.
+        ///
+        /// A value of zero
+        /// means that the timeout is disabled and it will stay in
+        /// discoverable/limited mode forever.
+        ///
+        /// The default value for the discoverable timeout should
+        /// be 180 seconds (3 minutes).
+        property(
+            DiscoverableTimeout, u32,
+            dbus: ("DiscoverableTimeout", u32, MANDATORY),
+            get: (discoverable_timeout, v => {v}),
+            set: (set_discoverable_timeout, v => {v}),
+        );
+
+        ///	Indicates that a device discovery procedure is active.
+        property(
+            Discovering, bool,
+            dbus: ("Discovering", bool, MANDATORY),
+            get: (is_discovering, v => {v}),
+        );
+
+        /// List of 128-bit UUIDs that represents the available
+        /// lcal services.
+        property(
+            Uuids, HashSet<Uuid>,
+            dbus: ("UUIDs", Vec<String>, OPTIONAL),
+            get: (uuids, v => {
+                v
+                .into_iter()
+                .map(|uuid| {
+                    uuid.parse()
+                        .map_err(|_| Error::InvalidUuid(uuid.to_string()))
+                })
+                .collect::<Result<HashSet<Uuid>>>()?
+            }),
+        );
+
+        /// Local Device ID information in modalias format
+        /// used by the kernel and udev.
+        property(
+            Modalias, Modalias,
+            dbus: ("Modalias", String, OPTIONAL),
+            get: (modalias, v => { v.parse()? }),
+        );
+
+    }
+);
+
+/// Bluetooth adapter property change event.
+#[derive(Debug, Clone)]
+pub struct AdapterChanged {
+    /// Name of changed Bluetooth adapter.
+    pub name: Arc<String>,
+    /// Changed property.
+    pub property: AdapterProperty,
 }
 
 /// Transport parameter determines the type of scan.

@@ -2,7 +2,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{Stream, StreamExt};
+use futures::{channel::mpsc, SinkExt, Stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -45,13 +45,7 @@ impl Device {
     ) -> Result<Self> {
         Ok(Self {
             connection,
-            dbus_path: Path::new(format!(
-                "{}{}/dev_{}",
-                adapter::PREFIX,
-                adapter_name,
-                address.to_string().replace(':', "_")
-            ))
-            .map_err(|_| Error::InvalidName((*adapter_name).clone()))?,
+            dbus_path: Self::dbus_path(&*adapter_name, address)?,
             adapter_name,
             address,
         })
@@ -59,6 +53,16 @@ impl Device {
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
         Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.connection)
+    }
+
+    pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<Path<'static>> {
+        Path::new(format!(
+            "{}{}/dev_{}",
+            adapter::PREFIX,
+            adapter_name,
+            address.to_string().replace(':', "_")
+        ))
+        .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
     }
 
     pub(crate) fn parse_dbus_path(path: &Path<'static>) -> Option<(String, Address)> {
@@ -93,214 +97,31 @@ impl Device {
     //         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
     //     }
 
-    /// Streams device property change events.
-    pub async fn change_events(&self) -> Result<impl Stream<Item = ()>> {
-        let strm = PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
-        Ok(strm.map(|_| ()))
-    }
-
-    dbus_interface!(INTERFACE);
-
-    // ===========================================================================================
-    // Properties
-    // ===========================================================================================
-
-    /// The Bluetooth device Address Type.
-    ///
-    /// For dual-mode and
-    /// BR/EDR only devices this defaults to "public". Single
-    /// mode LE devices may have either value. If remote device
-    /// uses privacy than before pairing this represents address
-    /// type used for connection and Identity Address after
-    /// pairing.
-    pub async fn address_type(&self) -> Result<AddressType> {
-        let address_type: String = self.get_property("AddressType").await?;
-        Ok(address_type.parse()?)
-    }
-
-    define_property!(
-        /// The Bluetooth remote name.
-        ///
-        /// This value can not be
-        ///	changed. Use the Alias property instead.
-        ///
-        ///	This value is only present for completeness. It is
-        ///	better to always use the Alias property when
-        ///	displaying the devices name.
-        ///
-        ///	If the Alias property is unset, it will reflect
-        ///	this value which makes it more convenient.
-        name, "Name" => Option<String>
-    );
-
-    define_property!(
-        /// Proposed icon name according to the freedesktop.org
-        /// icon naming specification.
-        icon, "Icon" => Option<String>
-    );
-
-    define_property!(
-        ///	The Bluetooth class of device of the remote device.
-        class, "Class" => Option<u32>
-    );
-
-    define_property!(
-        ///	External appearance of device, as found on GAP service.
-        appearance, "Appearance" => Option<u32>
-    );
-
-    ///	List of 128-bit UUIDs that represents the available
-    /// remote services.    
-    pub async fn uuids(&self) -> Result<Option<HashSet<Uuid>>> {
-        let uuids: Vec<String> = match self.get_opt_property("UUIDs").await? {
-            Some(uuids) => uuids,
-            None => return Ok(None),
-        };
-        let uuids: HashSet<Uuid> = uuids
-            .into_iter()
-            .map(|uuid| {
-                uuid.parse()
-                    .map_err(|_| Error::InvalidUuid(uuid.to_string()))
-            })
-            .collect::<Result<HashSet<Uuid>>>()?;
-        Ok(Some(uuids))
-    }
-
-    define_property!(
-        ///	Indicates if the remote device is paired.
-        is_paired, "Paired" => bool
-    );
-
-    define_property!(
-        ///	Indicates if the remote device is paired.
-        is_connected, "Connected" => bool
-    );
-
-    // /// True, when connected and paired.
-    // pub async fn is_ready_to_receive(&self) -> bool {
-    //     let is_connected: bool = self.is_connected().await.unwrap_or(false);
-    //     let is_paired: bool = self.is_paired().await.unwrap_or(false);
-    //     is_paired && is_connected
-    // }
-
-    define_property!(
-        ///	Indicates if the remote is seen as trusted. This
-        /// setting can be changed by the application.
-        is_trusted, set_trusted, "Trusted" => bool
-    );
-
-    define_property!(
-        /// If set to true any incoming connections from the
-        /// device will be immediately rejected.
-        ///
-        /// Any device
-        /// drivers will also be removed and no new ones will
-        /// be probed as long as the device is blocked.
-        is_blocked, set_blocked, "Blocked" => bool
-    );
-
-    define_property!(
-        /// If set to true this device will be allowed to wake the
-        /// host from system suspend.
-        is_wake_allowed, set_wake_allowed, "WakeAllowed" => bool
-    );
-
-    define_property!(
-        /// The name alias for the remote device.
-        ///
-        /// The alias can
-        /// be used to have a different friendly name for the
-        /// remote device.
-        ///
-        /// In case no alias is set, it will return the remote
-        /// device name. Setting an empty string as alias will
-        /// convert it back to the remote device name.
-        ///
-        /// When resetting the alias with an empty string, the
-        /// property will default back to the remote name.
-        alias, set_alias, "Alias" => String
-    );
-
-    // define_property!(
-    //     /// The object path of the adapter the device belongs to.
-    //     adapter, "Adapter" => String
-    // );
-
-    define_property!(
-        /// Set to true if the device only supports the pre-2.1
-        /// pairing mechanism.
-        ///
-        /// This property is useful during
-        /// device discovery to anticipate whether legacy or
-        /// simple pairing will occur if pairing is initiated.
-        ///
-        /// Note that this property can exhibit false-positives
-        /// in the case of Bluetooth 2.1 (or newer) devices that
-        /// have disabled Extended Inquiry Response support.
-        is_legacy_pairing, "LegacyPairing" => String
-    );
-
-    /// Remote Device ID information in modalias format
-    /// used by the kernel and udev.
-    pub async fn modalias(&self) -> Result<Option<Modalias>> {
-        let modalias: String = match self.get_opt_property("Modalias").await? {
-            Some(modalias) => modalias,
-            None => return Ok(None),
-        };
-        Ok(Some(modalias.parse()?))
-    }
-
-    define_property!(
-        /// Received Signal Strength Indicator of the remote
-        ///	device (inquiry or advertising).
-        rssi, "RSSI" => Option<i16>
-    );
-
-    define_property!(
-        /// Advertised transmitted power level (inquiry or
-        /// advertising).
-        tx_power, "TxPower" => Option<i16>
-    );
-
-    define_property!(
-        /// Manufacturer specific advertisement data.
-        ///
-        /// Keys are
-        /// 16 bits Manufacturer ID followed by its byte array
-        /// value.
-        manufacturer_data, "ManufacturerData" => Option<HashMap<u16, Vec<u8>>>
-    );
-
-    define_property!(
-        /// Service advertisement data.
-        ///
-        /// Keys are the UUIDs in
-        /// string format followed by its byte array value.
-        service_data, "ServiceData" => Option<HashMap<String, Vec<u8>>>
-    );
-
-    define_property!(
-        /// Indicate whether or not service discovery has been
-        /// resolved.
-        is_services_resolved, "ServicesResolved " => bool
-    );
-
-    define_property!(
-        /// The Advertising Data Flags of the remote device.
-        advertising_flags, "AdvertisingFlags" => Vec<u8>
-    );
-
-    define_property!(
-        /// The Advertising Data of the remote device.
-        ///
-        /// Note: Only types considered safe to be handled by
-        /// application are exposed.
-        advertising_data, "AdvertisingData" => HashMap<u8, Vec<u8>>
-    );
-
     // pub async fn get_gatt_services(&self) -> Result<Vec<String>> {
     //     bluetooth_utils::list_services(&self.session.connection(), &self.object_path).await
     // }
+
+    /// Streams device property changes.
+    pub async fn changes(&self) -> Result<impl Stream<Item = DeviceChanged>> {
+        let mut events =
+            PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
+
+        let (mut tx, rx) = mpsc::unbounded();
+        let address = self.address;
+        tokio::spawn(async move {
+            while let Some(event) = events.next().await {
+                for property in DeviceProperty::from_prop_map(event.changed) {
+                    if tx.send(DeviceChanged { address, property }).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    dbus_interface!(INTERFACE);
 
     // ===========================================================================================
     // Methods
@@ -398,4 +219,236 @@ impl Device {
     pub async fn cancel_pairing(&self) -> Result<()> {
         self.call_method("CancelPairing", ()).await
     }
+}
+
+define_properties!(
+    Device, DeviceProperty => {
+        /// The Bluetooth remote name.
+        ///
+        /// This value can not be
+        ///	changed. Use the Alias property instead.
+        ///
+        ///	This value is only present for completeness. It is
+        ///	better to always use the Alias property when
+        ///	displaying the devices name.
+        ///
+        ///	If the Alias property is unset, it will reflect
+        ///	this value which makes it more convenient.
+        property(
+            Name, String,
+            dbus: ("Name", String, OPTIONAL),
+            get: (name, v => {v}),
+        );
+
+        /// The Bluetooth device Address Type.
+        ///
+        /// For dual-mode and
+        /// BR/EDR only devices this defaults to "public". Single
+        /// mode LE devices may have either value. If remote device
+        /// uses privacy than before pairing this represents address
+        /// type used for connection and Identity Address after
+        /// pairing.
+        property(
+            AddressType, AddressType,
+            dbus: ("AddressType", String, MANDATORY),
+            get: (address_type, v => {v.parse()?}),
+        );
+
+        /// Proposed icon name according to the freedesktop.org
+        /// icon naming specification.
+        property(
+            Icon, String,
+            dbus: ("Icon", String, OPTIONAL),
+            get: (icon, v => {v}),
+        );
+
+        ///	The Bluetooth class of device of the remote device.
+        property(
+            Class, u32,
+            dbus: ("Class", u32, OPTIONAL),
+            get: (class, v => {v}),
+        );
+
+        ///	External appearance of device, as found on GAP service.
+        property(
+            Appearance, u32,
+            dbus: ("Appearance", u32, OPTIONAL),
+            get: (appearance, v => {v}),
+        );
+
+        ///	List of 128-bit UUIDs that represents the available
+        /// remote services.
+        property(
+            Uuids, HashSet<Uuid>,
+            dbus: ("UUIDs", Vec<String>, OPTIONAL),
+            get: (uuids, v => {
+                v
+                .into_iter()
+                .map(|uuid| {
+                    uuid.parse()
+                        .map_err(|_| Error::InvalidUuid(uuid.to_string()))
+                })
+                .collect::<Result<HashSet<Uuid>>>()?
+            }),
+        );
+
+        ///	Indicates if the remote device is paired.
+        property(
+            Paired, bool,
+            dbus: ("Paired", bool, MANDATORY),
+            get: (is_paired, v => {v}),
+        );
+
+        ///	Indicates if the remote device is paired.
+        property(
+            Connected, bool,
+            dbus: ("Connected", bool, MANDATORY),
+            get: (is_connected, v => {v}),
+        );
+
+        ///	Indicates if the remote is seen as trusted. This
+        /// setting can be changed by the application.
+        property(
+            Trusted, bool,
+            dbus: ("Trusted", bool, MANDATORY),
+            get: (is_trusted, v => {v}),
+            set: (set_trusted, v => {v}),
+        );
+
+        /// If set to true any incoming connections from the
+        /// device will be immediately rejected.
+        ///
+        /// Any device
+        /// drivers will also be removed and no new ones will
+        /// be probed as long as the device is blocked.
+        property(
+            Blocked, bool,
+            dbus: ("Blocked", bool, MANDATORY),
+            get: (is_blocked, v => {v}),
+            set: (set_blocked, v => {v}),
+        );
+
+        /// If set to true this device will be allowed to wake the
+        /// host from system suspend.
+        property(
+            WakeAllowed, bool,
+            dbus: ("WakeAllowed", bool, MANDATORY),
+            get: (is_wake_allowed, v => {v}),
+            set: (set_wake_allowed, v => {v}),
+        );
+
+        /// The name alias for the remote device.
+        ///
+        /// The alias can
+        /// be used to have a different friendly name for the
+        /// remote device.
+        ///
+        /// In case no alias is set, it will return the remote
+        /// device name. Setting an empty string as alias will
+        /// convert it back to the remote device name.
+        ///
+        /// When resetting the alias with an empty string, the
+        /// property will default back to the remote name.
+        property(
+            Alias, String,
+            dbus: ("Alias", String, MANDATORY),
+            get: (alias, v => {v}),
+            set: (set_alias, v => {v}),
+        );
+
+        /// Set to true if the device only supports the pre-2.1
+        /// pairing mechanism.
+        ///
+        /// This property is useful during
+        /// device discovery to anticipate whether legacy or
+        /// simple pairing will occur if pairing is initiated.
+        ///
+        /// Note that this property can exhibit false-positives
+        /// in the case of Bluetooth 2.1 (or newer) devices that
+        /// have disabled Extended Inquiry Response support.
+        property(
+            LegacyPairing, bool,
+            dbus: ("LegacyPairing", bool, MANDATORY),
+            get: (is_legacy_pairing, v => {v}),
+        );
+
+        /// Remote Device ID information in modalias format
+        /// used by the kernel and udev.
+        property(
+            Modalias, Modalias,
+            dbus: ("Modalias", String, OPTIONAL),
+            get: (modalias, v => { v.parse()? }),
+        );
+
+        /// Received Signal Strength Indicator of the remote
+        ///	device (inquiry or advertising).
+        property(
+            Rssi, i16,
+            dbus: ("RSSI", i16, OPTIONAL),
+            get: (rssi, v => {v}),
+        );
+
+        /// Advertised transmitted power level (inquiry or
+        /// advertising).
+        property(
+            TxPower, i16,
+            dbus: ("TxPower", i16, OPTIONAL),
+            get: (tx_power, v => {v}),
+        );
+
+        /// Manufacturer specific advertisement data.
+        ///
+        /// Keys are
+        /// 16 bits Manufacturer ID followed by its byte array
+        /// value.
+        property(
+            ManufacturerData, HashMap<u16, Vec<u8>>,
+            dbus: ("ManufacturerData", HashMap<u16, Vec<u8>>, OPTIONAL),
+            get: (manufacturer_data, v => {v}),
+        );
+
+        /// Service advertisement data.
+        ///
+        /// Keys are the UUIDs in
+        /// string format followed by its byte array value.
+        property(
+            ServiceData, HashMap<String, Vec<u8>>,
+            dbus: ("ServiceData", HashMap<String, Vec<u8>>, OPTIONAL),
+            get: (service_data, v => {v}),
+        );
+
+        /// Indicate whether or not service discovery has been
+        /// resolved.
+        property(
+            ServicesResolved, bool,
+            dbus: ("ServicesResolved", bool, MANDATORY),
+            get: (is_services_resolved, v => {v}),
+        );
+
+        /// The Advertising Data Flags of the remote device.
+        property(
+            AdvertisingFlags, Vec<u8>,
+            dbus: ("AdvertisingFlags", Vec<u8>, MANDATORY),
+            get: (advertising_flags, v => {v}),
+        );
+
+        /// The Advertising Data of the remote device.
+        ///
+        /// Note: Only types considered safe to be handled by
+        /// application are exposed.
+        property(
+            AdvertisingData, HashMap<u8, Vec<u8>>,
+            dbus: ("AdvertisingData", HashMap<u8, Vec<u8>>, MANDATORY),
+            get: (advertising_data, v => {v}),
+        );
+    }
+);
+
+/// Bluetooth device property change event.
+#[derive(Debug, Clone)]
+pub struct DeviceChanged {
+    /// Bluetooth address of changed Bluetooth device.
+    pub address: Address,
+    /// Changed property.
+    pub property: DeviceProperty,
 }

@@ -40,7 +40,7 @@ async fn main() -> blurz::Result<()> {
     let adapter = session.adapter(&adapter_name)?;
 
     let _discovery_session = adapter.discover_devices(DiscoveryFilter::default()).await?;
-    let device_events = adapter.device_events().await?;
+    let device_events = adapter.device_changes().await?;
     pin_mut!(device_events);
 
     let mut all_change_events = SelectAll::new();
@@ -57,8 +57,7 @@ async fn main() -> blurz::Result<()> {
                         }
 
                         let device = adapter.device(addr)?;
-                        let change_events = device.change_events().await?.map(move |_| addr);
-                        all_change_events.push(change_events);
+                        all_change_events.push(device.changes().await?);
                     }
                     DeviceEvent::Removed(addr) => {
                         println!("Device removed: {}", addr);
@@ -66,12 +65,9 @@ async fn main() -> blurz::Result<()> {
                 }
                 println!();
             }
-            Some(addr) = all_change_events.next() => {
-                println!("Device changed: {}", addr);
-                sleep(Duration::from_millis(100)).await;
-                if let Err(err) = query_device(&adapter, addr).await {
-                    println!("    Error: {}", &err);
-                }
+            Some(dev_change) = all_change_events.next() => {
+                println!("Device changed: {}", dev_change.address);
+                println!("    {:?}", &dev_change.property);
             }
             else => break
         }

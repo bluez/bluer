@@ -81,32 +81,122 @@ macro_rules! dbus_interface {
     };
 }
 
-macro_rules! define_property {
-    ($(#[$outer:meta])* $getter_name:ident, $dbus_name:expr => Option<$type:ty>) => {
+macro_rules! define_properties {
+    (@get
+        $(#[$outer:meta])*
+        $getter_name:ident, $dbus_name:expr, OPTIONAL ;
+        $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+    ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
-            self.get_opt_property($dbus_name).await
+            let dbus_opt_value: Option<$dbus_type> = self.get_opt_property($dbus_name).await?;
+            let value: Option<$type> = match dbus_opt_value {
+                Some($dbus_value) => Some($getter_transform),
+                None => None
+            };
+            Ok(value)
         }
     };
 
-    ($(#[$outer:meta])* $getter_name:ident, $dbus_name:expr => $type:ty) => {
+    (@get
+        $(#[$outer:meta])*
+        $getter_name:ident, $dbus_name:expr, MANDATORY ;
+        $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+    ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<$type> {
-            self.get_property($dbus_name).await
+            let $dbus_value: $dbus_type = self.get_property($dbus_name).await?;
+            let value: $type = $getter_transform;
+            Ok(value)
         }
     };
 
-    ($(#[$outer:meta])* $getter_name:ident, $setter_name:ident, $dbus_name:expr => $type:ty) => {
+    (@set
+        $(#[$outer:meta])*
+        set: ($setter_name:ident, $value:ident => $setter_transform:block),,
+        $dbus_name:expr, $dbus_type:ty => $type:ty
+    ) => {
         $(#[$outer])*
-        pub async fn $getter_name(&self) -> crate::Result<$type> {
-            self.get_property($dbus_name).await
-        }
-        $(#[$outer])*
-        pub async fn $setter_name(&self, value: $type) -> crate::Result<()> {
-            self.set_property($dbus_name, value).await?;
+        pub async fn $setter_name(&self, $value: $type) -> crate::Result<()> {
+            let dbus_value: $dbus_type = $setter_transform;
+            self.set_property($dbus_name, dbus_value).await?;
             Ok(())
         }
     };
+
+    (@set
+        $(#[$outer:meta])*
+        ,
+        $dbus_name:expr, $dbus_type:ty => $type:ty
+    ) => {};
+
+    (
+        $struct_name:ident, $enum_name:ident =>
+        {$(
+            $(#[$outer:meta])*
+            property(
+                $name:ident, $type:ty,
+                dbus: ($dbus_name:expr, $dbus_type:ty, $opt:tt),
+                get: ($getter_name:ident, $dbus_value:ident => $getter_transform:block),
+                $( $set_tt:tt )*
+            );
+        )*}
+    ) => {
+        impl $struct_name {
+            $(
+                define_properties!(@get
+                    $(#[$outer])*
+                    $getter_name, $dbus_name, $opt ;
+                    $dbus_value : $dbus_type => $getter_transform => $type
+                );
+
+                define_properties!(@set
+                    $(#[$outer])*
+                    $($set_tt)*,
+                    $dbus_name, $dbus_type => $type
+                );
+            )*
+        }
+
+        /// Property with value.
+        #[derive(Debug, Clone)]
+        pub enum $enum_name {
+            $(
+                $(#[$outer])*
+                $name ($type),
+            )*
+        }
+
+        impl $enum_name {
+            fn from_variant_property(
+                name: &str,
+                var_value: dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>
+            ) -> crate::Result<Option<Self>> {
+                match name {
+                    $(
+                        $dbus_name => {
+                            use dbus::arg::RefArg;
+                            let dbus_opt_value: Option<$dbus_type> = var_value.as_any().downcast_ref().cloned();
+                            match dbus_opt_value {
+                                Some($dbus_value) => {
+                                    let value: $type = $getter_transform;
+                                    Ok(Some(Self::$name (value)))
+                                },
+                                None => Ok(None),
+                            }
+                        }
+                    )*,
+                    _ => Ok(None),
+                }
+            }
+
+            fn from_prop_map(prop_map: dbus::arg::PropMap) -> Vec<Self> {
+                prop_map.into_iter().filter_map(|(name, value)|
+                    Self::from_variant_property(&name, value).ok().flatten()
+                ).collect()
+            }
+        }
+    }
 }
 
 mod adapter;
@@ -415,10 +505,10 @@ impl ObjectEvent {
 }
 
 /// D-Bus property changed event.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PropertyEvent {
     pub interface: String,
-    pub changed: Vec<String>,
+    pub changed: dbus::arg::PropMap,
 }
 
 impl PropertyEvent {
@@ -453,10 +543,7 @@ impl PropertyEvent {
             {
                 let evt = Self {
                     interface: interface_name,
-                    changed: changed_properties
-                        .into_iter()
-                        .map(|(name, _)| name)
-                        .collect(),
+                    changed: changed_properties,
                 };
                 dbg!(&evt);
 
