@@ -545,7 +545,7 @@ impl PropertyEvent {
                     interface: interface_name,
                     changed: changed_properties,
                 };
-                dbg!(&evt);
+                //dbg!(&evt);
 
                 if tx.send(evt).await.is_err() {
                     break;
