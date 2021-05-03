@@ -23,3 +23,6 @@ hex = "0.4"
 thiserror = "1"
 lazy_static = "1"
 uuid = "0.8"
+
+[dev-dependencies]
+crossterm = "0.19"
