@@ -295,7 +295,7 @@ define_properties!(
         property(
             SystemName, String,
             dbus: ("Name", String, MANDATORY),
-            get: (system_name, v => {v}),
+            get: (system_name, v => {v.to_owned()}),
         );
 
         /// The Bluetooth friendly name.
@@ -318,7 +318,7 @@ define_properties!(
         property(
             Alias, String,
             dbus: ("Alias", String, MANDATORY),
-            get: (alias, v => {v}),
+            get: (alias, v => {v.to_owned()}),
             set: (set_alias, v => {v}),
         );
 
@@ -330,7 +330,7 @@ define_properties!(
         property(
             Class, u32,
             dbus: ("Class", u32, MANDATORY),
-            get: (class, v => {v}),
+            get: (class, v => {v.to_owned()}),
         );
 
         /// Switch an adapter on or off. This will also set the
@@ -342,7 +342,7 @@ define_properties!(
         property(
             Powered, bool,
             dbus: ("Powered", bool, MANDATORY),
-            get: (is_powered, v => {v}),
+            get: (is_powered, v => {v.to_owned()}),
             set: (set_powered, v => {v}),
         );
 
@@ -368,7 +368,7 @@ define_properties!(
         property(
             Discoverable, bool,
             dbus: ("Discoverable", bool, MANDATORY),
-            get: (is_discoverable, v => {v}),
+            get: (is_discoverable, v => {v.to_owned()}),
             set: (set_discoverable, v => {v}),
         );
 
@@ -385,7 +385,7 @@ define_properties!(
         property(
             Pairable, bool,
             dbus: ("Pairable", bool, MANDATORY),
-            get: (is_pairable, v => {v}),
+            get: (is_pairable, v => {v.to_owned()}),
             set: (set_pairable, v => {v}),
         );
 
@@ -400,7 +400,7 @@ define_properties!(
         property(
             PairableTimeout, u32,
             dbus: ("PairableTimeout", u32, MANDATORY),
-            get: (pairable_timeout, v => {v}),
+            get: (pairable_timeout, v => {v.to_owned()}),
             set: (set_pairable_timeout, v => {v}),
         );
 
@@ -415,7 +415,7 @@ define_properties!(
         property(
             DiscoverableTimeout, u32,
             dbus: ("DiscoverableTimeout", u32, MANDATORY),
-            get: (discoverable_timeout, v => {v}),
+            get: (discoverable_timeout, v => {v.to_owned()}),
             set: (set_discoverable_timeout, v => {v}),
         );
 
@@ -423,7 +423,7 @@ define_properties!(
         property(
             Discovering, bool,
             dbus: ("Discovering", bool, MANDATORY),
-            get: (is_discovering, v => {v}),
+            get: (is_discovering, v => {v.to_owned()}),
         );
 
         /// List of 128-bit UUIDs that represents the available

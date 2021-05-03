@@ -90,7 +90,7 @@ macro_rules! define_properties {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
             let dbus_opt_value: Option<$dbus_type> = self.get_opt_property($dbus_name).await?;
-            let value: Option<$type> = match dbus_opt_value {
+            let value: Option<$type> = match dbus_opt_value.as_ref() {
                 Some($dbus_value) => Some($getter_transform),
                 None => None
             };
@@ -105,7 +105,8 @@ macro_rules! define_properties {
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<$type> {
-            let $dbus_value: $dbus_type = self.get_property($dbus_name).await?;
+            let dbus_value: $dbus_type = self.get_property($dbus_name).await?;
+            let $dbus_value = &dbus_value;
             let value: $type = $getter_transform;
             Ok(value)
         }
@@ -175,8 +176,7 @@ macro_rules! define_properties {
                 match name {
                     $(
                         $dbus_name => {
-                            use dbus::arg::RefArg;
-                            let dbus_opt_value: Option<$dbus_type> = var_value.as_any().downcast_ref().cloned();
+                            let dbus_opt_value: Option<&$dbus_type> = dbus::arg::cast(&var_value.0);
                             match dbus_opt_value {
                                 Some($dbus_value) => {
                                     let value: $type = $getter_transform;
@@ -524,7 +524,6 @@ impl PropertyEvent {
                 Some(&SERVICE_NAME_BUS);
         }
 
-        // dbg!(&path);
         let rule =
             PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, Some(&path)).static_clone();
         let msg_match = connection.add_match(rule).await?;
@@ -545,7 +544,6 @@ impl PropertyEvent {
                     interface: interface_name,
                     changed: changed_properties,
                 };
-                //dbg!(&evt);
 
                 if tx.send(evt).await.is_err() {
                     break;

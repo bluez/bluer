@@ -1,4 +1,5 @@
 use dbus::{
+    arg::{RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
     Path,
 };
@@ -237,7 +238,7 @@ define_properties!(
         property(
             Name, String,
             dbus: ("Name", String, OPTIONAL),
-            get: (name, v => {v}),
+            get: (name, v => {v.to_owned()}),
         );
 
         /// The Bluetooth device Address Type.
@@ -259,21 +260,21 @@ define_properties!(
         property(
             Icon, String,
             dbus: ("Icon", String, OPTIONAL),
-            get: (icon, v => {v}),
+            get: (icon, v => {v.to_owned()}),
         );
 
         ///	The Bluetooth class of device of the remote device.
         property(
             Class, u32,
             dbus: ("Class", u32, OPTIONAL),
-            get: (class, v => {v}),
+            get: (class, v => {v.to_owned()}),
         );
 
         ///	External appearance of device, as found on GAP service.
         property(
             Appearance, u32,
             dbus: ("Appearance", u32, OPTIONAL),
-            get: (appearance, v => {v}),
+            get: (appearance, v => {v.to_owned()}),
         );
 
         ///	List of 128-bit UUIDs that represents the available
@@ -296,14 +297,14 @@ define_properties!(
         property(
             Paired, bool,
             dbus: ("Paired", bool, MANDATORY),
-            get: (is_paired, v => {v}),
+            get: (is_paired, v => {v.to_owned()}),
         );
 
         ///	Indicates if the remote device is paired.
         property(
             Connected, bool,
             dbus: ("Connected", bool, MANDATORY),
-            get: (is_connected, v => {v}),
+            get: (is_connected, v => {v.to_owned()}),
         );
 
         ///	Indicates if the remote is seen as trusted. This
@@ -311,7 +312,7 @@ define_properties!(
         property(
             Trusted, bool,
             dbus: ("Trusted", bool, MANDATORY),
-            get: (is_trusted, v => {v}),
+            get: (is_trusted, v => {v.to_owned()}),
             set: (set_trusted, v => {v}),
         );
 
@@ -324,7 +325,7 @@ define_properties!(
         property(
             Blocked, bool,
             dbus: ("Blocked", bool, MANDATORY),
-            get: (is_blocked, v => {v}),
+            get: (is_blocked, v => {v.to_owned()}),
             set: (set_blocked, v => {v}),
         );
 
@@ -333,7 +334,7 @@ define_properties!(
         property(
             WakeAllowed, bool,
             dbus: ("WakeAllowed", bool, MANDATORY),
-            get: (is_wake_allowed, v => {v}),
+            get: (is_wake_allowed, v => {v.to_owned()}),
             set: (set_wake_allowed, v => {v}),
         );
 
@@ -352,7 +353,7 @@ define_properties!(
         property(
             Alias, String,
             dbus: ("Alias", String, MANDATORY),
-            get: (alias, v => {v}),
+            get: (alias, v => {v.to_owned()}),
             set: (set_alias, v => {v}),
         );
 
@@ -369,7 +370,7 @@ define_properties!(
         property(
             LegacyPairing, bool,
             dbus: ("LegacyPairing", bool, MANDATORY),
-            get: (is_legacy_pairing, v => {v}),
+            get: (is_legacy_pairing, v => {v.to_owned()}),
         );
 
         /// Remote Device ID information in modalias format
@@ -385,7 +386,7 @@ define_properties!(
         property(
             Rssi, i16,
             dbus: ("RSSI", i16, OPTIONAL),
-            get: (rssi, v => {v}),
+            get: (rssi, v => {v.to_owned()}),
         );
 
         /// Advertised transmitted power level (inquiry or
@@ -393,7 +394,7 @@ define_properties!(
         property(
             TxPower, i16,
             dbus: ("TxPower", i16, OPTIONAL),
-            get: (tx_power, v => {v}),
+            get: (tx_power, v => {v.to_owned()}),
         );
 
         /// Manufacturer specific advertisement data.
@@ -403,18 +404,39 @@ define_properties!(
         /// value.
         property(
             ManufacturerData, HashMap<u16, Vec<u8>>,
-            dbus: ("ManufacturerData", HashMap<u16, Vec<u8>>, OPTIONAL),
-            get: (manufacturer_data, v => {v}),
+            dbus: ("ManufacturerData", HashMap<u16, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            get: (manufacturer_data, m => {
+                let mut mt: HashMap<u16, Vec<u8>> = HashMap::new();
+                for (k,v) in m {
+                    match dbus::arg::cast(&v.0).cloned() {
+                        Some(v) => {
+                            mt.insert(*k, v);
+                        }
+                        None => (),
+                    }
+                }
+                mt
+            }),
         );
 
         /// Service advertisement data.
         ///
-        /// Keys are the UUIDs in
-        /// string format followed by its byte array value.
+        /// Keys are the UUIDs followed by its byte array value.
         property(
-            ServiceData, HashMap<String, Vec<u8>>,
-            dbus: ("ServiceData", HashMap<String, Vec<u8>>, OPTIONAL),
-            get: (service_data, v => {v}),
+            ServiceData, HashMap<Uuid, Vec<u8>>,
+            dbus: ("ServiceData", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            get: (service_data, m => {
+                let mut mt: HashMap<Uuid, Vec<u8>> = HashMap::new();
+                for (k,v) in m {
+                    match (k.parse(), dbus::arg::cast(&v.0).cloned()) {
+                        (Ok(k), Some(v)) => {
+                            mt.insert(k, v);
+                        }
+                        _ => (),
+                    }
+                }
+                mt
+            }),
         );
 
         /// Indicate whether or not service discovery has been
@@ -422,14 +444,14 @@ define_properties!(
         property(
             ServicesResolved, bool,
             dbus: ("ServicesResolved", bool, MANDATORY),
-            get: (is_services_resolved, v => {v}),
+            get: (is_services_resolved, v => {v.to_owned()}),
         );
 
         /// The Advertising Data Flags of the remote device.
         property(
             AdvertisingFlags, Vec<u8>,
             dbus: ("AdvertisingFlags", Vec<u8>, MANDATORY),
-            get: (advertising_flags, v => {v}),
+            get: (advertising_flags, v => {v.to_owned()}),
         );
 
         /// The Advertising Data of the remote device.
@@ -439,7 +461,7 @@ define_properties!(
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
             dbus: ("AdvertisingData", HashMap<u8, Vec<u8>>, MANDATORY),
-            get: (advertising_data, v => {v}),
+            get: (advertising_data, v => {v.to_owned()}),
         );
     }
 );

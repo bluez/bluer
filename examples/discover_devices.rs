@@ -51,7 +51,6 @@ async fn main() -> blurz::Result<()> {
                 match device_event {
                     DeviceEvent::Added(addr) => {
                         println!("Device added: {}", addr);
-                        sleep(Duration::from_millis(100)).await;
                         if let Err(err) = query_device(&adapter, addr).await {
                             println!("    Error: {}", &err);
                         }
