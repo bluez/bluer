@@ -1,16 +1,16 @@
 //! Scans for and monitors Bluetooth devices.
 
-use std::{
-    collections::{HashMap, VecDeque},
-    io::stdout,
-    time::{Duration, Instant},
-};
 use crossterm::{
     cursor, execute,
     style::{self, Colorize},
     terminal::{self, ClearType},
 };
 use futures::{pin_mut, stream::SelectAll, StreamExt};
+use std::{
+    collections::{HashMap, VecDeque},
+    io::stdout,
+    time::{Duration, Instant},
+};
 use tokio::time::sleep;
 
 use blurz::{Adapter, Address, DeviceChanged, DeviceEvent, DiscoveryFilter};
