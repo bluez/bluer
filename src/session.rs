@@ -1,4 +1,5 @@
-use dbus::nonblock::SyncConnection;
+use dbus::{message::MatchRule, nonblock::SyncConnection};
+use dbus_crossroads::{Crossroads, IfaceToken};
 use dbus_tokio::connection;
 use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
 use std::{
@@ -8,17 +9,24 @@ use std::{
 };
 use tokio::task::spawn_blocking;
 
-use crate::{adapter, all_dbus_objects, Adapter, ObjectEvent, Result};
+use crate::{adapter, all_dbus_objects, Adapter, LeAdvertisement, ObjectEvent, Result};
+
+/// Shared state of all objects in a Bluetooth session.
+pub(crate) struct SessionInner {
+    pub connection: Arc<SyncConnection>,
+    pub crossroads: Mutex<Crossroads>,
+    pub le_advertisment_token: IfaceToken<LeAdvertisement>,
+    pub discovery_slots: Mutex<HashMap<String, oneshot::Receiver<()>>>,
+}
 
 /// Bluetooth session.
 pub struct Session {
-    connection: Arc<SyncConnection>,
-    discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
+    inner: Arc<SessionInner>,
 }
 
 impl Debug for Session {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Session {{ {} }}", self.connection.unique_name())
+        write!(f, "Session {{ {} }}", self.inner.connection.unique_name())
     }
 }
 
@@ -36,16 +44,42 @@ impl Session {
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);
-        Ok(Self {
-            connection,
-            discovery_slots: Arc::new(Mutex::new(HashMap::new())),
-        })
+        //connection.request_name("io.crates.tokio-bluez", false, false, true).await?;
+
+        let mut crossroads = Crossroads::new();
+        crossroads.set_async_support(Some((
+            connection.clone(),
+            Box::new(|x| {
+                tokio::spawn(x);
+            }),
+        )));
+
+        let le_advertisment_token = LeAdvertisement::register_interface(&mut crossroads);
+
+        let inner = Arc::new(SessionInner {
+            connection: connection.clone(),
+            crossroads: Mutex::new(crossroads),
+            le_advertisment_token,
+            discovery_slots: Mutex::new(HashMap::new()),
+        });
+
+        let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;
+        let mc_inner = inner.clone();
+        tokio::spawn(async move {
+            let (_mc_callback, mut mc_stream) = mc_callback.msg_stream();
+            while let Some(msg) = mc_stream.next().await {
+                let mut crossroads = mc_inner.crossroads.lock().await;
+                let _ = crossroads.handle_message(msg, &*mc_inner.connection);
+            }
+        });
+
+        Ok(Self { inner })
     }
 
     /// Enumerate connected Bluetooth adapters and return their names.
     pub async fn adapter_names(&self) -> Result<Vec<String>> {
         let mut names = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
             match Adapter::parse_dbus_path(&path) {
                 Some(name) if interfaces.contains_key(adapter::INTERFACE) => {
                     names.push(name.to_string());
@@ -58,16 +92,12 @@ impl Session {
 
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
-        Adapter::new(
-            self.connection.clone(),
-            adapter_name,
-            self.discovery_slots.clone(),
-        )
+        Adapter::new(self.inner.clone(), adapter_name)
     }
 
     /// Stream adapter added and removed events.
     pub async fn adapter_events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
-        let obj_events = ObjectEvent::stream(self.connection.clone(), None).await?;
+        let obj_events = ObjectEvent::stream(self.inner.connection.clone(), None).await?;
         let events = obj_events.filter_map(|evt| async move {
             match evt {
                 ObjectEvent::Added { object, interfaces }

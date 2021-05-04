@@ -5,7 +5,6 @@ use dbus::{
 };
 use futures::{
     channel::{mpsc, oneshot},
-    lock::Mutex,
     SinkExt, Stream, StreamExt,
 };
 use std::{
@@ -21,7 +20,7 @@ use crate::{
     advertising, all_dbus_objects, device::Device, Address, AddressType, LeAdvertisement,
     LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel,
     LeAdvertisingCapabilities, LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent,
-    SERVICE_NAME, TIMEOUT,
+    SessionInner, SERVICE_NAME, TIMEOUT,
 };
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::{device, Error, Result};
@@ -32,10 +31,9 @@ pub(crate) const PREFIX: &str = "/org/bluez/";
 /// Interface to a Bluetooth adapter.
 #[derive(Clone)]
 pub struct Adapter {
-    connection: Arc<SyncConnection>,
+    inner: Arc<SessionInner>,
     dbus_path: Path<'static>,
     name: Arc<String>,
-    discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
 }
 
 impl Debug for Adapter {
@@ -55,22 +53,27 @@ pub enum DeviceEvent {
 
 impl Adapter {
     /// Create Bluetooth adapter interface for adapter with specified name.
-    pub(crate) fn new(
-        connection: Arc<SyncConnection>,
-        name: &str,
-        discovery_slots: Arc<Mutex<HashMap<String, oneshot::Receiver<()>>>>,
-    ) -> Result<Self> {
+    pub(crate) fn new(inner: Arc<SessionInner>, name: &str) -> Result<Self> {
         Ok(Self {
-            connection,
+            inner,
             dbus_path: Path::new(PREFIX.to_string() + name)
                 .map_err(|_| Error::InvalidName(name.to_string()))?,
             name: Arc::new(name.to_string()),
-            discovery_slots,
         })
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.connection)
+        Proxy::new(
+            SERVICE_NAME,
+            &self.dbus_path,
+            TIMEOUT,
+            &*self.inner.connection,
+        )
+    }
+
+    pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
+        Path::new(format!("{}{}", PREFIX, adapter_name,))
+            .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
     }
 
     pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
@@ -96,7 +99,7 @@ impl Adapter {
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
             match Device::parse_dbus_path(&path) {
                 Some((adapter, addr))
                     if adapter == *self.name && interfaces.contains_key(device::INTERFACE) =>
@@ -111,14 +114,14 @@ impl Adapter {
 
     /// Get interface to Bluetooth device of specified address.
     pub fn device(&self, address: Address) -> Result<Device> {
-        Device::new(self.connection.clone(), self.name.clone(), address)
+        Device::new(self.inner.clone(), self.name.clone(), address)
     }
 
     /// Stream device added and removed events.
     pub async fn device_changes(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let adapter_path = self.dbus_path.clone().into_static();
         let obj_events =
-            ObjectEvent::stream(self.connection.clone(), Some(adapter_path.clone())).await?;
+            ObjectEvent::stream(self.inner.connection.clone(), Some(adapter_path.clone())).await?;
 
         let my_name = self.name.clone();
         let events = obj_events.filter_map(move |evt| {
@@ -163,7 +166,7 @@ impl Adapter {
     /// Use the `device_events` method to get notified when a device is discovered.
     /// Drop the `DeviceDiscovery` to stop the discovery process.
     pub async fn discover_devices(&self, filter: DiscoveryFilter) -> Result<DeviceDiscovery> {
-        let mut discovery_slots = self.discovery_slots.lock().await;
+        let mut discovery_slots = self.inner.discovery_slots.lock().await;
         if let Some(mut rx) = discovery_slots.remove(&*self.name) {
             if let Ok(None) = rx.try_recv() {
                 discovery_slots.insert((*self.name).clone(), rx);
@@ -174,7 +177,7 @@ impl Adapter {
         discovery_slots.insert((*self.name).clone(), done_rx);
 
         DeviceDiscovery::new(
-            self.connection.clone(),
+            self.inner.clone(),
             self.dbus_path.clone(),
             self.name.clone(),
             filter,
@@ -189,7 +192,7 @@ impl Adapter {
     /// Streams adapter property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = AdapterChanged>> {
         let mut events =
-            PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
+            PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
 
         let (mut tx, rx) = mpsc::unbounded();
         let name = self.name.clone();
@@ -237,7 +240,7 @@ impl Adapter {
         le_advertisement: LeAdvertisement,
     ) -> Result<LeAdvertisementHandle> {
         le_advertisement
-            .register(self.connection.clone(), self.name.clone())
+            .register(self.inner.clone(), self.name.clone())
             .await
     }
 
@@ -724,13 +727,13 @@ impl Debug for DeviceDiscovery {
 
 impl DeviceDiscovery {
     pub(crate) async fn new<'a>(
-        connection: Arc<SyncConnection>,
+        inner: Arc<SessionInner>,
         dbus_path: Path<'static>,
         adapter_name: Arc<String>,
         filter: DiscoveryFilter,
         done_tx: oneshot::Sender<()>,
     ) -> Result<Self> {
-        let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+        let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
         proxy
             .method_call(INTERFACE, "SetDiscoveryFilter", (filter.to_dict(),))
             .await?;
@@ -741,7 +744,7 @@ impl DeviceDiscovery {
             let _done_tx = done_tx;
             let _ = term_rx.await;
 
-            let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+            let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
             let _: std::result::Result<(), dbus::Error> =
                 proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
         });

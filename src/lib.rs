@@ -357,9 +357,11 @@ impl From<dbus::Error> for Error {
             Some("Failed") => Self::Failed,
             Some("InProgress") => Self::InProgress,
             Some("InvalidArguments") => Self::InvalidArguments,
+            Some("InvalidLength") => Self::InvalidLength,
             Some("NotAvailable") => Self::NotAvailable,
             Some("NotReady") => Self::NotReady,
             Some("NotSupported") => Self::NotSupported,
+            Some("NotPermitted") => Self::NotPermitted,
             _ => Self::DBus {
                 name: err.name().unwrap_or_default().to_string(),
                 message: err.message().unwrap_or_default().to_string(),

@@ -1,19 +1,23 @@
+use dbus::{
+    arg::{PropMap, RefArg, Variant},
+    nonblock::Proxy,
+};
+use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
+use futures::channel::oneshot;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt,
     sync::Arc,
     time::Duration,
-};
-
-use dbus::{
-    arg::{RefArg, Variant},
-    nonblock::SyncConnection,
 };
 use strum::{Display, EnumString};
 use uuid::Uuid;
 
-use crate::{read_dict, Error, Result};
+use crate::{read_dict, Adapter, Result, SessionInner, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
+pub(crate) const ADVERTISEMENT_INTERFACE: &str = "org.bluez.LEAdvertisement1";
+pub(crate) const ADVERTISEMENT_PREFIX: &str = "/io/crates/tokio_bluez/";
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
@@ -214,13 +218,85 @@ pub struct LeAdvertisement {
 }
 
 impl LeAdvertisement {
+    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
+        cr.register(ADVERTISEMENT_INTERFACE, |b: &mut IfaceBuilder<Self>| {
+            b.property("Type").get(|_, la| {
+                println!("Type queried");
+                Ok(la.advertisement_type.to_string())
+            });
+        })
+    }
+
     pub(crate) async fn register(
         self,
-        connection: Arc<SyncConnection>,
+        inner: Arc<SessionInner>,
         adapter_name: Arc<String>,
     ) -> Result<LeAdvertisementHandle> {
-        todo!()
+        let name = dbus::Path::new(format!(
+            "{}{}",
+            ADVERTISEMENT_PREFIX,
+            Uuid::new_v4().to_simple()
+        ))
+        .unwrap();
+        dbg!(&name);
+
+        {
+            let mut cr = inner.crossroads.lock().await;
+            cr.insert(name.clone(), &[inner.le_advertisment_token], self);
+        }
+
+        let proxy = Proxy::new(
+            SERVICE_NAME,
+            Adapter::dbus_path(&*adapter_name)?,
+            TIMEOUT,
+            inner.connection.clone(),
+        );
+        println!("registering");
+        proxy
+            .method_call(
+                MANAGER_INTERFACE,
+                "RegisterAdvertisement",
+                (name.clone(), PropMap::new()),
+            )
+            .await?;
+        println!("done");
+
+        let (drop_tx, drop_rx) = oneshot::channel();
+        let unreg_name = name.clone();
+        tokio::spawn(async move {
+            let _ = drop_rx.await;
+            let _: std::result::Result<(), dbus::Error> = proxy
+                .method_call(
+                    MANAGER_INTERFACE,
+                    "UnregisterAdvertisement",
+                    (unreg_name.clone(),),
+                )
+                .await;
+
+            let mut cr = inner.crossroads.lock().await;
+            let _: Option<Self> = cr.remove(&unreg_name);
+        });
+
+        Ok(LeAdvertisementHandle {
+            name,
+            _drop_tx: drop_tx,
+        })
     }
 }
 
-pub struct LeAdvertisementHandle {}
+pub struct LeAdvertisementHandle {
+    name: dbus::Path<'static>,
+    _drop_tx: oneshot::Sender<()>,
+}
+
+impl Drop for LeAdvertisementHandle {
+    fn drop(&mut self) {
+        // required for drop order
+    }
+}
+
+impl fmt::Debug for LeAdvertisementHandle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "LeAdvertisementHandle {{ {} }}", &self.name)
+    }
+}

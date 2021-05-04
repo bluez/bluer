@@ -12,7 +12,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SERVICE_NAME, TIMEOUT,
+    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -20,7 +21,7 @@ pub(crate) const INTERFACE: &str = "org.bluez.Device1";
 /// Interface to a Bluetooth device.
 #[derive(Clone)]
 pub struct Device {
-    connection: Arc<SyncConnection>,
+    inner: Arc<SessionInner>,
     dbus_path: Path<'static>,
     adapter_name: Arc<String>,
     address: Address,
@@ -40,12 +41,12 @@ impl fmt::Debug for Device {
 impl Device {
     /// Create Bluetooth device interface for device of specified address connected to specified adapater.
     pub(crate) fn new(
-        connection: Arc<SyncConnection>,
+        inner: Arc<SessionInner>,
         adapter_name: Arc<String>,
         address: Address,
     ) -> Result<Self> {
         Ok(Self {
-            connection,
+            inner,
             dbus_path: Self::dbus_path(&*adapter_name, address)?,
             adapter_name,
             address,
@@ -53,7 +54,12 @@ impl Device {
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.connection)
+        Proxy::new(
+            SERVICE_NAME,
+            &self.dbus_path,
+            TIMEOUT,
+            &*self.inner.connection,
+        )
     }
 
     pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<Path<'static>> {
@@ -105,7 +111,7 @@ impl Device {
     /// Streams device property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = DeviceChanged>> {
         let mut events =
-            PropertyEvent::stream(self.connection.clone(), self.dbus_path.clone()).await?;
+            PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
 
         let (mut tx, rx) = mpsc::unbounded();
         let address = self.address;

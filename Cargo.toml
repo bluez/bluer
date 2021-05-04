@@ -20,14 +20,16 @@ path = "src/lib.rs"
 [dependencies]
 dbus = { version = "0.9", features = ["futures"] }
 dbus-tokio = "0.7"
+dbus-crossroads = "0.3"
 futures = "0.3"
 tokio = { version = "1", features = ["macros", "rt"] }
 tokio-stream = "0.1"
 hex = "0.4"
 thiserror = "1"
 lazy_static = "1"
-uuid = "0.8"
+uuid = { version = "0.8", features = ["v4"] }
 strum = { version = "0.20", features = ["derive"] }
 
 [dev-dependencies]
 crossterm = "0.19"
+tokio = { version = "1", features = ["io-std", "io-util"] }
