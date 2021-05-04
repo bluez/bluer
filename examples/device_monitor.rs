@@ -110,6 +110,9 @@ impl DeviceMonitor {
     }
 
     async fn add_device(&mut self, address: Address) {
+        if self.devices.contains_key(&address) {
+            return;
+        }
         if let Some(row) = self.empty_rows.pop() {
             self.devices.insert(
                 address,

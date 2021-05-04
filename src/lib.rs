@@ -1,5 +1,5 @@
 use dbus::{
-    arg::PropMap,
+    arg::{prop_cast, PropMap, RefArg, Variant},
     nonblock::{
         stdintf::org_freedesktop_dbus::{
             ObjectManager, ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved,
@@ -21,6 +21,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use strum::{Display, EnumString};
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -33,25 +34,32 @@ macro_rules! other_err {
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
-/// Define D-Bus interface methods.
 macro_rules! dbus_interface {
-    ($interface:expr) => {
+    () => {
         #[allow(dead_code)]
-        async fn get_property<R>(&self, name: &str) -> crate::Result<R>
+        async fn get_property_with_interface<R>(
+            &self,
+            name: &str,
+            interface: &str,
+        ) -> crate::Result<R>
         where
             R: for<'b> dbus::arg::Get<'b> + 'static,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            Ok(self.proxy().get($interface, name).await?)
+            Ok(self.proxy().get(interface, name).await?)
         }
 
         #[allow(dead_code)]
-        async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
+        async fn get_opt_property_with_interface<R>(
+            &self,
+            name: &str,
+            interface: &str,
+        ) -> crate::Result<Option<R>>
         where
             R: for<'b> dbus::arg::Get<'b> + 'static,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            match self.proxy().get($interface, name).await {
+            match self.proxy().get(interface, name).await {
                 Ok(v) => Ok(Some(v)),
                 Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
                     Ok(None)
@@ -61,13 +69,61 @@ macro_rules! dbus_interface {
         }
 
         #[allow(dead_code)]
-        async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
+        async fn set_property_with_interface<T>(
+            &self,
+            name: &str,
+            value: T,
+            interface: &str,
+        ) -> crate::Result<()>
         where
             T: dbus::arg::Arg + dbus::arg::Append,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            self.proxy().set($interface, name, value).await?;
+            self.proxy().set(interface, name, value).await?;
             Ok(())
+        }
+
+        #[allow(dead_code)]
+        async fn call_method_with_interface<A, R>(
+            &self,
+            name: &str,
+            args: A,
+            interface: &str,
+        ) -> crate::Result<R>
+        where
+            A: dbus::arg::AppendAll,
+            R: dbus::arg::ReadAll + 'static,
+        {
+            Ok(self.proxy().method_call(interface, name, args).await?)
+        }
+    };
+}
+
+macro_rules! dbus_default_interface {
+    ($interface:expr) => {
+        #[allow(dead_code)]
+        async fn get_property<R>(&self, name: &str) -> crate::Result<R>
+        where
+            R: for<'b> dbus::arg::Get<'b> + 'static,
+        {
+            self.get_property_with_interface(name, $interface).await
+        }
+
+        #[allow(dead_code)]
+        async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
+        where
+            R: for<'b> dbus::arg::Get<'b> + 'static,
+        {
+            self.get_opt_property_with_interface(name, $interface).await
+        }
+
+        #[allow(dead_code)]
+        async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
+        where
+            T: dbus::arg::Arg + dbus::arg::Append,
+        {
+            self.set_property_with_interface(name, value, $interface)
+                .await
         }
 
         #[allow(dead_code)]
@@ -76,7 +132,8 @@ macro_rules! dbus_interface {
             A: dbus::arg::AppendAll,
             R: dbus::arg::ReadAll + 'static,
         {
-            Ok(self.proxy().method_call($interface, name, args).await?)
+            self.call_method_with_interface(name, args, $interface)
+                .await
         }
     };
 }
@@ -85,11 +142,11 @@ macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
         $getter_name:ident, $dbus_name:expr, OPTIONAL ;
-        $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+        $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
-            let dbus_opt_value: Option<$dbus_type> = self.get_opt_property($dbus_name).await?;
+            let dbus_opt_value: Option<$dbus_type> = self.get_opt_property_with_interface($dbus_name, $dbus_interface).await?;
             let value: Option<$type> = match dbus_opt_value.as_ref() {
                 Some($dbus_value) => Some($getter_transform),
                 None => None
@@ -101,11 +158,11 @@ macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
         $getter_name:ident, $dbus_name:expr, MANDATORY ;
-        $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+        $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<$type> {
-            let dbus_value: $dbus_type = self.get_property($dbus_name).await?;
+            let dbus_value: $dbus_type = self.get_property_with_interface($dbus_name, $dbus_interface).await?;
             let $dbus_value = &dbus_value;
             let value: $type = $getter_transform;
             Ok(value)
@@ -115,12 +172,12 @@ macro_rules! define_properties {
     (@set
         $(#[$outer:meta])*
         set: ($setter_name:ident, $value:ident => $setter_transform:block),,
-        $dbus_name:expr, $dbus_type:ty => $type:ty
+        $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $setter_name(&self, $value: $type) -> crate::Result<()> {
             let dbus_value: $dbus_type = $setter_transform;
-            self.set_property($dbus_name, dbus_value).await?;
+            self.set_property_with_interface($dbus_name, dbus_value, $dbus_interface).await?;
             Ok(())
         }
     };
@@ -128,7 +185,7 @@ macro_rules! define_properties {
     (@set
         $(#[$outer:meta])*
         ,
-        $dbus_name:expr, $dbus_type:ty => $type:ty
+        $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
     ) => {};
 
     (
@@ -137,7 +194,7 @@ macro_rules! define_properties {
             $(#[$outer:meta])*
             property(
                 $name:ident, $type:ty,
-                dbus: ($dbus_name:expr, $dbus_type:ty, $opt:tt),
+                dbus: ($dbus_interface:expr, $dbus_name:expr, $dbus_type:ty, $opt:tt),
                 get: ($getter_name:ident, $dbus_value:ident => $getter_transform:block),
                 $( $set_tt:tt )*
             );
@@ -148,13 +205,13 @@ macro_rules! define_properties {
                 define_properties!(@get
                     $(#[$outer])*
                     $getter_name, $dbus_name, $opt ;
-                    $dbus_value : $dbus_type => $getter_transform => $type
+                    $dbus_interface, $dbus_value : $dbus_type => $getter_transform => $type
                 );
 
                 define_properties!(@set
                     $(#[$outer])*
                     $($set_tt)*,
-                    $dbus_name, $dbus_type => $type
+                    $dbus_interface, $dbus_name, $dbus_type => $type
                 );
             )*
         }
@@ -200,6 +257,7 @@ macro_rules! define_properties {
 }
 
 mod adapter;
+mod advertising;
 mod device;
 //mod bluetooth_discovery_session;
 //mod bluetooth_event;
@@ -213,10 +271,9 @@ mod device;
 mod session;
 
 pub use crate::adapter::*;
+pub use crate::advertising::*;
 pub use crate::device::*;
 pub use crate::session::*;
-// pub use crate::bluetooth_discovery_session::BluetoothDiscoverySession;
-// pub use crate::bluetooth_event::BluetoothEvent;
 // pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
 // pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
 // pub use crate::bluetooth_gatt_service::BluetoothGATTService;
@@ -249,12 +306,16 @@ pub enum Error {
     InProgress,
     #[error("invalid arguments for Bluetooth operation")]
     InvalidArguments,
+    #[error("the data provided generates a Bluetooth data packet which is too long")]
+    InvalidLength,
     #[error("Bluetooth operation not available")]
     NotAvailable,
     #[error("Bluetooth device not ready")]
     NotReady,
     #[error("Bluetooth operation not supported")]
     NotSupported,
+    #[error("Bluetooth operation not permitted")]
+    NotPermitted,
     #[error("Bluetooth D-Bus error {name}: {message}")]
     DBus { name: String, message: String },
     #[error("No Bluetooth adapter available")]
@@ -269,6 +330,10 @@ pub enum Error {
     InvalidName(String),
     #[error("Invalid UUID: {0}")]
     InvalidUuid(String),
+    #[error("Invalid value")]
+    InvalidValue,
+    #[error("Key {0} is missing")]
+    MissingKey(String),
     #[error("Another Bluetooth device discovery is in progress")]
     AnotherDiscoveryInProgress,
     #[error("Bluetooth error: {0}")]
@@ -306,6 +371,12 @@ impl From<dbus::Error> for Error {
 impl From<JoinError> for Error {
     fn from(err: JoinError) -> Self {
         Self::JoinError(err.to_string())
+    }
+}
+
+impl From<strum::ParseError> for Error {
+    fn from(_: strum::ParseError) -> Self {
+        Self::InvalidValue
     }
 }
 
@@ -349,40 +420,26 @@ impl FromStr for Address {
 }
 
 /// Bluetooth device address type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
 pub enum AddressType {
     /// Public address
+    #[strum(serialize = "public")]
     Public,
     /// Random address
+    #[strum(serialize = "random")]
     Random,
-}
-
-impl Display for AddressType {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Public => write!(f, "public"),
-            Self::Random => write!(f, "random"),
-        }
-    }
-}
-
-impl FromStr for AddressType {
-    type Err = Error;
-    fn from_str(s: &str) -> Result<Self> {
-        match s {
-            "public" => Ok(Self::Public),
-            "random" => Ok(Self::Random),
-            _ => Err(other_err!("unknown address type: {}", &s)),
-        }
-    }
 }
 
 /// Linux kernel modalias information.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Modalias {
+    /// Source.
     pub source: String,
+    /// Vendor id.
     pub vendor: u32,
+    /// Product id.
     pub product: u32,
+    /// Device id.
     pub device: u32,
 }
 
@@ -400,9 +457,9 @@ impl FromStr for Modalias {
 
             Some(Modalias {
                 source: source.to_string(),
-                vendor: (vendor[0] as u32) * 16 * 16 + (vendor[1] as u32),
-                product: (product[0] as u32) * 16 * 16 + (product[1] as u32),
-                device: (device[0] as u32) * 16 * 16 + (device[1] as u32),
+                vendor: (vendor[0] as u32) << 8 | (vendor[1] as u32),
+                product: (product[0] as u32) << 8 | (product[1] as u32),
+                device: (device[0] as u32) << 8 | (device[1] as u32),
             })
         }
         do_parse(m).ok_or_else(|| other_err!("invalid modalias: {}", m))
@@ -563,4 +620,12 @@ async fn all_dbus_objects(
 ) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
     let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
     Ok(p.get_managed_objects().await?)
+}
+
+/// Read value from D-Bus dictionary.
+pub(crate) fn read_dict<'a, T: 'static>(
+    dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
+    key: &str,
+) -> Result<&'a T> {
+    prop_cast(dict, key).ok_or(Error::MissingKey(key.to_string()))
 }

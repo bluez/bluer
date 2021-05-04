@@ -9,15 +9,18 @@ use futures::{
     SinkExt, Stream, StreamExt,
 };
 use std::{
-    collections::{HashMap, HashSet},
-    fmt::{self, Debug, Formatter},
+    collections::{BTreeSet, HashMap, HashSet},
+    fmt::{Debug, Formatter},
     sync::Arc,
     u32,
 };
+use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    all_dbus_objects, device::Device, Address, AddressType, Modalias, ObjectEvent, PropertyEvent,
+    advertising, all_dbus_objects, device::Device, Address, AddressType, LeAdvertisement,
+    LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel,
+    LeAdvertisingCapabilities, LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent,
     SERVICE_NAME, TIMEOUT,
 };
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
@@ -76,7 +79,7 @@ impl Adapter {
 
     /// The Bluetooth adapter name.
     ///
-    /// For example hci0.
+    /// For example `hci0`.
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -180,7 +183,8 @@ impl Adapter {
         .await
     }
 
-    dbus_interface!(INTERFACE);
+    dbus_interface!();
+    dbus_default_interface!(INTERFACE);
 
     /// Streams adapter property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = AdapterChanged>> {
@@ -207,6 +211,34 @@ impl Adapter {
         });
 
         Ok(rx)
+    }
+
+    /// Registers an advertisement object to be sent over the LE
+    /// Advertising channel.
+    ///
+    /// InvalidArguments error indicates that the object has
+    /// invalid or conflicting properties.
+    ///
+    /// InvalidLength error indicates that the data
+    /// provided generates a data packet which is too long.
+    ///
+    /// The properties of this object are parsed when it is
+    /// registered, and any changes are ignored.
+    ///
+    /// If the same object is registered twice it will result in
+    /// an AlreadyExists error.
+    ///
+    /// If the maximum number of advertisement instances is
+    /// reached it will result in NotPermitted error.    
+    ///
+    /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
+    pub async fn le_advertise(
+        &self,
+        le_advertisement: LeAdvertisement,
+    ) -> Result<LeAdvertisementHandle> {
+        le_advertisement
+            .register(self.connection.clone(), self.name.clone())
+            .await
     }
 
     // ===========================================================================================
@@ -267,10 +299,15 @@ impl Adapter {
 
 define_properties!(
     Adapter, AdapterProperty => {
+
+        // ===========================================================================================
+        // Adapter properties
+        // ===========================================================================================
+
         /// The Bluetooth device address.
         property(
             Address, Address,
-            dbus: ("Address", String, MANDATORY),
+            dbus: (INTERFACE, "Address", String, MANDATORY),
             get: (address, v => { v.parse()? }),
         );
 
@@ -283,7 +320,7 @@ define_properties!(
         /// address used for connection.
         property(
             AddressType, AddressType,
-            dbus: ("AddressType", String, MANDATORY),
+            dbus: (INTERFACE, "AddressType", String, MANDATORY),
             get: (address_type, v => {v.parse()?}),
         );
 
@@ -294,7 +331,7 @@ define_properties!(
         /// access to the pretty hostname configuration.
         property(
             SystemName, String,
-            dbus: ("Name", String, MANDATORY),
+            dbus: (INTERFACE, "Name", String, MANDATORY),
             get: (system_name, v => {v.to_owned()}),
         );
 
@@ -317,7 +354,7 @@ define_properties!(
         /// resort.
         property(
             Alias, String,
-            dbus: ("Alias", String, MANDATORY),
+            dbus: (INTERFACE, "Alias", String, MANDATORY),
             get: (alias, v => {v.to_owned()}),
             set: (set_alias, v => {v}),
         );
@@ -329,7 +366,7 @@ define_properties!(
         ///	or provided as static configuration.
         property(
             Class, u32,
-            dbus: ("Class", u32, MANDATORY),
+            dbus: (INTERFACE, "Class", u32, MANDATORY),
             get: (class, v => {v.to_owned()}),
         );
 
@@ -341,7 +378,7 @@ define_properties!(
         /// back to false.
         property(
             Powered, bool,
-            dbus: ("Powered", bool, MANDATORY),
+            dbus: (INTERFACE, "Powered", bool, MANDATORY),
             get: (is_powered, v => {v.to_owned()}),
             set: (set_powered, v => {v}),
         );
@@ -367,7 +404,7 @@ define_properties!(
         /// For any new adapter this settings defaults to false.
         property(
             Discoverable, bool,
-            dbus: ("Discoverable", bool, MANDATORY),
+            dbus: (INTERFACE, "Discoverable", bool, MANDATORY),
             get: (is_discoverable, v => {v.to_owned()}),
             set: (set_discoverable, v => {v}),
         );
@@ -384,7 +421,7 @@ define_properties!(
         /// For any new adapter this settings defaults to true.
         property(
             Pairable, bool,
-            dbus: ("Pairable", bool, MANDATORY),
+            dbus: (INTERFACE, "Pairable", bool, MANDATORY),
             get: (is_pairable, v => {v.to_owned()}),
             set: (set_pairable, v => {v}),
         );
@@ -399,7 +436,7 @@ define_properties!(
         /// disabled (value 0).
         property(
             PairableTimeout, u32,
-            dbus: ("PairableTimeout", u32, MANDATORY),
+            dbus: (INTERFACE, "PairableTimeout", u32, MANDATORY),
             get: (pairable_timeout, v => {v.to_owned()}),
             set: (set_pairable_timeout, v => {v}),
         );
@@ -414,7 +451,7 @@ define_properties!(
         /// be 180 seconds (3 minutes).
         property(
             DiscoverableTimeout, u32,
-            dbus: ("DiscoverableTimeout", u32, MANDATORY),
+            dbus: (INTERFACE, "DiscoverableTimeout", u32, MANDATORY),
             get: (discoverable_timeout, v => {v.to_owned()}),
             set: (set_discoverable_timeout, v => {v}),
         );
@@ -422,15 +459,15 @@ define_properties!(
         ///	Indicates that a device discovery procedure is active.
         property(
             Discovering, bool,
-            dbus: ("Discovering", bool, MANDATORY),
+            dbus: (INTERFACE, "Discovering", bool, MANDATORY),
             get: (is_discovering, v => {v.to_owned()}),
         );
 
         /// List of 128-bit UUIDs that represents the available
-        /// lcal services.
+        /// local services.
         property(
             Uuids, HashSet<Uuid>,
-            dbus: ("UUIDs", Vec<String>, OPTIONAL),
+            dbus: (INTERFACE, "UUIDs", Vec<String>, OPTIONAL),
             get: (uuids, v => {
                 v
                 .into_iter()
@@ -446,10 +483,72 @@ define_properties!(
         /// used by the kernel and udev.
         property(
             Modalias, Modalias,
-            dbus: ("Modalias", String, OPTIONAL),
+            dbus: (INTERFACE, "Modalias", String, OPTIONAL),
             get: (modalias, v => { v.parse()? }),
         );
 
+        // ===========================================================================================
+        // LE advertising manager properties
+        // ===========================================================================================
+
+        ///	Number of active advertising instances.
+        property(
+            ActiveAdvertisingInstances, u8,
+            dbus: (advertising::MANAGER_INTERFACE, "ActiveInstances", u8, MANDATORY),
+            get: (active_advertising_instances, v => {v.to_owned()}),
+        );
+
+        ///	Number of available advertising instances.
+        property(
+            SupportedAdvertisingInstances, u8,
+            dbus: (advertising::MANAGER_INTERFACE, "SupportedInstances", u8, MANDATORY),
+            get: (supported_advertising_instances, v => {v.to_owned()}),
+        );
+
+        /// List of supported system includes.
+        property(
+            SupportedAdvertisingSystemIncludes, BTreeSet<LeAdvertisementFeature>,
+            dbus: (advertising::MANAGER_INTERFACE, "SupportedIncludes", Vec<String>, MANDATORY),
+            get: (supported_advertising_system_includes, v => {
+                v.iter().filter_map(|s| s.parse().ok()).collect()
+            }),
+        );
+
+        /// List of supported Secondary channels.
+        ///
+        /// Secondary
+        /// channels can be used to advertise with the
+        /// corresponding PHY.
+        property(
+            SupportedAdvertisingSecondaryChannels, BTreeSet<LeAdvertisementSecondaryChannel>,
+            dbus: (advertising::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, MANDATORY),
+            get: (supported_advertising_secondary_channels, v => {
+                v.iter().filter_map(|s| s.parse().ok()).collect()
+            }),
+        );
+
+        /// Enumerates Advertising-related controller capabilities
+        /// useful to the client.
+        property(
+            SupportedAdvertisingCapabilities, LeAdvertisingCapabilities,
+            dbus: (advertising::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            get: (supported_advertising_capabilities, v => {
+                LeAdvertisingCapabilities::from_dict(v)?
+            }),
+        );
+
+        /// List of supported platform features.
+        ///
+        /// If no features
+        /// are available on the platform, the SupportedFeatures
+        /// array will be empty.
+        property(
+            SupportedAdvertisingFeatures, BTreeSet<LeAdvertisingFeature>,
+            dbus: (advertising::MANAGER_INTERFACE, "SupportedFeatures", Vec<String>, OPTIONAL),
+            get: (supported_advertising_features, v => {
+                v.iter().filter_map(|s| s.parse().ok()).collect()
+            }),
+        );
     }
 );
 
@@ -463,29 +562,22 @@ pub struct AdapterChanged {
 }
 
 /// Transport parameter determines the type of scan.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
 pub enum DiscoveryTransport {
     /// interleaved scan
+    #[strum(serialize = "auto")]
     Auto,
     /// BR/EDR inquiry
+    #[strum(serialize = "bredr")]
     BrEdr,
     /// LE scan only
+    #[strum(serialize = "le")]
     Le,
 }
 
 impl Default for DiscoveryTransport {
     fn default() -> Self {
         Self::Auto
-    }
-}
-
-impl fmt::Display for DiscoveryTransport {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::BrEdr => write!(f, "bredr"),
-            Self::Le => write!(f, "le"),
-        }
     }
 }
 

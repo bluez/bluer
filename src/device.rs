@@ -122,7 +122,8 @@ impl Device {
         Ok(rx)
     }
 
-    dbus_interface!(INTERFACE);
+    dbus_interface!();
+    dbus_default_interface!(INTERFACE);
 
     // ===========================================================================================
     // Methods
@@ -237,7 +238,7 @@ define_properties!(
         ///	this value which makes it more convenient.
         property(
             Name, String,
-            dbus: ("Name", String, OPTIONAL),
+            dbus: (INTERFACE, "Name", String, OPTIONAL),
             get: (name, v => {v.to_owned()}),
         );
 
@@ -251,7 +252,7 @@ define_properties!(
         /// pairing.
         property(
             AddressType, AddressType,
-            dbus: ("AddressType", String, MANDATORY),
+            dbus: (INTERFACE, "AddressType", String, MANDATORY),
             get: (address_type, v => {v.parse()?}),
         );
 
@@ -259,21 +260,21 @@ define_properties!(
         /// icon naming specification.
         property(
             Icon, String,
-            dbus: ("Icon", String, OPTIONAL),
+            dbus: (INTERFACE, "Icon", String, OPTIONAL),
             get: (icon, v => {v.to_owned()}),
         );
 
         ///	The Bluetooth class of device of the remote device.
         property(
             Class, u32,
-            dbus: ("Class", u32, OPTIONAL),
+            dbus: (INTERFACE, "Class", u32, OPTIONAL),
             get: (class, v => {v.to_owned()}),
         );
 
         ///	External appearance of device, as found on GAP service.
         property(
             Appearance, u32,
-            dbus: ("Appearance", u32, OPTIONAL),
+            dbus: (INTERFACE, "Appearance", u32, OPTIONAL),
             get: (appearance, v => {v.to_owned()}),
         );
 
@@ -281,7 +282,7 @@ define_properties!(
         /// remote services.
         property(
             Uuids, HashSet<Uuid>,
-            dbus: ("UUIDs", Vec<String>, OPTIONAL),
+            dbus: (INTERFACE, "UUIDs", Vec<String>, OPTIONAL),
             get: (uuids, v => {
                 v
                 .into_iter()
@@ -296,14 +297,14 @@ define_properties!(
         ///	Indicates if the remote device is paired.
         property(
             Paired, bool,
-            dbus: ("Paired", bool, MANDATORY),
+            dbus: (INTERFACE, "Paired", bool, MANDATORY),
             get: (is_paired, v => {v.to_owned()}),
         );
 
         ///	Indicates if the remote device is paired.
         property(
             Connected, bool,
-            dbus: ("Connected", bool, MANDATORY),
+            dbus: (INTERFACE, "Connected", bool, MANDATORY),
             get: (is_connected, v => {v.to_owned()}),
         );
 
@@ -311,7 +312,7 @@ define_properties!(
         /// setting can be changed by the application.
         property(
             Trusted, bool,
-            dbus: ("Trusted", bool, MANDATORY),
+            dbus: (INTERFACE, "Trusted", bool, MANDATORY),
             get: (is_trusted, v => {v.to_owned()}),
             set: (set_trusted, v => {v}),
         );
@@ -324,7 +325,7 @@ define_properties!(
         /// be probed as long as the device is blocked.
         property(
             Blocked, bool,
-            dbus: ("Blocked", bool, MANDATORY),
+            dbus: (INTERFACE, "Blocked", bool, MANDATORY),
             get: (is_blocked, v => {v.to_owned()}),
             set: (set_blocked, v => {v}),
         );
@@ -333,7 +334,7 @@ define_properties!(
         /// host from system suspend.
         property(
             WakeAllowed, bool,
-            dbus: ("WakeAllowed", bool, MANDATORY),
+            dbus: (INTERFACE, "WakeAllowed", bool, MANDATORY),
             get: (is_wake_allowed, v => {v.to_owned()}),
             set: (set_wake_allowed, v => {v}),
         );
@@ -352,7 +353,7 @@ define_properties!(
         /// property will default back to the remote name.
         property(
             Alias, String,
-            dbus: ("Alias", String, MANDATORY),
+            dbus: (INTERFACE, "Alias", String, MANDATORY),
             get: (alias, v => {v.to_owned()}),
             set: (set_alias, v => {v}),
         );
@@ -369,7 +370,7 @@ define_properties!(
         /// have disabled Extended Inquiry Response support.
         property(
             LegacyPairing, bool,
-            dbus: ("LegacyPairing", bool, MANDATORY),
+            dbus: (INTERFACE, "LegacyPairing", bool, MANDATORY),
             get: (is_legacy_pairing, v => {v.to_owned()}),
         );
 
@@ -377,7 +378,7 @@ define_properties!(
         /// used by the kernel and udev.
         property(
             Modalias, Modalias,
-            dbus: ("Modalias", String, OPTIONAL),
+            dbus: (INTERFACE, "Modalias", String, OPTIONAL),
             get: (modalias, v => { v.parse()? }),
         );
 
@@ -385,7 +386,7 @@ define_properties!(
         ///	device (inquiry or advertising).
         property(
             Rssi, i16,
-            dbus: ("RSSI", i16, OPTIONAL),
+            dbus: (INTERFACE, "RSSI", i16, OPTIONAL),
             get: (rssi, v => {v.to_owned()}),
         );
 
@@ -393,7 +394,7 @@ define_properties!(
         /// advertising).
         property(
             TxPower, i16,
-            dbus: ("TxPower", i16, OPTIONAL),
+            dbus: (INTERFACE, "TxPower", i16, OPTIONAL),
             get: (tx_power, v => {v.to_owned()}),
         );
 
@@ -404,7 +405,7 @@ define_properties!(
         /// value.
         property(
             ManufacturerData, HashMap<u16, Vec<u8>>,
-            dbus: ("ManufacturerData", HashMap<u16, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (INTERFACE, "ManufacturerData", HashMap<u16, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (manufacturer_data, m => {
                 let mut mt: HashMap<u16, Vec<u8>> = HashMap::new();
                 for (k,v) in m {
@@ -424,7 +425,7 @@ define_properties!(
         /// Keys are the UUIDs followed by its byte array value.
         property(
             ServiceData, HashMap<Uuid, Vec<u8>>,
-            dbus: ("ServiceData", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (INTERFACE, "ServiceData", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (service_data, m => {
                 let mut mt: HashMap<Uuid, Vec<u8>> = HashMap::new();
                 for (k,v) in m {
@@ -443,14 +444,14 @@ define_properties!(
         /// resolved.
         property(
             ServicesResolved, bool,
-            dbus: ("ServicesResolved", bool, MANDATORY),
+            dbus: (INTERFACE, "ServicesResolved", bool, MANDATORY),
             get: (is_services_resolved, v => {v.to_owned()}),
         );
 
         /// The Advertising Data Flags of the remote device.
         property(
             AdvertisingFlags, Vec<u8>,
-            dbus: ("AdvertisingFlags", Vec<u8>, MANDATORY),
+            dbus: (INTERFACE, "AdvertisingFlags", Vec<u8>, MANDATORY),
             get: (advertising_flags, v => {v.to_owned()}),
         );
 
@@ -460,7 +461,7 @@ define_properties!(
         /// application are exposed.
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
-            dbus: ("AdvertisingData", HashMap<u8, Vec<u8>>, MANDATORY),
+            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Vec<u8>>, MANDATORY),
             get: (advertising_data, v => {v.to_owned()}),
         );
     }
