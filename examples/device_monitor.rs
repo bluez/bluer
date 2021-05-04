@@ -5,7 +5,7 @@ use crossterm::{
     style::{self, Colorize},
     terminal::{self, ClearType},
 };
-use futures::{pin_mut, stream::SelectAll, StreamExt};
+use futures::{pin_mut, stream::SelectAll, FutureExt, StreamExt};
 use std::{
     collections::HashMap,
     io::stdout,
@@ -18,6 +18,7 @@ use blurz::{Adapter, Address, DeviceChanged, DeviceEvent, DiscoveryFilter};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const MAX_AGO: u64 = 30;
+const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 fn clear_line(row: u16) {
     queue!(
@@ -65,8 +66,7 @@ impl DeviceMonitor {
         let device_events = self.adapter.device_changes().await?;
         pin_mut!(device_events);
 
-        let next_update = sleep(Duration::from_secs(1));
-        pin_mut!(next_update);
+        let mut next_update = sleep(UPDATE_INTERVAL).boxed();
 
         for addr in self.adapter.device_addresses().await? {
             self.add_device(addr).await;
@@ -99,8 +99,8 @@ impl DeviceMonitor {
                         } else {
                             self.show_device(&data).await;
                         }
-
                     }
+                    next_update = sleep(UPDATE_INTERVAL).boxed();
                 },
                 else => break,
             }
