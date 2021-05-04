@@ -1,13 +1,13 @@
 //! Scans for and monitors Bluetooth devices.
 
 use crossterm::{
-    cursor, execute,
+    cursor, execute, queue,
     style::{self, Colorize},
     terminal::{self, ClearType},
 };
 use futures::{pin_mut, stream::SelectAll, StreamExt};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     io::stdout,
     time::{Duration, Instant},
 };
@@ -19,54 +19,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const MAX_AGO: u64 = 30;
 
-async fn device_line(adapter: &Adapter, addr: Address, seen_ago: u64) -> Result<String> {
-    use std::fmt::Write;
-    let mut line = String::new();
-    let device = adapter.device(addr)?;
-
-    write!(&mut line, "{}", addr.to_string().white())?;
-    write!(&mut line, " [{}] ", device.address_type().await?)?;
-
-    const MIN_RSSI: i16 = -120;
-    const MAX_RSSI: i16 = -30;
-    const MAX_BAR_LEN: i16 = 25;
-    let bar_len = if let Some(rssi) = device.rssi().await? {
-        write!(&mut line, "{} dBm [", format!("{:4}", rssi).red())?;
-        (rssi.clamp(MIN_RSSI, MAX_RSSI) - MIN_RSSI) * MAX_BAR_LEN / (MAX_RSSI - MIN_RSSI)
-    } else {
-        write!(&mut line, "---- dBm [")?;
-        0
-    };
-    write!(&mut line, "{}", "#".repeat(bar_len as _).black().on_red())?;
-    write!(&mut line, "{}", " ".repeat((MAX_BAR_LEN - bar_len) as _))?;
-    write!(&mut line, "]")?;
-
-    const MAX_AGO_BAR_LEN: u64 = 10;
-    let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
-    write!(&mut line, "{} s ago [", format!("{:3}", seen_ago).green())?;
-    write!(
-        &mut line,
-        "{}",
-        "#".repeat(ago_bar_len as _).black().on_green()
-    )?;
-    write!(
-        &mut line,
-        "{}",
-        " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _)
-    )?;
-    write!(&mut line, "]")?;
-
-    write!(
-        &mut line,
-        "  {}   ",
-        format!("{:30}", device.name().await?.unwrap_or_default()).blue()
-    )?;
-
-    Ok(line)
-}
-
 fn clear_line(row: u16) {
-    execute!(
+    queue!(
         stdout(),
         cursor::MoveTo(0, row),
         terminal::DisableLineWrap,
@@ -75,28 +29,176 @@ fn clear_line(row: u16) {
     .unwrap();
 }
 
-async fn show_device(adapter: &Adapter, addr: Address, seen_ago: Duration, row: u16) {
-    let line = device_line(adapter, addr, seen_ago.as_secs())
-        .await
-        .unwrap_or_else(|err| {
+struct DeviceMonitor {
+    adapter: Adapter,
+    n_rows: u16,
+    empty_rows: Vec<u16>,
+    devices: HashMap<Address, DeviceData>,
+}
+
+#[derive(Clone)]
+struct DeviceData {
+    address: Address,
+    row: u16,
+    last_seen: Instant,
+}
+
+impl DeviceMonitor {
+    pub async fn run(adapter: Adapter) -> Result<()> {
+        let (_, n_rows) = terminal::size()?;
+        let mut this = Self {
+            adapter,
+            n_rows,
+            empty_rows: (2..n_rows - 1).rev().collect(),
+            devices: HashMap::new(),
+        };
+        this.perform().await
+    }
+
+    async fn perform(&mut self) -> Result<()> {
+        let _discovery_session = self
+            .adapter
+            .discover_devices(DiscoveryFilter::default())
+            .await?;
+
+        let mut all_change_events = SelectAll::new();
+        let device_events = self.adapter.device_changes().await?;
+        pin_mut!(device_events);
+
+        let next_update = sleep(Duration::from_secs(1));
+        pin_mut!(next_update);
+
+        for addr in self.adapter.device_addresses().await? {
+            self.add_device(addr).await;
+            let device = self.adapter.device(addr)?;
+            all_change_events.push(device.changes().await?);
+        }
+
+        loop {
+            tokio::select! {
+                Some(device_event) = device_events.next() => {
+                    match device_event {
+                        DeviceEvent::Added(addr) => {
+                            self.add_device(addr).await;
+                            let device = self.adapter.device(addr)?;
+                            all_change_events.push(device.changes().await?);
+                        },
+                        DeviceEvent::Removed(addr) => self.remove_device(addr).await,
+                    }
+                },
+                Some(DeviceChanged { address: addr, ..}) = all_change_events.next() => {
+                    if let Some(data) = self.devices.get_mut(&addr) {
+                        data.last_seen = Instant::now();
+                    }
+                },
+                _ = &mut next_update => {
+                    for (addr, data) in self.devices.clone().iter() {
+                        let seen_ago = data.last_seen.elapsed();
+                        if seen_ago.as_secs() > MAX_AGO {
+                            self.remove_device(*addr).await;
+                        } else {
+                            self.show_device(&data).await;
+                        }
+
+                    }
+                },
+                else => break,
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn add_device(&mut self, address: Address) {
+        if let Some(row) = self.empty_rows.pop() {
+            self.devices.insert(
+                address,
+                DeviceData {
+                    address,
+                    row,
+                    last_seen: Instant::now(),
+                },
+            );
+
+            self.show_device(&self.devices[&address]).await;
+        }
+    }
+
+    async fn remove_device(&mut self, address: Address) {
+        if let Some(data) = self.devices.remove(&address) {
+            clear_line(data.row);
+            self.empty_rows.push(data.row);
+            self.empty_rows.sort_by(|a, b| b.cmp(a));
+        }
+    }
+
+    async fn device_line(&self, data: &DeviceData) -> Result<String> {
+        use std::fmt::Write;
+        let mut line = String::new();
+        let device = self.adapter.device(data.address)?;
+
+        write!(&mut line, "{}", data.address.to_string().white())?;
+        write!(&mut line, " [{}] ", device.address_type().await?)?;
+
+        const MIN_RSSI: i16 = -120;
+        const MAX_RSSI: i16 = -30;
+        const MAX_BAR_LEN: i16 = 25;
+        let bar_len = if let Some(rssi) = device.rssi().await? {
+            write!(&mut line, "{} dBm [", format!("{:4}", rssi).red())?;
+            (rssi.clamp(MIN_RSSI, MAX_RSSI) - MIN_RSSI) * MAX_BAR_LEN / (MAX_RSSI - MIN_RSSI)
+        } else {
+            write!(&mut line, "---- dBm [")?;
+            0
+        };
+        write!(&mut line, "{}", "#".repeat(bar_len as _).black().on_red())?;
+        write!(&mut line, "{}", " ".repeat((MAX_BAR_LEN - bar_len) as _))?;
+        write!(&mut line, "]")?;
+
+        const MAX_AGO_BAR_LEN: u64 = 10;
+        let seen_ago = data.last_seen.elapsed().as_secs();
+        let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
+        write!(&mut line, "{} s ago [", format!("{:3}", seen_ago).green())?;
+        write!(
+            &mut line,
+            "{}",
+            "#".repeat(ago_bar_len as _).black().on_green()
+        )?;
+        write!(
+            &mut line,
+            "{}",
+            " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _)
+        )?;
+        write!(&mut line, "]")?;
+
+        write!(
+            &mut line,
+            "  {}   ",
+            format!("{:30}", device.name().await?.unwrap_or_default()).blue()
+        )?;
+
+        Ok(line)
+    }
+
+    async fn show_device(&self, data: &DeviceData) {
+        let line = self.device_line(&data).await.unwrap_or_else(|err| {
             format!(
                 "{} - Error: {}",
-                addr.to_string().white(),
+                data.address.to_string().white(),
                 err.to_string().on_dark_red()
             )
         });
 
-    let (_, n_rows) = terminal::size().unwrap();
-    clear_line(row);
-    execute!(
-        stdout(),
-        cursor::Hide,
-        cursor::MoveTo(0, row),
-        style::Print(line),
-        cursor::MoveTo(0, n_rows - 2),
-        cursor::Show,
-    )
-    .unwrap();
+        queue!(stdout(), cursor::Hide).unwrap();
+        clear_line(data.row);
+        execute!(
+            stdout(),
+            cursor::MoveTo(0, data.row),
+            style::Print(line),
+            cursor::MoveTo(0, self.n_rows - 2),
+            cursor::Show,
+        )
+        .unwrap();
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -117,69 +219,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     let adapter = session.adapter(&adapter_name)?;
-    let _discovery_session = adapter.discover_devices(DiscoveryFilter::default()).await?;
-
-    let mut all_change_events = SelectAll::new();
-    let device_events = adapter.device_changes().await?;
-    pin_mut!(device_events);
-
-    let (_, n_rows) = terminal::size()?;
-    let mut empty_rows: VecDeque<u16> = (2..n_rows - 1).collect();
-    let mut addr_row: HashMap<Address, u16> = HashMap::new();
-    let mut last_seen: HashMap<Address, Instant> = HashMap::new();
-
-    let next_update = sleep(Duration::from_secs(1));
-    pin_mut!(next_update);
-
-    loop {
-        tokio::select! {
-            Some(device_event) = device_events.next() => {
-                match device_event {
-                    DeviceEvent::Added(addr) => {
-                        if let Some(row) = empty_rows.pop_front() {
-                            let device = adapter.device(addr)?;
-                            all_change_events.push(device.changes().await?);
-
-                            addr_row.insert(addr, row);
-                            last_seen.insert(addr, Instant::now());
-                            show_device(&adapter, addr, Duration::default(), row).await;
-                        }
-                    }
-                    DeviceEvent::Removed(addr) => {
-                        if let Some(row) = addr_row.remove(&addr) {
-                            clear_line(row);
-                            empty_rows.push_back(row);
-                            empty_rows.make_contiguous().sort();
-                            last_seen.remove(&addr);
-                        }
-                    }
-                }
-            },
-            Some(DeviceChanged { address: addr, ..}) = all_change_events.next() => {
-                if let Some(row) = addr_row.get(&addr) {
-                    last_seen.insert(addr, Instant::now());
-                    show_device(&adapter, addr, Duration::default(), *row).await;
-                }
-            },
-            _ = &mut next_update => {
-                for (addr, row) in addr_row.clone().iter() {
-                    if let Some(ls) = last_seen.get(&addr) {
-                        let seen_ago = ls.elapsed();
-                        if seen_ago.as_secs() > MAX_AGO {
-                            clear_line(*row);
-                            addr_row.remove(&addr);
-                            empty_rows.push_back(*row);
-                            empty_rows.make_contiguous().sort();
-                            last_seen.remove(&addr);
-                        } else {
-                            show_device(&adapter, *addr, seen_ago, *row).await;
-                        }
-                    }
-                }
-            },
-            else => break,
-        }
-    }
+    DeviceMonitor::run(adapter).await?;
 
     Ok(())
 }
