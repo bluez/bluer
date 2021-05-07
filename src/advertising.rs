@@ -32,7 +32,7 @@ pub enum LeAdvertisementType {
 
 impl Default for LeAdvertisementType {
     fn default() -> Self {
-        Self::Broadcast
+        Self::Peripheral
     }
 }
 
@@ -313,6 +313,9 @@ impl LeAdvertisement {
     }
 }
 
+/// Active Bluetooth LE advertisement.
+///
+/// Drop to unregister advertisement.
 pub struct LeAdvertisementHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
