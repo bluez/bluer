@@ -4,6 +4,7 @@ use dbus::{
 };
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::channel::oneshot;
+use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
@@ -163,7 +164,7 @@ pub struct LeAdvertisement {
     /// discoverable/limited mode forever.
     ///
     /// Note: This property shall not be set when Type is set
-    /// to broadcast.    
+    /// to broadcast.
     pub discoverable_timeout: Option<Duration>,
     /// List of system features to be included in the advertising
     /// packet.
@@ -206,7 +207,7 @@ pub struct LeAdvertisement {
     /// Acceptable values
     /// are in the range [20ms, 10,485s]. If the provided
     /// MinInterval is larger than the provided MaxInterval,
-    /// the registration will return failure.    
+    /// the registration will return failure.
     pub max_interval: Option<Duration>,
     /// Requested transmission power of this advertising set.
     ///
@@ -217,12 +218,71 @@ pub struct LeAdvertisement {
     pub tx_power: Option<i16>,
 }
 
+macro_rules! property {
+    ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
+        $ib.property($dbus_name).get(|_, $obj| {
+            eprintln!("Property {} queried", $dbus_name);
+            match $get {
+                Some(v) => Ok(v),
+                None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
+            }
+        })
+    };
+}
+
 impl LeAdvertisement {
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
-        cr.register(ADVERTISEMENT_INTERFACE, |b: &mut IfaceBuilder<Self>| {
-            b.property("Type").get(|_, la| {
-                println!("Type queried");
-                Ok(la.advertisement_type.to_string())
+        cr.register(ADVERTISEMENT_INTERFACE, |ib: &mut IfaceBuilder<Self>| {
+            property!(ib, "Type", la => {
+                Some(la.advertisement_type.to_string())
+            });
+            property!(ib, "ServiceUUIDs", la => {
+                Some(la.service_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
+            });
+            property!(ib, "ManufacturerData", la => {
+                Some(la.manufacturer_data.clone().into_iter().collect::<HashMap<_, _>>())
+            });
+            property!(ib, "SolicitUUIDs", la => {
+                Some(la.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
+            });
+            property!(ib, "ServiceData", la => {
+                Some(la.service_data.iter().map(|(k, v)| (k.to_string(), v.clone())).collect::<HashMap<_, _>>())
+            });
+            property!(ib, "Data", la => {
+                Some(la.advertisting_data.clone().into_iter().collect::<HashMap<_, _>>())
+            });
+            property!(ib, "Discoverable", la => {
+                la.discoverable
+            });
+            property!(ib, "DiscoverableTimeout", la => {
+                la.discoverable_timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            });
+            property!(ib, "Includes", la => {
+                Some(la.system_includes.iter().map(|v| v.to_string()).collect::<Vec<_>>())
+            });
+            property!(ib, "LocalName", la => {
+                la.local_name.clone()
+            });
+            property!(ib, "Appearance", la => {
+                la.appearance
+            });
+            property!(ib, "Duration", la => {
+                la.duration.map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            });
+            property!(ib, "Timeout", la => {
+                la.timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            });
+            property!(ib, "SecondaryChannel", la => {
+                la.secondary_channel.map(|v| v.to_string())
+            });
+            property!(ib, "MinInterval", la => {
+                la.min_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
+            });
+            property!(ib, "MaxInterval", la => {
+                la.max_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
+            });
+            property!(ib, "TxPower", la => {
+                la.tx_power
             });
         })
     }
