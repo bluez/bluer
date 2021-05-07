@@ -32,6 +32,7 @@ macro_rules! other_err {
 }
 
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
+pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
 macro_rules! dbus_interface {
@@ -239,6 +240,7 @@ macro_rules! define_properties {
 mod adapter;
 mod advertising;
 mod device;
+pub mod gatt;
 //mod bluetooth_discovery_session;
 //mod bluetooth_event;
 //mod bluetooth_gatt_characteristic;
@@ -259,7 +261,7 @@ pub use crate::{adapter::*, advertising::*, device::*, session::*};
 // pub use crate::bluetooth_obex::BluetoothOBEXSession;
 
 /// Bluetooth error.
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, EnumString)]
 pub enum Error {
     #[error("Bluetooth device already connected")]
     AlreadyConnected,
@@ -287,12 +289,16 @@ pub enum Error {
     InvalidLength,
     #[error("Bluetooth operation not available")]
     NotAvailable,
+    #[error("Bluetooth operation not authorized")]
+    NotAuthorized,
     #[error("Bluetooth device not ready")]
     NotReady,
     #[error("Bluetooth operation not supported")]
     NotSupported,
     #[error("Bluetooth operation not permitted")]
     NotPermitted,
+    #[error("Invalid offset for Bluetooth GATT property")]
+    InvalidOffset,
     #[error("Bluetooth D-Bus error {name}: {message}")]
     DBus { name: String, message: String },
     #[error("No Bluetooth adapter available")]
@@ -319,23 +325,8 @@ pub enum Error {
 
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
-        match err.name().and_then(|name| name.strip_prefix("org.bluez.Error.")) {
-            Some("AlreadyConnected") => Self::AlreadyConnected,
-            Some("AlreadyExists") => Self::AlreadyExists,
-            Some("AuthenticationCanceled") => Self::AuthenticationCanceled,
-            Some("AuthenticationFailed") => Self::AuthenticationFailed,
-            Some("AuthenticationRejected") => Self::AuthenticationRejected,
-            Some("AuthenticationTimeout") => Self::AuthenticationTimeout,
-            Some("ConnectionAttemptFailed") => Self::ConnectionAttemptFailed,
-            Some("DoesNotExist") => Self::DoesNotExist,
-            Some("Failed") => Self::Failed,
-            Some("InProgress") => Self::InProgress,
-            Some("InvalidArguments") => Self::InvalidArguments,
-            Some("InvalidLength") => Self::InvalidLength,
-            Some("NotAvailable") => Self::NotAvailable,
-            Some("NotReady") => Self::NotReady,
-            Some("NotSupported") => Self::NotSupported,
-            Some("NotPermitted") => Self::NotPermitted,
+        match err.name().and_then(|name| name.strip_prefix(ERR_PREFIX)).and_then(|s| Self::from_str(s).ok()) {
+            Some(err) => err,
             _ => Self::DBus {
                 name: err.name().unwrap_or_default().to_string(),
                 message: err.message().unwrap_or_default().to_string(),
