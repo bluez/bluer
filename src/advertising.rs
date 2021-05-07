@@ -288,7 +288,6 @@ impl LeAdvertisement {
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> Result<LeAdvertisementHandle> {
         let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
-        dbg!(&name);
 
         {
             let mut cr = inner.crossroads.lock().await;
@@ -298,7 +297,6 @@ impl LeAdvertisement {
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
-        println!("done");
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
