@@ -12,8 +12,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner,
-    SERVICE_NAME, TIMEOUT,
+    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -29,47 +28,23 @@ pub struct Device {
 
 impl fmt::Debug for Device {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "Device {{ adapter_name: {}, address: {} }}",
-            self.adapter_name(),
-            self.address()
-        )
+        write!(f, "Device {{ adapter_name: {}, address: {} }}", self.adapter_name(), self.address())
     }
 }
 
 impl Device {
     /// Create Bluetooth device interface for device of specified address connected to specified adapater.
-    pub(crate) fn new(
-        inner: Arc<SessionInner>,
-        adapter_name: Arc<String>,
-        address: Address,
-    ) -> Result<Self> {
-        Ok(Self {
-            inner,
-            dbus_path: Self::dbus_path(&*adapter_name, address)?,
-            adapter_name,
-            address,
-        })
+    pub(crate) fn new(inner: Arc<SessionInner>, adapter_name: Arc<String>, address: Address) -> Result<Self> {
+        Ok(Self { inner, dbus_path: Self::dbus_path(&*adapter_name, address)?, adapter_name, address })
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(
-            SERVICE_NAME,
-            &self.dbus_path,
-            TIMEOUT,
-            &*self.inner.connection,
-        )
+        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
     }
 
     pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<Path<'static>> {
-        Path::new(format!(
-            "{}{}/dev_{}",
-            adapter::PREFIX,
-            adapter_name,
-            address.to_string().replace(':', "_")
-        ))
-        .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
+        Path::new(format!("{}{}/dev_{}", adapter::PREFIX, adapter_name, address.to_string().replace(':', "_")))
+            .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
     }
 
     pub(crate) fn parse_dbus_path(path: &Path<'static>) -> Option<(String, Address)> {
@@ -110,8 +85,7 @@ impl Device {
 
     /// Streams device property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = DeviceChanged>> {
-        let mut events =
-            PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
+        let mut events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
 
         let (mut tx, rx) = mpsc::unbounded();
         let address = self.address;
@@ -185,8 +159,7 @@ impl Device {
     /// device. The UUID provided is the remote service
     /// UUID for the profile.
     pub async fn connect_profile(&self, uuid: &Uuid) -> Result<()> {
-        self.call_method("ConnectProfile", (uuid.to_string(),))
-            .await
+        self.call_method("ConnectProfile", (uuid.to_string(),)).await
     }
 
     /// This method disconnects a specific profile of
@@ -199,8 +172,7 @@ impl Device {
     /// as long as the profile is registered this will always
     /// succeed.
     pub async fn disconnect_profile(&self, uuid: &Uuid) -> Result<()> {
-        self.call_method("DisconnectProfile", (uuid.to_string(),))
-            .await
+        self.call_method("DisconnectProfile", (uuid.to_string(),)).await
     }
 
     /// This method will connect to the remote device,

@@ -12,10 +12,8 @@ async fn main() -> blurz::Result<()> {
 
     println!("Advertising on Bluetooth adapter {}", &adapter_name);
 
-    let le_advertisement = LeAdvertisement {
-        advertisement_type: blurz::LeAdvertisementType::Peripheral,
-        ..Default::default()
-    };
+    let le_advertisement =
+        LeAdvertisement { advertisement_type: blurz::LeAdvertisementType::Peripheral, ..Default::default() };
     let handle = adapter.le_advertise(le_advertisement).await?;
 
     println!("Press enter to quit");

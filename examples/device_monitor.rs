@@ -21,13 +21,8 @@ const MAX_AGO: u64 = 30;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 fn clear_line(row: u16) {
-    queue!(
-        stdout(),
-        cursor::MoveTo(0, row),
-        terminal::DisableLineWrap,
-        terminal::Clear(ClearType::CurrentLine)
-    )
-    .unwrap();
+    queue!(stdout(), cursor::MoveTo(0, row), terminal::DisableLineWrap, terminal::Clear(ClearType::CurrentLine))
+        .unwrap();
 }
 
 struct DeviceMonitor {
@@ -47,20 +42,13 @@ struct DeviceData {
 impl DeviceMonitor {
     pub async fn run(adapter: Adapter) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
-        let mut this = Self {
-            adapter,
-            n_rows,
-            empty_rows: (2..n_rows - 1).rev().collect(),
-            devices: HashMap::new(),
-        };
+        let mut this =
+            Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
         this.perform().await
     }
 
     async fn perform(&mut self) -> Result<()> {
-        let _discovery_session = self
-            .adapter
-            .discover_devices(DiscoveryFilter::default())
-            .await?;
+        let _discovery_session = self.adapter.discover_devices(DiscoveryFilter::default()).await?;
 
         let mut all_change_events = SelectAll::new();
         let device_events = self.adapter.device_changes().await?;
@@ -114,14 +102,7 @@ impl DeviceMonitor {
             return;
         }
         if let Some(row) = self.empty_rows.pop() {
-            self.devices.insert(
-                address,
-                DeviceData {
-                    address,
-                    row,
-                    last_seen: Instant::now(),
-                },
-            );
+            self.devices.insert(address, DeviceData { address, row, last_seen: Instant::now() });
 
             self.show_device(&self.devices[&address]).await;
         }
@@ -161,34 +142,18 @@ impl DeviceMonitor {
         let seen_ago = data.last_seen.elapsed().as_secs();
         let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
         write!(&mut line, "{} s ago [", format!("{:3}", seen_ago).green())?;
-        write!(
-            &mut line,
-            "{}",
-            "#".repeat(ago_bar_len as _).black().on_green()
-        )?;
-        write!(
-            &mut line,
-            "{}",
-            " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _)
-        )?;
+        write!(&mut line, "{}", "#".repeat(ago_bar_len as _).black().on_green())?;
+        write!(&mut line, "{}", " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _))?;
         write!(&mut line, "]")?;
 
-        write!(
-            &mut line,
-            "  {}   ",
-            format!("{:30}", device.name().await?.unwrap_or_default()).blue()
-        )?;
+        write!(&mut line, "  {}   ", format!("{:30}", device.name().await?.unwrap_or_default()).blue())?;
 
         Ok(line)
     }
 
     async fn show_device(&self, data: &DeviceData) {
         let line = self.device_line(&data).await.unwrap_or_else(|err| {
-            format!(
-                "{} - Error: {}",
-                data.address.to_string().white(),
-                err.to_string().on_dark_red()
-            )
+            format!("{} - Error: {}", data.address.to_string().white(), err.to_string().on_dark_red())
         });
 
         queue!(stdout(), cursor::Hide).unwrap();
@@ -214,10 +179,7 @@ async fn main() -> Result<()> {
         stdout(),
         terminal::Clear(ClearType::All),
         cursor::MoveTo(0, 0),
-        style::Print(format!(
-            "Discovering devices using Bluetooth adapater {}",
-            adapter_name.clone().blue()
-        ))
+        style::Print(format!("Discovering devices using Bluetooth adapater {}", adapter_name.clone().blue()))
     )
     .unwrap();
 

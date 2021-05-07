@@ -17,10 +17,9 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device::Device, Address, AddressType, LeAdvertisement,
-    LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel,
-    LeAdvertisingCapabilities, LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent,
-    SessionInner, SERVICE_NAME, TIMEOUT,
+    advertising, all_dbus_objects, device::Device, Address, AddressType, LeAdvertisement, LeAdvertisementFeature,
+    LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities, LeAdvertisingFeature,
+    Modalias, ObjectEvent, PropertyEvent, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::{device, Error, Result};
@@ -56,19 +55,13 @@ impl Adapter {
     pub(crate) fn new(inner: Arc<SessionInner>, name: &str) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Path::new(PREFIX.to_string() + name)
-                .map_err(|_| Error::InvalidName(name.to_string()))?,
+            dbus_path: Path::new(PREFIX.to_string() + name).map_err(|_| Error::InvalidName(name.to_string()))?,
             name: Arc::new(name.to_string()),
         })
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(
-            SERVICE_NAME,
-            &self.dbus_path,
-            TIMEOUT,
-            &*self.inner.connection,
-        )
+        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
     }
 
     pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
@@ -101,9 +94,7 @@ impl Adapter {
         let mut addrs = Vec::new();
         for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
             match Device::parse_dbus_path(&path) {
-                Some((adapter, addr))
-                    if adapter == *self.name && interfaces.contains_key(device::INTERFACE) =>
-                {
+                Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(device::INTERFACE) => {
                     addrs.push(addr)
                 }
                 _ => (),
@@ -120,8 +111,7 @@ impl Adapter {
     /// Stream device added and removed events.
     pub async fn device_changes(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let adapter_path = self.dbus_path.clone().into_static();
-        let obj_events =
-            ObjectEvent::stream(self.inner.connection.clone(), Some(adapter_path.clone())).await?;
+        let obj_events = ObjectEvent::stream(self.inner.connection.clone(), Some(adapter_path.clone())).await?;
 
         let my_name = self.name.clone();
         let events = obj_events.filter_map(move |evt| {
@@ -129,15 +119,11 @@ impl Adapter {
             async move {
                 match evt {
                     ObjectEvent::Added { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => {
-                            Some(DeviceEvent::Added(address))
-                        }
+                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Added(address)),
                         _ => None,
                     },
                     ObjectEvent::Removed { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => {
-                            Some(DeviceEvent::Removed(address))
-                        }
+                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Removed(address)),
                         _ => None,
                     },
                 }
@@ -176,14 +162,7 @@ impl Adapter {
         let (done_tx, done_rx) = oneshot::channel();
         discovery_slots.insert((*self.name).clone(), done_rx);
 
-        DeviceDiscovery::new(
-            self.inner.clone(),
-            self.dbus_path.clone(),
-            self.name.clone(),
-            filter,
-            done_tx,
-        )
-        .await
+        DeviceDiscovery::new(self.inner.clone(), self.dbus_path.clone(), self.name.clone(), filter, done_tx).await
     }
 
     dbus_interface!();
@@ -191,22 +170,14 @@ impl Adapter {
 
     /// Streams adapter property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = AdapterChanged>> {
-        let mut events =
-            PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
+        let mut events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
 
         let (mut tx, rx) = mpsc::unbounded();
         let name = self.name.clone();
         tokio::spawn(async move {
             while let Some(event) = events.next().await {
                 for property in AdapterProperty::from_prop_map(event.changed) {
-                    if tx
-                        .send(AdapterChanged {
-                            name: name.clone(),
-                            property,
-                        })
-                        .await
-                        .is_err()
-                    {
+                    if tx.send(AdapterChanged { name: name.clone(), property }).await.is_err() {
                         break;
                     }
                 }
@@ -235,13 +206,8 @@ impl Adapter {
     /// reached it will result in NotPermitted error.    
     ///
     /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
-    pub async fn le_advertise(
-        &self,
-        le_advertisement: LeAdvertisement,
-    ) -> Result<LeAdvertisementHandle> {
-        le_advertisement
-            .register(self.inner.clone(), self.name.clone())
-            .await
+    pub async fn le_advertise(&self, le_advertisement: LeAdvertisement) -> Result<LeAdvertisementHandle> {
+        le_advertisement.register(self.inner.clone(), self.name.clone()).await
     }
 
     // ===========================================================================================
@@ -286,9 +252,7 @@ impl Adapter {
     ///
     /// This method is experimental.
     pub async fn connect_device(
-        &self,
-        address: Address,
-        address_type: Option<AddressType>,
+        &self, address: Address, address_type: Option<AddressType>,
     ) -> Result<Path<'static>> {
         let mut m = HashMap::new();
         m.insert("Address", address.to_string());
@@ -673,24 +637,8 @@ impl Default for DiscoveryFilter {
 impl DiscoveryFilter {
     fn to_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
         let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
-        let Self {
-            uuids,
-            rssi,
-            pathloss,
-            transport,
-            duplicate_data,
-            discoverable,
-            pattern,
-        } = self;
-        hm.insert(
-            "UUIDs",
-            Variant(Box::new(
-                uuids
-                    .into_iter()
-                    .map(|uuid| uuid.to_string())
-                    .collect::<Vec<_>>(),
-            )),
-        );
+        let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern } = self;
+        hm.insert("UUIDs", Variant(Box::new(uuids.into_iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())));
         if let Some(rssi) = rssi {
             hm.insert("RSSI", Variant(Box::new(rssi)));
         }
@@ -717,26 +665,17 @@ pub struct DeviceDiscovery {
 
 impl Debug for DeviceDiscovery {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "DeviceDiscovery {{ adapter_name: {} }}",
-            self.adapter_name
-        )
+        write!(f, "DeviceDiscovery {{ adapter_name: {} }}", self.adapter_name)
     }
 }
 
 impl DeviceDiscovery {
     pub(crate) async fn new<'a>(
-        inner: Arc<SessionInner>,
-        dbus_path: Path<'static>,
-        adapter_name: Arc<String>,
-        filter: DiscoveryFilter,
+        inner: Arc<SessionInner>, dbus_path: Path<'static>, adapter_name: Arc<String>, filter: DiscoveryFilter,
         done_tx: oneshot::Sender<()>,
     ) -> Result<Self> {
         let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
-        proxy
-            .method_call(INTERFACE, "SetDiscoveryFilter", (filter.to_dict(),))
-            .await?;
+        proxy.method_call(INTERFACE, "SetDiscoveryFilter", (filter.to_dict(),)).await?;
         proxy.method_call(INTERFACE, "StartDiscovery", ()).await?;
 
         let (term_tx, term_rx) = oneshot::channel();
@@ -745,14 +684,10 @@ impl DeviceDiscovery {
             let _ = term_rx.await;
 
             let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
-            let _: std::result::Result<(), dbus::Error> =
-                proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
+            let _: std::result::Result<(), dbus::Error> = proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
         });
 
-        Ok(Self {
-            adapter_name,
-            _term_tx: term_tx,
-        })
+        Ok(Self { adapter_name, _term_tx: term_tx })
     }
 }
 

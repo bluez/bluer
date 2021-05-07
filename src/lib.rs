@@ -37,11 +37,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 macro_rules! dbus_interface {
     () => {
         #[allow(dead_code)]
-        async fn get_property_with_interface<R>(
-            &self,
-            name: &str,
-            interface: &str,
-        ) -> crate::Result<R>
+        async fn get_property_with_interface<R>(&self, name: &str, interface: &str) -> crate::Result<R>
         where
             R: for<'b> dbus::arg::Get<'b> + 'static,
         {
@@ -51,9 +47,7 @@ macro_rules! dbus_interface {
 
         #[allow(dead_code)]
         async fn get_opt_property_with_interface<R>(
-            &self,
-            name: &str,
-            interface: &str,
+            &self, name: &str, interface: &str,
         ) -> crate::Result<Option<R>>
         where
             R: for<'b> dbus::arg::Get<'b> + 'static,
@@ -61,20 +55,13 @@ macro_rules! dbus_interface {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
             match self.proxy().get(interface, name).await {
                 Ok(v) => Ok(Some(v)),
-                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
-                    Ok(None)
-                }
+                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => Ok(None),
                 Err(err) => Err(err.into()),
             }
         }
 
         #[allow(dead_code)]
-        async fn set_property_with_interface<T>(
-            &self,
-            name: &str,
-            value: T,
-            interface: &str,
-        ) -> crate::Result<()>
+        async fn set_property_with_interface<T>(&self, name: &str, value: T, interface: &str) -> crate::Result<()>
         where
             T: dbus::arg::Arg + dbus::arg::Append,
         {
@@ -84,12 +71,7 @@ macro_rules! dbus_interface {
         }
 
         #[allow(dead_code)]
-        async fn call_method_with_interface<A, R>(
-            &self,
-            name: &str,
-            args: A,
-            interface: &str,
-        ) -> crate::Result<R>
+        async fn call_method_with_interface<A, R>(&self, name: &str, args: A, interface: &str) -> crate::Result<R>
         where
             A: dbus::arg::AppendAll,
             R: dbus::arg::ReadAll + 'static,
@@ -122,8 +104,7 @@ macro_rules! dbus_default_interface {
         where
             T: dbus::arg::Arg + dbus::arg::Append,
         {
-            self.set_property_with_interface(name, value, $interface)
-                .await
+            self.set_property_with_interface(name, value, $interface).await
         }
 
         #[allow(dead_code)]
@@ -132,8 +113,7 @@ macro_rules! dbus_default_interface {
             A: dbus::arg::AppendAll,
             R: dbus::arg::ReadAll + 'static,
         {
-            self.call_method_with_interface(name, args, $interface)
-                .await
+            self.call_method_with_interface(name, args, $interface).await
         }
     };
 }
@@ -270,10 +250,7 @@ mod device;
 //mod bluetooth_utils;
 mod session;
 
-pub use crate::adapter::*;
-pub use crate::advertising::*;
-pub use crate::device::*;
-pub use crate::session::*;
+pub use crate::{adapter::*, advertising::*, device::*, session::*};
 // pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
 // pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
 // pub use crate::bluetooth_gatt_service::BluetoothGATTService;
@@ -342,10 +319,7 @@ pub enum Error {
 
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
-        match err
-            .name()
-            .and_then(|name| name.strip_prefix("org.bluez.Error."))
-        {
+        match err.name().and_then(|name| name.strip_prefix("org.bluez.Error.")) {
             Some("AlreadyConnected") => Self::AlreadyConnected,
             Some("AlreadyExists") => Self::AlreadyExists,
             Some("AuthenticationCanceled") => Self::AuthenticationCanceled,
@@ -413,11 +387,7 @@ impl FromStr for Address {
             .split(':')
             .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::InvalidAddress(s.to_string())))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self(
-            fields
-                .try_into()
-                .map_err(|_| Error::InvalidAddress(s.to_string()))?,
-        ))
+        Ok(Self(fields.try_into().map_err(|_| Error::InvalidAddress(s.to_string()))?))
     }
 }
 
@@ -472,39 +442,29 @@ impl FromStr for Modalias {
 #[derive(Debug, Clone)]
 pub(crate) enum ObjectEvent {
     /// Object or object interfaces added.
-    Added {
-        object: Path<'static>,
-        interfaces: Vec<String>,
-    },
+    Added { object: Path<'static>, interfaces: Vec<String> },
     /// Object or object interfaces removed.
-    Removed {
-        object: Path<'static>,
-        interfaces: Vec<String>,
-    },
+    Removed { object: Path<'static>, interfaces: Vec<String> },
 }
 
 impl ObjectEvent {
     /// Stream D-Bus object events starting with specified path prefix.
     pub(crate) async fn stream(
-        connection: Arc<SyncConnection>,
-        path_prefix: Option<Path<'static>>,
+        connection: Arc<SyncConnection>, path_prefix: Option<Path<'static>>,
     ) -> Result<mpsc::UnboundedReceiver<Self>> {
         use dbus::message::SignalArgs;
         lazy_static! {
             static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
-            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> =
-                Some(&SERVICE_NAME_BUS);
+            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
         }
 
         //let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, path_prefix.as_ref()).static_clone();
-        let rule_add =
-            ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None).static_clone();
+        let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None).static_clone();
         let msg_match_add = connection.add_match(rule_add).await?;
         let (msg_match_add, stream_add) = msg_match_add.msg_stream();
 
         //let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, path_prefix.as_ref()).static_clone();
-        let rule_removed =
-            ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None).static_clone();
+        let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None).static_clone();
         let msg_match_removed = connection.add_match(rule_removed).await?;
         let (msg_match_removed, stream_removed) = msg_match_removed.msg_stream();
 
@@ -519,24 +479,19 @@ impl ObjectEvent {
         tokio::spawn(async move {
             while let Some(msg) = stream.next().await {
                 let to_send = {
-                    if let Some(ObjectManagerInterfacesAdded {
-                        object, interfaces, ..
-                    }) = ObjectManagerInterfacesAdded::from_message(&msg)
+                    if let Some(ObjectManagerInterfacesAdded { object, interfaces, .. }) =
+                        ObjectManagerInterfacesAdded::from_message(&msg)
                     {
                         if has_prefix(&object) {
                             Some(Self::Added {
                                 object,
-                                interfaces: interfaces
-                                    .into_iter()
-                                    .map(|(interface, _)| interface)
-                                    .collect(),
+                                interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
                             })
                         } else {
                             None
                         }
-                    } else if let Some(ObjectManagerInterfacesRemoved {
-                        object, interfaces, ..
-                    }) = ObjectManagerInterfacesRemoved::from_message(&msg)
+                    } else if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) =
+                        ObjectManagerInterfacesRemoved::from_message(&msg)
                     {
                         if has_prefix(&object) {
                             Some(Self::Removed { object, interfaces })
@@ -573,36 +528,24 @@ pub(crate) struct PropertyEvent {
 impl PropertyEvent {
     /// Stream D-Bus property changed events.
     pub async fn stream(
-        connection: Arc<SyncConnection>,
-        path: Path<'static>,
+        connection: Arc<SyncConnection>, path: Path<'static>,
     ) -> Result<mpsc::UnboundedReceiver<Self>> {
         use dbus::message::SignalArgs;
         lazy_static! {
             static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
-            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> =
-                Some(&SERVICE_NAME_BUS);
+            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
         }
 
-        let rule =
-            PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, Some(&path)).static_clone();
+        let rule = PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, Some(&path)).static_clone();
         let msg_match = connection.add_match(rule).await?;
         let (msg_match, mut stream) = msg_match.stream();
 
         let (mut tx, rx) = mpsc::unbounded();
         tokio::spawn(async move {
-            while let Some((
-                _,
-                PropertiesPropertiesChanged {
-                    interface_name,
-                    changed_properties,
-                    ..
-                },
-            )) = stream.next().await
+            while let Some((_, PropertiesPropertiesChanged { interface_name, changed_properties, .. })) =
+                stream.next().await
             {
-                let evt = Self {
-                    interface: interface_name,
-                    changed: changed_properties,
-                };
+                let evt = Self { interface: interface_name, changed: changed_properties };
 
                 if tx.send(evt).await.is_err() {
                     break;
@@ -626,8 +569,7 @@ async fn all_dbus_objects(
 
 /// Read value from D-Bus dictionary.
 pub(crate) fn read_dict<'a, T: 'static>(
-    dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
-    key: &str,
+    dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
     prop_cast(dict, key).ok_or(Error::MissingKey(key.to_string()))
 }

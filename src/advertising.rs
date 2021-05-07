@@ -4,7 +4,6 @@ use dbus::{
 };
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::channel::oneshot;
-use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
@@ -100,9 +99,7 @@ pub struct LeAdvertisingCapabilities {
 }
 
 impl LeAdvertisingCapabilities {
-    pub(crate) fn from_dict(
-        dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>,
-    ) -> Result<Self> {
+    pub(crate) fn from_dict(dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>) -> Result<Self> {
         Ok(Self {
             max_advertisement_length: *read_dict(&dict, "MaxAdvLen")?,
             max_scan_response_length: *read_dict(&dict, "MaxScnRspLen")?,
@@ -288,16 +285,9 @@ impl LeAdvertisement {
     }
 
     pub(crate) async fn register(
-        self,
-        inner: Arc<SessionInner>,
-        adapter_name: Arc<String>,
+        self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> Result<LeAdvertisementHandle> {
-        let name = dbus::Path::new(format!(
-            "{}{}",
-            ADVERTISEMENT_PREFIX,
-            Uuid::new_v4().to_simple()
-        ))
-        .unwrap();
+        let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
         dbg!(&name);
 
         {
@@ -305,42 +295,23 @@ impl LeAdvertisement {
             cr.insert(name.clone(), &[inner.le_advertisment_token], self);
         }
 
-        let proxy = Proxy::new(
-            SERVICE_NAME,
-            Adapter::dbus_path(&*adapter_name)?,
-            TIMEOUT,
-            inner.connection.clone(),
-        );
-        println!("registering");
-        proxy
-            .method_call(
-                MANAGER_INTERFACE,
-                "RegisterAdvertisement",
-                (name.clone(), PropMap::new()),
-            )
-            .await?;
+        let proxy =
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+        proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
         println!("done");
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
-            let _: std::result::Result<(), dbus::Error> = proxy
-                .method_call(
-                    MANAGER_INTERFACE,
-                    "UnregisterAdvertisement",
-                    (unreg_name.clone(),),
-                )
-                .await;
+            let _: std::result::Result<(), dbus::Error> =
+                proxy.method_call(MANAGER_INTERFACE, "UnregisterAdvertisement", (unreg_name.clone(),)).await;
 
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
-        Ok(LeAdvertisementHandle {
-            name,
-            _drop_tx: drop_tx,
-        })
+        Ok(LeAdvertisementHandle { name, _drop_tx: drop_tx })
     }
 }
 

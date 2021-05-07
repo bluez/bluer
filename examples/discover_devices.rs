@@ -10,20 +10,14 @@ async fn query_device(adapter: &Adapter, addr: Address) -> blurz::Result<()> {
     println!("    Name:               {:?}", device.name().await?);
     println!("    Icon:               {:?}", device.icon().await?);
     println!("    Class:              {:?}", device.class().await?);
-    println!(
-        "    UUIDs:              {:?}",
-        device.uuids().await?.unwrap_or_default()
-    );
+    println!("    UUIDs:              {:?}", device.uuids().await?.unwrap_or_default());
     println!("    Paried:             {:?}", device.is_paired().await?);
     println!("    Connected:          {:?}", device.is_connected().await?);
     println!("    Trusted:            {:?}", device.is_trusted().await?);
     println!("    Modalias:           {:?}", device.modalias().await?);
     println!("    RSSI:               {:?}", device.rssi().await?);
     println!("    TX power:           {:?}", device.tx_power().await?);
-    println!(
-        "    Manufacturer data:  {:?}",
-        device.manufacturer_data().await?
-    );
+    println!("    Manufacturer data:  {:?}", device.manufacturer_data().await?);
     println!("    Service data:       {:?}", device.service_data().await?);
     Ok(())
 }
@@ -33,10 +27,7 @@ async fn main() -> blurz::Result<()> {
     let session = blurz::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
-    println!(
-        "Discovering devices using Bluetooth adapater {}\n",
-        &adapter_name
-    );
+    println!("Discovering devices using Bluetooth adapater {}\n", &adapter_name);
     let adapter = session.adapter(&adapter_name)?;
 
     let _discovery_session = adapter.discover_devices(DiscoveryFilter::default()).await?;
