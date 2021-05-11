@@ -17,7 +17,7 @@ use crate::{read_dict, Adapter, Result, SessionInner, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 pub(crate) const ADVERTISEMENT_INTERFACE: &str = "org.bluez.LEAdvertisement1";
-pub(crate) const ADVERTISEMENT_PREFIX: &str = "/io/crates/tokio_bluez/";
+pub(crate) const ADVERTISEMENT_PREFIX: &str = "/io/crates/tokio_bluez/advertising/";
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
@@ -215,70 +215,58 @@ pub struct LeAdvertisement {
     pub tx_power: Option<i16>,
 }
 
-macro_rules! property {
-    ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
-        $ib.property($dbus_name).get(|_, $obj| {
-            eprintln!("Property {} queried", $dbus_name);
-            match $get {
-                Some(v) => Ok(v),
-                None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
-            }
-        })
-    };
-}
-
 impl LeAdvertisement {
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
         cr.register(ADVERTISEMENT_INTERFACE, |ib: &mut IfaceBuilder<Self>| {
-            property!(ib, "Type", la => {
+            cr_property!(ib, "Type", la => {
                 Some(la.advertisement_type.to_string())
             });
-            property!(ib, "ServiceUUIDs", la => {
+            cr_property!(ib, "ServiceUUIDs", la => {
                 Some(la.service_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
             });
-            property!(ib, "ManufacturerData", la => {
+            cr_property!(ib, "ManufacturerData", la => {
                 Some(la.manufacturer_data.clone().into_iter().collect::<HashMap<_, _>>())
             });
-            property!(ib, "SolicitUUIDs", la => {
+            cr_property!(ib, "SolicitUUIDs", la => {
                 Some(la.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
             });
-            property!(ib, "ServiceData", la => {
+            cr_property!(ib, "ServiceData", la => {
                 Some(la.service_data.iter().map(|(k, v)| (k.to_string(), v.clone())).collect::<HashMap<_, _>>())
             });
-            property!(ib, "Data", la => {
+            cr_property!(ib, "Data", la => {
                 Some(la.advertisting_data.clone().into_iter().collect::<HashMap<_, _>>())
             });
-            property!(ib, "Discoverable", la => {
+            cr_property!(ib, "Discoverable", la => {
                 la.discoverable
             });
-            property!(ib, "DiscoverableTimeout", la => {
+            cr_property!(ib, "DiscoverableTimeout", la => {
                 la.discoverable_timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
             });
-            property!(ib, "Includes", la => {
+            cr_property!(ib, "Includes", la => {
                 Some(la.system_includes.iter().map(|v| v.to_string()).collect::<Vec<_>>())
             });
-            property!(ib, "LocalName", la => {
+            cr_property!(ib, "LocalName", la => {
                 la.local_name.clone()
             });
-            property!(ib, "Appearance", la => {
+            cr_property!(ib, "Appearance", la => {
                 la.appearance
             });
-            property!(ib, "Duration", la => {
+            cr_property!(ib, "Duration", la => {
                 la.duration.map(|t| t.as_secs().min(u16::MAX as _) as u16)
             });
-            property!(ib, "Timeout", la => {
+            cr_property!(ib, "Timeout", la => {
                 la.timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
             });
-            property!(ib, "SecondaryChannel", la => {
+            cr_property!(ib, "SecondaryChannel", la => {
                 la.secondary_channel.map(|v| v.to_string())
             });
-            property!(ib, "MinInterval", la => {
+            cr_property!(ib, "MinInterval", la => {
                 la.min_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
             });
-            property!(ib, "MaxInterval", la => {
+            cr_property!(ib, "MaxInterval", la => {
                 la.max_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
             });
-            property!(ib, "TxPower", la => {
+            cr_property!(ib, "TxPower", la => {
                 la.tx_power
             });
         })

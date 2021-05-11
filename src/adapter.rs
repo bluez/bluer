@@ -17,9 +17,9 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device::Device, Address, AddressType, LeAdvertisement, LeAdvertisementFeature,
-    LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities, LeAdvertisingFeature,
-    Modalias, ObjectEvent, PropertyEvent, SessionInner, SERVICE_NAME, TIMEOUT,
+    advertising, all_dbus_objects, device::Device, gatt, Address, AddressType, LeAdvertisement,
+    LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities,
+    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 //use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
 use crate::{device, Error, Result};
@@ -208,6 +208,18 @@ impl Adapter {
     /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
     pub async fn le_advertise(&self, le_advertisement: LeAdvertisement) -> Result<LeAdvertisementHandle> {
         le_advertisement.register(self.inner.clone(), self.name.clone()).await
+    }
+
+    /// Registers a local GATT services hierarchy (GATT Server).
+    ///
+    /// Registering a service allows applications to publish a *local* GATT service,
+    /// which then becomes available to remote devices.
+    ///
+    /// Drop the returned `ApplicationHandle` to unregister the application.
+    pub async fn serve_gatt_application(
+        &self, gatt_application: gatt::local::Application,
+    ) -> Result<gatt::local::ApplicationHandle> {
+        gatt_application.register(self.inner.clone(), self.name.clone()).await
     }
 
     // ===========================================================================================

@@ -237,6 +237,67 @@ macro_rules! define_properties {
     }
 }
 
+macro_rules! cr_property {
+    ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
+        $ib.property($dbus_name).get(|_, $obj| {
+            eprintln!("Property {} queried", $dbus_name);
+            match $get {
+                Some(v) => Ok(v),
+                None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
+            }
+        })
+    };
+}
+
+macro_rules! define_flags {
+    ($name:ident, $doc:tt => {
+        $(
+            $(#[$field_outer:meta])*
+            $field:ident ($dbus_name:expr),
+        )*
+    }) => {
+        #[derive(Clone, Copy, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[doc=$doc]
+        pub struct $name {
+            $(
+                $(#[$field_outer])*
+                pub $field: bool,
+            )*
+        }
+
+        impl $name {
+            #[allow(dead_code)]
+            pub(crate) fn to_vec(&self) -> Vec<String> {
+                let mut v = Vec::new();
+                $(
+                    if self.$field {
+                        v.push($dbus_name.to_string());
+                    }
+                )*
+                v
+            }
+
+            #[allow(dead_code)]
+            pub(crate) fn from_vec(v: Vec<String>) -> Self {
+                let hs: std::collections::HashSet<_> = v.into_iter().collect();
+                let mut s = Self::default();
+                $(
+                    if hs.contains($dbus_name) {
+                        s.$field = true;
+                    }
+                )*
+                s
+            }
+        }
+    };
+}
+
+macro_rules! read_prop {
+    ($dict:expr, $name:expr, $type:ty) => {
+        dbus::arg::prop_cast::<$type>($dict, $name).ok_or(MethodErr::invalid_arg($name))?.to_owned()
+    };
+}
+
 mod adapter;
 mod advertising;
 mod device;

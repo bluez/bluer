@@ -9,13 +9,16 @@ use std::{
 };
 use tokio::task::spawn_blocking;
 
-use crate::{adapter, all_dbus_objects, Adapter, LeAdvertisement, ObjectEvent, Result};
+use crate::{adapter, all_dbus_objects, gatt, Adapter, LeAdvertisement, ObjectEvent, Result};
 
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
     pub connection: Arc<SyncConnection>,
     pub crossroads: Mutex<Crossroads>,
     pub le_advertisment_token: IfaceToken<LeAdvertisement>,
+    pub gatt_service_token: IfaceToken<Arc<gatt::local::Service>>,
+    pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
+    pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
     pub discovery_slots: Mutex<HashMap<String, oneshot::Receiver<()>>>,
 }
 
@@ -55,11 +58,18 @@ impl Session {
         )));
 
         let le_advertisment_token = LeAdvertisement::register_interface(&mut crossroads);
+        let gatt_service_token = gatt::local::Service::register_interface(&mut crossroads);
+        let gatt_characteristic_token = gatt::local::Characteristic::register_interface(&mut crossroads);
+        let gatt_characteristic_descriptor_token =
+            gatt::local::CharacteristicDescriptor::register_interface(&mut crossroads);
 
         let inner = Arc::new(SessionInner {
             connection: connection.clone(),
             crossroads: Mutex::new(crossroads),
             le_advertisment_token,
+            gatt_service_token,
+            gatt_characteristic_token,
+            gatt_characteristic_descriptor_token,
             discovery_slots: Mutex::new(HashMap::new()),
         });
 
