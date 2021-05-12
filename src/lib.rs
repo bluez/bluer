@@ -170,7 +170,7 @@ macro_rules! define_properties {
     ) => {};
 
     (
-        $struct_name:ident, $enum_name:ident =>
+        $struct_name:ident, $enum_vis:vis $enum_name:ident =>
         {$(
             $(#[$outer:meta])*
             property(
@@ -199,7 +199,7 @@ macro_rules! define_properties {
 
         /// Property with value.
         #[derive(Debug, Clone)]
-        pub enum $enum_name {
+        $enum_vis enum $enum_name {
             $(
                 $(#[$outer])*
                 $name ($type),
@@ -207,6 +207,7 @@ macro_rules! define_properties {
         }
 
         impl $enum_name {
+            #[allow(dead_code)]
             fn from_variant_property(
                 name: &str,
                 var_value: dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>
@@ -228,6 +229,7 @@ macro_rules! define_properties {
                 }
             }
 
+            #[allow(dead_code)]
             fn from_prop_map(prop_map: dbus::arg::PropMap) -> Vec<Self> {
                 prop_map.into_iter().filter_map(|(name, value)|
                     Self::from_variant_property(&name, value).ok().flatten()
@@ -278,8 +280,8 @@ macro_rules! define_flags {
             }
 
             #[allow(dead_code)]
-            pub(crate) fn from_vec(v: Vec<String>) -> Self {
-                let hs: std::collections::HashSet<_> = v.into_iter().collect();
+            pub(crate) fn from_slice(v: &[String]) -> Self {
+                let hs: std::collections::HashSet<&str> = v.into_iter().map(|s| s.as_str()).collect();
                 let mut s = Self::default();
                 $(
                     if hs.contains($dbus_name) {
@@ -295,6 +297,12 @@ macro_rules! define_flags {
 macro_rules! read_prop {
     ($dict:expr, $name:expr, $type:ty) => {
         dbus::arg::prop_cast::<$type>($dict, $name).ok_or(MethodErr::invalid_arg($name))?.to_owned()
+    };
+}
+
+macro_rules! read_opt_prop {
+    ($dict:expr, $name:expr, $type:ty) => {
+        dbus::arg::prop_cast::<$type>($dict, $name).cloned()
     };
 }
 
@@ -380,12 +388,15 @@ pub enum Error {
     MissingKey(String),
     #[error("Another Bluetooth device discovery is in progress")]
     AnotherDiscoveryInProgress,
+    #[error("GATT services have not been resolved for that Bluetooth device")]
+    ServicesUnresolved,
     #[error("Bluetooth error: {0}")]
     Other(String),
 }
 
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
+        eprintln!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
         match err.name().and_then(|name| name.strip_prefix(ERR_PREFIX)).and_then(|s| Self::from_str(s).ok()) {
             Some(err) => err,
             _ => Self::DBus {

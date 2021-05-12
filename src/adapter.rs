@@ -69,8 +69,21 @@ impl Adapter {
             .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
     }
 
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<(&'a str, &'a str)> {
+        match path.strip_prefix(PREFIX) {
+            Some(p) => {
+                let sep = p.find('/').unwrap_or(p.len());
+                Some((&p[0..sep], &p[sep..]))
+            }
+            None => None,
+        }
+    }
+
     pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
-        path.strip_prefix(PREFIX)
+        match Self::parse_dbus_path_prefix(path) {
+            Some((v, "")) => Some(v),
+            _ => None,
+        }
     }
 
     /// The Bluetooth adapter name.
@@ -277,7 +290,7 @@ impl Adapter {
 }
 
 define_properties!(
-    Adapter, AdapterProperty => {
+    Adapter, pub AdapterProperty => {
 
         // ===========================================================================================
         // Adapter properties

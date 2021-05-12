@@ -1,4 +1,10 @@
-use std::{fmt, marker::PhantomData, pin::Pin, sync::Arc};
+use std::{
+    fmt,
+    marker::PhantomData,
+    mem::{swap, take},
+    pin::Pin,
+    sync::Arc,
+};
 
 use dbus::{
     arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
@@ -6,13 +12,14 @@ use dbus::{
     MethodErr,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::{channel::oneshot, Future};
+use futures::{channel::oneshot, future, Future};
 use strum::{Display, EnumString, IntoStaticStr};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::{Adapter, SessionInner, ERR_PREFIX, TIMEOUT};
+use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
+use crate::{Adapter, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 pub(crate) const GATT_PREFIX: &str = "/io/crates/tokio_bluez/gatt/";
@@ -50,11 +57,17 @@ pub struct ReadCharacteristicValueRequest {
     pub offset: u16,
     /// Exchanged MTU.
     pub mtu: u16,
+    /// Link type.
+    pub link: String,
 }
 
 impl ReadCharacteristicValueRequest {
     fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self { offset: read_prop!(dict, "offset", u16), mtu: read_prop!(dict, "mtu", u16) })
+        Ok(Self {
+            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
+            mtu: read_prop!(dict, "mtu", u16),
+            link: read_prop!(dict, "link", String),
+        })
     }
 }
 
@@ -100,29 +113,16 @@ pub struct WriteCharacteristicValueRequest {
 impl WriteCharacteristicValueRequest {
     fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
         Ok(Self {
-            offset: read_prop!(dict, "offset", u16),
-            op_type: read_prop!(dict, "op_type", String)
-                .parse()
-                .map_err(|_| MethodErr::invalid_arg("op_type"))?,
+            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
+            op_type: read_opt_prop!(dict, "type", String)
+                .map(|s| s.parse().map_err(|_| MethodErr::invalid_arg("type")))
+                .transpose()?
+                .unwrap_or_default(),
             mtu: read_prop!(dict, "mtu", u16),
             link: read_prop!(dict, "link", String),
-            prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
+            prepare_authorize: read_opt_prop!(dict, "prepare-authorize", bool).unwrap_or_default(),
         })
     }
-}
-
-/// Write operation type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]
-pub enum WriteValueType {
-    /// Write without response.
-    #[strum(serialize = "command")]
-    Command,
-    /// Write with response.
-    #[strum(serialize = "request")]
-    Request,
-    /// Reliable Write.
-    #[strum(serialize = "reliable")]
-    Reliable,
 }
 
 /// Write value operation error.
@@ -208,26 +208,6 @@ pub struct Characteristic {
     //
 }
 
-define_flags!(CharacteristicFlags, "Local Bluetooth GATT characteristic flags." => {
-    broadcast ("broadcast"),
-    read ("read"),
-    write_without_response ("write-without-response"),
-    write ("write"),
-    notify ("notify"),
-    indicate ("indicate"),
-    authenticated_signed_writes ("authenticated-signed-writes"),
-    extended_properties ("extended-properties"),
-    reliable_write ("reliable-write"),
-    writable_auxiliaries ("writable-auxiliaries"),
-    encrypt_read ("encrypt-read"),
-    encrypt_write ("encrypt-write"),
-    encrypt_authenticated_read ("encrypt-authenticated-read"),
-    encrypt_authenticated_write ("encrypt-authenticated-write"),
-    secure_read ("secure-read"),
-    secure_write ("secure-write"),
-    authorize ("authorize"),
-});
-
 fn method_call<
     T: Send + Sync + 'static,
     R: AppendAll,
@@ -252,6 +232,13 @@ impl Characteristic {
             cr_property!(ib, "Flags", c => {
                 Some(c.flags.to_vec())
             });
+            ib.property("Service").get(|ctx, _| {
+                let mut comps: Vec<_> = ctx.path().split('/').collect();
+                comps.pop();
+                let service_path = dbus::Path::new(comps.join("/")).unwrap();
+                dbg!(&service_path);
+                Ok(service_path)
+            });
             ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
                 method_call(ctx, cr, |c: Arc<Self>| async move {
                     let options = ReadCharacteristicValueRequest::from_dict(&options)?;
@@ -270,6 +257,7 @@ impl Characteristic {
                 (),
                 |ctx, cr, (value, options): (Vec<u8>, PropMap)| {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
+                        //dbg!(&options);
                         let options = WriteCharacteristicValueRequest::from_dict(&options)?;
                         match &c.write_value {
                             Some(write_value) => {
@@ -313,18 +301,6 @@ pub struct CharacteristicDescriptor {
         >,
     >,
 }
-
-define_flags!(CharacteristicDescriptorFlags, "Local Bluetooth GATT characteristic descriptor flags." => {
-    read ("read"),
-    write ("write"),
-    encrypt_read ("encrypt-read"),
-    encrypt_write ("encrypt-write"),
-    encrypt_authenticated_read ("encrypt-authenticated-read"),
-    encrypt_authenticated_write ("encrypt-authenticated-write"),
-    secure_read ("secure-read"),
-    secure_write ("secure-write"),
-    authorize ("authorize"),
-});
 
 /// Read characteristic value request.
 #[derive(Debug, Clone)]
@@ -371,8 +347,16 @@ impl CharacteristicDescriptor {
             cr_property!(ib, "Flags", cd => {
                 Some(cd.flags.to_vec())
             });
+            ib.property("Characteristic").get(|ctx, _| {
+                let mut comps: Vec<_> = ctx.path().split('/').collect();
+                comps.pop();
+                let char_path = dbus::Path::new(comps.join("/")).unwrap();
+                dbg!(&char_path);
+                Ok(char_path)
+            });
             ib.method_with_cr_async("ReadValue", ("flags",), ("value",), |ctx, cr, (flags,): (PropMap,)| {
                 method_call(ctx, cr, |c: Arc<Self>| async move {
+                    dbg!(&flags);
                     let options = ReadCharacteristicDescriptorValueRequest::from_dict(&flags)?;
                     match &c.read_value {
                         Some(read_value) => {
@@ -420,30 +404,40 @@ impl Application {
         {
             let mut cr = inner.crossroads.lock().await;
 
-            for (service_idx, mut service) in self.services.drain(..).enumerate() {
+            let services = take(&mut self.services);
+            reg_paths.push(app_path.clone());
+            let om = cr.object_manager::<Application>();
+            cr.insert(app_path.clone(), &[om], self);
+
+            for (service_idx, mut service) in services.into_iter().enumerate() {
+                let chars = take(&mut service.characteristics);
                 let service_path = format!("{}/service{}", &app_path, service_idx);
-                for (char_idx, mut char) in service.characteristics.drain(..).enumerate() {
+                let service_path = dbus::Path::new(service_path).unwrap();
+                reg_paths.push(service_path.clone());
+                cr.insert(service_path.clone(), &[inner.gatt_service_token], Arc::new(service));
+
+                for (char_idx, mut char) in chars.into_iter().enumerate() {
+                    let descs = take(&mut char.descriptors);
+
                     let char_path = format!("{}/char{}", &service_path, char_idx);
-                    for (desc_idx, desc) in char.descriptors.drain(..).enumerate() {
+                    let char_path = dbus::Path::new(char_path).unwrap();
+                    reg_paths.push(char_path.clone());
+                    cr.insert(char_path.clone(), &[inner.gatt_characteristic_token], Arc::new(char));
+
+                    for (desc_idx, desc) in descs.into_iter().enumerate() {
                         let desc_path = format!("{}/desc{}", &char_path, desc_idx);
                         let desc_path = dbus::Path::new(desc_path).unwrap();
                         reg_paths.push(desc_path.clone());
                         cr.insert(desc_path, &[inner.gatt_characteristic_descriptor_token], Arc::new(desc));
                     }
-                    let char_path = dbus::Path::new(char_path).unwrap();
-                    reg_paths.push(char_path.clone());
-                    cr.insert(char_path, &[inner.gatt_characteristic_token], Arc::new(char));
                 }
-                let service_path = dbus::Path::new(service_path).unwrap();
-                reg_paths.push(service_path.clone());
-                cr.insert(service_path, &[inner.gatt_service_token], Arc::new(service));
             }
-            reg_paths.push(app_path.clone());
-            cr.insert(app_path.clone(), &[], self);
         }
 
         let proxy =
-            Proxy::new(MANAGER_INTERFACE, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+        dbg!(&app_path);
+        //future::pending::<()>().await;
         proxy.method_call(MANAGER_INTERFACE, "RegisterApplication", (app_path.clone(), PropMap::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();

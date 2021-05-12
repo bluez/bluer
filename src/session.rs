@@ -5,7 +5,7 @@ use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 use tokio::task::spawn_blocking;
 
@@ -20,6 +20,11 @@ pub(crate) struct SessionInner {
     pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
     pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
     pub discovery_slots: Mutex<HashMap<String, oneshot::Receiver<()>>>,
+    pub notify_slots: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
+}
+
+impl SessionInner {
+    //pub fn notify_session(path: &dbus::Path, start_fn: impl FnOnce(oneshot::Receiver<()>, oneshot::Sender<()>))
 }
 
 /// Bluetooth session.

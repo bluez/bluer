@@ -12,7 +12,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
+    adapter, all_dbus_objects,
+    gatt::{
+        self,
+        remote::{Service, SERVICE_INTERFACE},
+    },
+    Adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -43,20 +48,30 @@ impl Device {
     }
 
     pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<Path<'static>> {
-        Path::new(format!("{}{}/dev_{}", adapter::PREFIX, adapter_name, address.to_string().replace(':', "_")))
-            .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
+        let adapter_path = Adapter::dbus_path(adapter_name)?;
+        Ok(Path::new(format!("{}/dev_{}", adapter_path, address.to_string().replace(':', "_"))).unwrap())
     }
 
-    pub(crate) fn parse_dbus_path(path: &Path<'static>) -> Option<(String, Address)> {
-        match path.strip_prefix(adapter::PREFIX) {
-            Some(adapter_dev) => match adapter_dev.split("/dev_").collect::<Vec<_>>().as_slice() {
-                &[adapater, dev] => match dev.replace('_', ":").parse() {
-                    Ok(addr) => (Some((adapater.to_string(), addr))),
-                    Err(_) => None,
-                },
-                _ => None,
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address), &'a str)> {
+        match Adapter::parse_dbus_path_prefix(path) {
+            Some((adapter_name, p)) => match p.strip_prefix("/dev_") {
+                Some(p) => {
+                    let sep = p.find('/').unwrap_or(p.len());
+                    match p[0..sep].replace('_', ":").parse::<Address>() {
+                        Ok(addr) => Some(((adapter_name, addr), &p[sep..])),
+                        Err(_) => None,
+                    }
+                }
+                None => None,
             },
             None => None,
+        }
+    }
+
+    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<(&'a str, Address)> {
+        match Self::parse_dbus_path_prefix(path) {
+            Some((v, "")) => Some(v),
+            _ => None,
         }
     }
 
@@ -102,6 +117,36 @@ impl Device {
         Ok(rx)
     }
 
+    /// Remote GATT services.
+    ///
+    /// The device must be connected for GATT services to be resolved.
+    pub async fn services(&self) -> Result<Vec<gatt::remote::Service>> {
+        if !self.is_services_resolved().await? {
+            return Err(Error::ServicesUnresolved);
+        }
+
+        let mut services = Vec::new();
+        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+            match Service::parse_dbus_path(&path) {
+                Some((adapter, device_address, id))
+                    if adapter == *self.adapter_name
+                        && device_address == self.address
+                        && interfaces.contains_key(SERVICE_INTERFACE) =>
+                {
+                    services.push(self.service(id).await?);
+                }
+                _ => (),
+            }
+        }
+
+        Ok(services)
+    }
+
+    /// Remote GATT service with specified id.
+    pub async fn service(&self, service_id: u16) -> Result<gatt::remote::Service> {
+        gatt::remote::Service::new(self.inner.clone(), self.adapter_name.clone(), self.address, service_id)
+    }
+
     dbus_interface!();
     dbus_default_interface!(INTERFACE);
 
@@ -124,16 +169,16 @@ impl Device {
     /// For dual-mode devices only one bearer is connected at
     /// time, the conditions are in the following order:
     ///
-    ///     1. Connect the disconnected bearer if already
-    ///     connected.
+    /// 1. Connect the disconnected bearer if already
+    ///    connected.
     ///
-    ///     2. Connect first the bonded bearer. If no
-    ///     bearers are bonded or both are skip and check
-    ///     latest seen bearer.
+    /// 2. Connect first the bonded bearer. If no
+    ///    bearers are bonded or both are skip and check
+    ///    latest seen bearer.
     ///
-    ///     3. Connect last seen bearer, in case the
-    ///     timestamps are the same BR/EDR takes
-    ///     precedence.
+    /// 3. Connect last seen bearer, in case the
+    ///    timestamps are the same BR/EDR takes
+    ///    precedence.
     pub async fn connect(&self) -> Result<()> {
         self.call_method("Connect", ()).await
     }
@@ -202,7 +247,7 @@ impl Device {
 }
 
 define_properties!(
-    Device, DeviceProperty => {
+    Device, pub DeviceProperty => {
         /// The Bluetooth remote name.
         ///
         /// This value can not be
