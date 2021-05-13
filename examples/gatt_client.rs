@@ -1,7 +1,10 @@
 //! Connects to a Bluetooth GATT application.
 
+use std::time::Duration;
+
 use blurz::{gatt::remote::Characteristic, Device, DeviceEvent, Result};
 use futures::{pin_mut, StreamExt};
+use tokio::time::sleep;
 use uuid::Uuid;
 
 async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristic>> {
@@ -15,9 +18,20 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
     if uuids.contains(&service_uuid) {
         println!("    Device provides our service!");
 
+        sleep(Duration::from_secs(2)).await;
         if !device.is_connected().await? {
             println!("    Connecting...");
-            device.connect().await?;
+            let mut retries = 2;
+            loop {
+                match device.connect().await {
+                    Ok(()) => break,
+                    Err(err) if retries > 0 => {
+                        println!("    Connect error: {}", &err);
+                        retries -= 1;
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
             println!("    Connected");
         } else {
             println!("    Already connected");
@@ -75,20 +89,26 @@ async fn main() -> blurz::Result<()> {
     pin_mut!(device_events);
 
     while let Some(evt) = device_events.next().await {
-        if let DeviceEvent::Added(addr) = evt {
-            let device = adapter.device(addr)?;
-            match find_our_characteristic(&device).await {
-                Ok(Some(char)) => {
-                    if let Err(err) = exercise_characteristic(&char).await {
-                        println!("    Characteristic exercise failed: {}", &err);
+        match evt {
+            DeviceEvent::Added(addr) => {
+                let device = adapter.device(addr)?;
+                match find_our_characteristic(&device).await {
+                    Ok(Some(char)) => {
+                        if let Err(err) = exercise_characteristic(&char).await {
+                            println!("    Characteristic exercise failed: {}", &err);
+                        }
+                    }
+                    Ok(None) => (),
+                    Err(err) => {
+                        println!("    Device failed: {}", &err);
+                        let _ = adapter.remove_device(device.address()).await;
                     }
                 }
-                Ok(None) => (),
-                Err(err) => {
-                    println!("    Device failed: {}", &err);
-                }
+                let _ = device.disconnect().await;
             }
-            let _ = device.disconnect().await;
+            DeviceEvent::Removed(addr) => {
+                println!("Device removed {}", addr);
+            }
         }
     }
 
