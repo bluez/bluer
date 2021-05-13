@@ -155,7 +155,7 @@ impl Adapter {
                 &self.dbus_path,
                 async move {
                     let filter = DiscoveryFilter {
-                        duplicate_data: true,
+                        duplicate_data: false,
                         transport: DiscoveryTransport::Auto,
                         ..Default::default()
                     };

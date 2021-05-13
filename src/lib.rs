@@ -610,8 +610,12 @@ impl PropertyEvent {
                 if tx.send(evt).await.is_err() {
                     break;
                 }
+                
+                // TODO: make sure this is singleton and matching end immediately
+                todo()
             }
 
+            println!("Removing match for {}", &path);
             let _ = connection.remove_match(msg_match.token()).await;
         });
 

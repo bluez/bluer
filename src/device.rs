@@ -113,6 +113,9 @@ impl Device {
         if self.is_services_resolved().await? {
             return Ok(());
         }
+        if !self.is_connected().await? {
+            return Err(Error::ServicesUnresolved);
+        }
 
         let timeout = sleep(TIMEOUT).fuse();
         pin_mut!(timeout);
@@ -120,13 +123,17 @@ impl Device {
         loop {
             select! {
                 change_opt = changes.next() => {
+                    dbg!(&change_opt);
                     match change_opt {
-                        Some(DeviceChanged {property: DeviceProperty::ServicesResolved(true), ..} ) => return Ok(()),
+                        Some(DeviceChanged {property: DeviceProperty::ServicesResolved(true), ..} ) => 
+                            return Ok(()),
+                        Some(DeviceChanged {property: DeviceProperty::Connected(false), ..} ) => 
+                            return Err(Error::ServicesUnresolved),
                         Some(_) => (),
                         None => break,
                     }
                 },
-                () = timeout => break,
+                () = &mut timeout => break,
             }
         }
 
