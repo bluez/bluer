@@ -1,7 +1,7 @@
 use dbus::{message::MatchRule, nonblock::SyncConnection};
 use dbus_crossroads::{Crossroads, IfaceToken};
 use dbus_tokio::connection;
-use futures::{channel::oneshot, lock::Mutex, Stream, StreamExt};
+use futures::{channel::oneshot, lock::Mutex, Future, Stream, StreamExt};
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -19,12 +19,51 @@ pub(crate) struct SessionInner {
     pub gatt_service_token: IfaceToken<Arc<gatt::local::Service>>,
     pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
     pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
+    pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub discovery_slots: Mutex<HashMap<String, oneshot::Receiver<()>>>,
-    pub notify_slots: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
+    pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
 }
 
 impl SessionInner {
-    //pub fn notify_session(path: &dbus::Path, start_fn: impl FnOnce(oneshot::Receiver<()>, oneshot::Sender<()>))
+    pub async fn single_session(
+        &self, path: &dbus::Path<'static>, start_fn: impl Future<Output = Result<()>>,
+        stop_fn: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<SingleSessionToken> {
+        let mut single_sessions = self.single_sessions.lock().await;
+
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(&path) {
+            match term_tx_weak.upgrade() {
+                Some(term_tx) => return Ok(SingleSessionToken(term_tx)),
+                None => {
+                    let _ = termed_rx.await;
+                }
+            }
+        }
+
+        start_fn.await?;
+
+        let (term_tx, term_rx) = oneshot::channel();
+        let term_tx = Arc::new(term_tx);
+        let (termed_tx, termed_rx) = oneshot::channel();
+        single_sessions.insert(path.clone(), (Arc::downgrade(&term_tx), termed_rx));
+
+        tokio::spawn(async move {
+            let _ = term_rx.await;
+            stop_fn.await;
+            let _ = termed_tx.send(());
+        });
+
+        Ok(SingleSessionToken(term_tx))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SingleSessionToken(Arc<oneshot::Sender<()>>);
+
+impl Drop for SingleSessionToken {
+    fn drop(&mut self) {
+        // required for drop order
+    }
 }
 
 /// Bluetooth session.
@@ -52,7 +91,6 @@ impl Session {
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);
-        //connection.request_name("io.crates.tokio-bluez", false, false, true).await?;
 
         let mut crossroads = Crossroads::new();
         crossroads.set_async_support(Some((
@@ -67,6 +105,7 @@ impl Session {
         let gatt_characteristic_token = gatt::local::Characteristic::register_interface(&mut crossroads);
         let gatt_characteristic_descriptor_token =
             gatt::local::CharacteristicDescriptor::register_interface(&mut crossroads);
+        let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
 
         let inner = Arc::new(SessionInner {
             connection: connection.clone(),
@@ -75,7 +114,9 @@ impl Session {
             gatt_service_token,
             gatt_characteristic_token,
             gatt_characteristic_descriptor_token,
+            gatt_profile_token,
             discovery_slots: Mutex::new(HashMap::new()),
+            single_sessions: Mutex::new(HashMap::new()),
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;

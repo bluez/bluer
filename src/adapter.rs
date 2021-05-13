@@ -235,6 +235,20 @@ impl Adapter {
         gatt_application.register(self.inner.clone(), self.name.clone()).await
     }
 
+    /// Registers local GATT profiles (GATT Client).    
+    ///
+    /// By registering this type of object
+    /// an application effectively indicates support for a specific GATT profile
+    /// and requests automatic connections to be established to devices
+    /// supporting it.
+    ///
+    /// Drop the returned `ProfileHandle` to unregister the application.
+    pub async fn register_gatt_profile(
+        &self, gatt_profile: gatt::local::Profile,
+    ) -> Result<gatt::local::ProfileHandle> {
+        gatt_profile.register(self.inner.clone(), self.name.clone()).await
+    }
+
     // ===========================================================================================
     // Methods
     // ===========================================================================================

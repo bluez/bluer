@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fmt,
     marker::PhantomData,
     mem::{swap, take},
@@ -22,7 +23,25 @@ use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
 use crate::{Adapter, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
-pub(crate) const GATT_PREFIX: &str = "/io/crates/tokio_bluez/gatt/";
+
+fn method_call<
+    T: Send + Sync + 'static,
+    R: AppendAll,
+    F: Future<Output = Result<R, dbus::MethodErr>> + Send + 'static,
+>(
+    mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
+) -> impl Future<Output = PhantomData<R>> {
+    let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
+    let data: Arc<T> = data_ref.clone();
+    async move {
+        let result = f(data).await;
+        ctx.reply(result)
+    }
+}
+
+// ===========================================================================================
+// Service
+// ===========================================================================================
 
 /// Local GATT service exposed over Bluetooth.
 pub struct Service {
@@ -46,6 +65,97 @@ impl Service {
             cr_property!(ib, "Primary", s => {
                 Some(s.primary)
             });
+        })
+    }
+}
+
+// ===========================================================================================
+// Characteristic
+// ===========================================================================================
+
+/// Local GATT characteristic exposed over Bluetooth.
+pub struct Characteristic {
+    /// 128-bit characteristic UUID.
+    pub uuid: Uuid,
+    /// Characteristic flags.
+    pub flags: CharacteristicFlags,
+    // /// Characteristic descriptors.
+    pub descriptors: Vec<CharacteristicDescriptor>,
+    /// Read value of characteristic.
+    pub read_value: Option<
+        Box<
+            dyn (Fn(
+                    ReadCharacteristicValueRequest,
+                ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ReadValueError>> + Send>>)
+                + Send
+                + Sync,
+        >,
+    >,
+    /// Write value of characteristic.
+    pub write_value: Option<
+        Box<
+            dyn Fn(
+                    Vec<u8>,
+                    WriteCharacteristicValueRequest,
+                ) -> Pin<Box<dyn Future<Output = Result<(), WriteValueError>> + Send>>
+                + Send
+                + Sync,
+        >,
+    >,
+    // /// Request value change notifications over provided channel.
+    // pub notify: Option<Box<dyn Fn(mpsc::Sender<()>) -> Result<(), NotifyError> + Send>>,
+    // TODO: file descriptors
+    // How to support notification session?
+    // Or can't we do that? as a server?
+    //
+}
+
+impl Characteristic {
+    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
+        cr.register("org.bluez.GattCharacteristic1", |ib: &mut IfaceBuilder<Arc<Self>>| {
+            cr_property!(ib, "UUID", c => {
+                Some(c.uuid.to_string())
+            });
+            cr_property!(ib, "Flags", c => {
+                Some(c.flags.to_vec())
+            });
+            ib.property("Service").get(|ctx, _| {
+                let mut comps: Vec<_> = ctx.path().split('/').collect();
+                comps.pop();
+                let service_path = dbus::Path::new(comps.join("/")).unwrap();
+                dbg!(&service_path);
+                Ok(service_path)
+            });
+            ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
+                method_call(ctx, cr, |c: Arc<Self>| async move {
+                    let options = ReadCharacteristicValueRequest::from_dict(&options)?;
+                    match &c.read_value {
+                        Some(read_value) => {
+                            let value = read_value(options).await?;
+                            Ok((value,))
+                        }
+                        None => Err(ReadValueError::NotSupported.into()),
+                    }
+                })
+            });
+            ib.method_with_cr_async(
+                "WriteValue",
+                ("value", "options"),
+                (),
+                |ctx, cr, (value, options): (Vec<u8>, PropMap)| {
+                    method_call(ctx, cr, |c: Arc<Self>| async move {
+                        //dbg!(&options);
+                        let options = WriteCharacteristicValueRequest::from_dict(&options)?;
+                        match &c.write_value {
+                            Some(write_value) => {
+                                write_value(value, options).await?;
+                                Ok(())
+                            }
+                            None => Err(WriteValueError::NotSupported.into()),
+                        }
+                    })
+                },
+            );
         })
     }
 }
@@ -171,107 +281,9 @@ impl From<NotifyError> for dbus::Error {
     }
 }
 
-/// Local GATT characteristic exposed over Bluetooth.
-pub struct Characteristic {
-    /// 128-bit characteristic UUID.
-    pub uuid: Uuid,
-    /// Characteristic flags.
-    pub flags: CharacteristicFlags,
-    // /// Characteristic descriptors.
-    pub descriptors: Vec<CharacteristicDescriptor>,
-    /// Read value of characteristic.
-    pub read_value: Option<
-        Box<
-            dyn (Fn(
-                    ReadCharacteristicValueRequest,
-                ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ReadValueError>> + Send>>)
-                + Send
-                + Sync,
-        >,
-    >,
-    /// Write value of characteristic.
-    pub write_value: Option<
-        Box<
-            dyn Fn(
-                    Vec<u8>,
-                    WriteCharacteristicValueRequest,
-                ) -> Pin<Box<dyn Future<Output = Result<(), WriteValueError>> + Send>>
-                + Send
-                + Sync,
-        >,
-    >,
-    // /// Request value change notifications over provided channel.
-    // pub notify: Option<Box<dyn Fn(mpsc::Sender<()>) -> Result<(), NotifyError> + Send>>,
-    // TODO: file descriptors
-    // How to support notification session?
-    // Or can't we do that? as a server?
-    //
-}
-
-fn method_call<
-    T: Send + Sync + 'static,
-    R: AppendAll,
-    F: Future<Output = Result<R, dbus::MethodErr>> + Send + 'static,
->(
-    mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
-) -> impl Future<Output = PhantomData<R>> {
-    let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
-    let data: Arc<T> = data_ref.clone();
-    async move {
-        let result = f(data).await;
-        ctx.reply(result)
-    }
-}
-
-impl Characteristic {
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register("org.bluez.GattCharacteristic1", |ib: &mut IfaceBuilder<Arc<Self>>| {
-            cr_property!(ib, "UUID", c => {
-                Some(c.uuid.to_string())
-            });
-            cr_property!(ib, "Flags", c => {
-                Some(c.flags.to_vec())
-            });
-            ib.property("Service").get(|ctx, _| {
-                let mut comps: Vec<_> = ctx.path().split('/').collect();
-                comps.pop();
-                let service_path = dbus::Path::new(comps.join("/")).unwrap();
-                dbg!(&service_path);
-                Ok(service_path)
-            });
-            ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
-                method_call(ctx, cr, |c: Arc<Self>| async move {
-                    let options = ReadCharacteristicValueRequest::from_dict(&options)?;
-                    match &c.read_value {
-                        Some(read_value) => {
-                            let value = read_value(options).await?;
-                            Ok((value,))
-                        }
-                        None => Err(ReadValueError::NotSupported.into()),
-                    }
-                })
-            });
-            ib.method_with_cr_async(
-                "WriteValue",
-                ("value", "options"),
-                (),
-                |ctx, cr, (value, options): (Vec<u8>, PropMap)| {
-                    method_call(ctx, cr, |c: Arc<Self>| async move {
-                        //dbg!(&options);
-                        let options = WriteCharacteristicValueRequest::from_dict(&options)?;
-                        match &c.write_value {
-                            Some(write_value) => {
-                                write_value(value, options).await?;
-                                Ok(())
-                            }
-                            None => Err(WriteValueError::NotSupported.into()),
-                        }
-                    })
-                },
-            );
-        })
-    }
-}
+// ===========================================================================================
+// Characteristic descriptor
+// ===========================================================================================
 
 /// Local GATT characteristic descriptor exposed over Bluetooth.
 pub struct CharacteristicDescriptor {
@@ -388,8 +400,15 @@ impl CharacteristicDescriptor {
     }
 }
 
-/// Local GATT application published over Bluetooth.
+// ===========================================================================================
+// Application
+// ===========================================================================================
+
+pub(crate) const GATT_APP_PREFIX: &str = "/io/crates/tokio_bluez/gatt/app/";
+
+/// Local GATT application to publish over Bluetooth.
 pub struct Application {
+    /// Services to publish.
     pub services: Vec<Service>,
 }
 
@@ -398,7 +417,7 @@ impl Application {
         mut self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ApplicationHandle> {
         let mut reg_paths = Vec::new();
-        let app_path = format!("{}{}", GATT_PREFIX, Uuid::new_v4().to_simple());
+        let app_path = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().to_simple());
         let app_path = dbus::Path::new(app_path).unwrap();
 
         {
@@ -406,7 +425,7 @@ impl Application {
 
             let services = take(&mut self.services);
             reg_paths.push(app_path.clone());
-            let om = cr.object_manager::<Application>();
+            let om = cr.object_manager::<Self>();
             cr.insert(app_path.clone(), &[om], self);
 
             for (service_idx, mut service) in services.into_iter().enumerate() {
@@ -457,6 +476,9 @@ impl Application {
     }
 }
 
+/// Local GATT application published over Bluetooth.
+///
+/// Drop this handle to unpublish.
 pub struct ApplicationHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
@@ -471,5 +493,88 @@ impl Drop for ApplicationHandle {
 impl fmt::Debug for ApplicationHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ApplicationHandle {{ {} }}", &self.name)
+    }
+}
+
+// ===========================================================================================
+// GATT profile
+// ===========================================================================================
+
+pub(crate) const GATT_PROFILE_PREFIX: &str = "/io/crates/tokio_bluez/gatt/profile/";
+
+/// Local profile (GATT client) instance.
+///
+/// By registering this type of object
+/// an application effectively indicates support for a specific GATT profile
+/// and requests automatic connections to be established to devices
+/// supporting it.
+pub struct Profile {
+    /// 128-bit GATT service UUIDs to auto connect.
+    pub uuids: HashSet<Uuid>,
+}
+
+impl Profile {
+    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
+        cr.register("org.bluez.GattProfile1", |ib: &mut IfaceBuilder<Self>| {
+            cr_property!(ib, "UUIDs", p => {
+                Some(p.uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
+            });
+        })
+    }
+
+    pub(crate) async fn register(
+        self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
+    ) -> crate::Result<ProfileHandle> {
+        let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().to_simple());
+        let profile_path = dbus::Path::new(profile_path).unwrap();
+
+        {
+            let mut cr = inner.crossroads.lock().await;
+            let om = cr.object_manager::<Self>();
+            cr.insert(profile_path.clone(), &[inner.gatt_profile_token, om], self);
+        }
+
+        let proxy =
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+        dbg!(&profile_path);
+        //future::pending::<()>().await;
+        proxy
+            .method_call(MANAGER_INTERFACE, "RegisterApplication", (profile_path.clone(), PropMap::new()))
+            .await?;
+
+        let (drop_tx, drop_rx) = oneshot::channel();
+        let profile_path_unreg = profile_path.clone();
+        tokio::spawn(async move {
+            let _ = drop_rx.await;
+
+            let _: std::result::Result<(), dbus::Error> = proxy
+                .method_call(MANAGER_INTERFACE, "UnregisterApplication", (profile_path_unreg.clone(),))
+                .await;
+
+            let mut cr = inner.crossroads.lock().await;
+            let _: Option<Self> = cr.remove(&profile_path_unreg);
+        });
+
+        Ok(ProfileHandle { name: profile_path, _drop_tx: drop_tx })
+    }
+}
+
+/// Published local profile (GATT client) instance.
+///
+/// Drop this handle to unpublish.
+pub struct ProfileHandle {
+    name: dbus::Path<'static>,
+    _drop_tx: oneshot::Sender<()>,
+}
+
+impl Drop for ProfileHandle {
+    fn drop(&mut self) {
+        // required for drop order
+    }
+}
+
+impl fmt::Debug for ProfileHandle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ProfileHandle {{ {} }}", &self.name)
     }
 }

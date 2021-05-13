@@ -12,14 +12,15 @@ use dbus::{
     MethodErr, Path,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::{channel::oneshot, future, Future, Stream};
+use futures::{channel::oneshot, future, Future, Stream, StreamExt};
 use strum::{Display, EnumString, IntoStaticStr};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
 use crate::{
-    all_dbus_objects, Adapter, Address, Device, Error, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT,
+    all_dbus_objects, Adapter, Address, Device, Error, ObjectEvent, PropertyEvent, Result, SessionInner,
+    SingleSessionToken, ERR_PREFIX, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
@@ -329,43 +330,49 @@ impl Characteristic {
 
     /// Starts a notification session from this characteristic
     /// if it supports value notifications or indications.    
+    ///
+    /// This will also notify after a read operation.
     pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>>> {
-        // So how do we implement this?
-        // The problem here is as before that we might have to share a notify session.
-        // Let's see how we handled this before.
-        // Problem here is race condition during session termination.
-        // So it would need two slots,
-        // one for send one for receive.
-        todo!()
+        let token = self.notify_session().await?;
+        let events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
+        let values = events.filter_map(move |evt| {
+            let _token = &token;
+            async move {
+                for property in CharacteristicProperty::from_prop_map(evt.changed) {
+                    if let CharacteristicProperty::CachedValue(value) = property {
+                        return Some(value);
+                    }
+                }
+                None
+            }
+        });
+        Ok(values)
     }
 
-    async fn notify_session(&self) -> Result<Arc<oneshot::Sender<()>>> {
-        let mut notify_slots = self.inner.notify_slots.lock().await;
-        if let Some((term_tx_weak, termed_rx)) = notify_slots.get_mut(&self.dbus_path) {
-            match term_tx_weak.upgrade() {
-                Some(term_tx) => return Ok(term_tx),
-                None => {
-                    let _ = termed_rx.await;
-                }
-            }
-        }
-
-        let (term_tx, term_rx) = oneshot::channel();
-        let (termed_tx, termed_rx) = oneshot::channel();
-
-        let term_tx = Arc::new(term_tx);
-        notify_slots.insert(self.dbus_path.clone(), (Arc::downgrade(&term_tx), termed_rx));
-
-        tokio::spawn(async move {});
-
-        Ok(term_tx)
+    async fn notify_session(&self) -> Result<SingleSessionToken> {
+        let dbus_path = self.dbus_path.clone();
+        let connection = self.inner.connection.clone();
+        self.inner
+            .single_session(
+                &self.dbus_path,
+                async move {
+                    self.call_method("StartNotify", ()).await?;
+                    Ok(())
+                },
+                async move {
+                    let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+                    let _: std::result::Result<(), dbus::Error> =
+                        proxy.method_call(CHARACTERISTIC_INTERFACE, "StopNotify", ()).await;
+                },
+            )
+            .await
     }
 
     dbus_interface!();
     dbus_default_interface!(CHARACTERISTIC_INTERFACE);
 }
 
-/// Read value request.
+/// Read characteristic value extended request.
 #[derive(Debug, Default, Clone)]
 pub struct ReadCharacteristicValueRequest {
     /// Offset.
@@ -380,7 +387,7 @@ impl ReadCharacteristicValueRequest {
     }
 }
 
-/// Write value request.
+/// Write characteristic value extended request.
 #[derive(Debug, Default, Clone)]
 pub struct WriteCharacteristicValueRequest {
     /// Start offset.
@@ -565,6 +572,69 @@ impl CharacteristicDescriptor {
 
     dbus_interface!();
     dbus_default_interface!(DESCRIPTOR_INTERFACE);
+
+    /// Issues a request to read the value of the
+    /// descriptor and returns the value if the
+    /// operation was successful.    
+    pub async fn read(&self) -> Result<Vec<u8>> {
+        self.read_ext(&ReadCharacteristicDescriptorValueRequest::default()).await
+    }
+
+    /// Issues a request to read the value of the
+    /// descriptor and returns the value if the
+    /// operation was successful.    
+    ///
+    /// Takes extended options for the read operation.
+    pub async fn read_ext(&self, req: &ReadCharacteristicDescriptorValueRequest) -> Result<Vec<u8>> {
+        let (value,): (Vec<u8>,) = self.call_method("ReadValue", (req.to_dict(),)).await?;
+        Ok(value)
+    }
+
+    /// Issues a request to write the value of the descriptor.
+    pub async fn write(&self, value: &[u8]) -> Result<()> {
+        self.write_ext(value, &WriteCharacteristicDescriptorValueRequest::default()).await
+    }
+
+    /// Issues a request to write the value of the descriptor.
+    ///
+    /// Takes extended options for the write operation.
+    pub async fn write_ext(&self, value: &[u8], req: &WriteCharacteristicDescriptorValueRequest) -> Result<()> {
+        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        Ok(())
+    }
+}
+
+/// Read characteristic descriptor value extended request.
+#[derive(Debug, Default, Clone)]
+pub struct ReadCharacteristicDescriptorValueRequest {
+    /// Offset.
+    pub offset: u16,
+}
+
+impl ReadCharacteristicDescriptorValueRequest {
+    fn to_dict(&self) -> PropMap {
+        let mut pm = PropMap::new();
+        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
+        pm
+    }
+}
+
+/// Write characteristic descriptor value extended request.
+#[derive(Debug, Default, Clone)]
+pub struct WriteCharacteristicDescriptorValueRequest {
+    /// Start offset.
+    pub offset: u16,
+    /// True if prepare authorization request.
+    pub prepare_authorize: bool,
+}
+
+impl WriteCharacteristicDescriptorValueRequest {
+    fn to_dict(&self) -> PropMap {
+        let mut pm = PropMap::new();
+        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
+        pm.insert("prepare-authorize".to_string(), Variant(self.prepare_authorize.box_clone()));
+        pm
+    }
 }
 
 define_properties!(
