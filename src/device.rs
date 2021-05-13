@@ -85,19 +85,6 @@ impl Device {
         self.address
     }
 
-    //     pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
-    //         let addata = bluetooth_utils::list_addata_2(&self.session.connection(), &self.object_path).await?;
-    //
-    //         if addata.is_empty() {
-    //             return Err(Box::from("No addata found."));
-    //         }
-    //         Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
-    //     }
-
-    // pub async fn get_gatt_services(&self) -> Result<Vec<String>> {
-    //     bluetooth_utils::list_services(&self.session.connection(), &self.object_path).await
-    // }
-
     /// Streams device property changes.
     pub async fn changes(&self) -> Result<impl Stream<Item = DeviceChanged>> {
         let mut events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;

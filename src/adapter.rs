@@ -93,15 +93,6 @@ impl Adapter {
         &self.name
     }
 
-    // pub async fn get_addata(&self) -> Result<BluetoothAdvertisingData<'_>> {
-    //     let addata = bluetooth_utils::list_addata_1(&self.session.get_connection(), &self.object_path).await?;
-    //
-    //     if addata.is_empty() {
-    //         return Err(Box::from("No addata found."));
-    //     }
-    //     Ok(BluetoothAdvertisingData::new(&self.session, &addata[0]))
-    // }
-
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
@@ -273,7 +264,7 @@ impl Adapter {
     /// services discovery will continue and any supported
     /// profile will be connected. There is no need for calling
     /// Connect on Device1 after this call. If connection was
-    /// successful this method returns object path to created
+    /// successful this method returns the created
     /// device object.
     ///
     /// Parameters that may be set in the filter dictionary
@@ -290,16 +281,15 @@ impl Adapter {
     ///     BR/EDR device is created.    
     ///
     /// This method is experimental.
-    pub async fn connect_device(
-        &self, address: Address, address_type: Option<AddressType>,
-    ) -> Result<Path<'static>> {
+    pub async fn connect_device(&self, address: Address, address_type: Option<AddressType>) -> Result<Device> {
         let mut m = HashMap::new();
         m.insert("Address", address.to_string());
         if let Some(address_type) = address_type {
             m.insert("AddressType", address_type.to_string());
         }
-        let (path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
-        Ok(path)
+        let (_path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
+
+        self.device(address)
     }
 }
 
