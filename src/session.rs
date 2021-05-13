@@ -1,3 +1,5 @@
+//! Bluetooth session.
+
 use dbus::{message::MatchRule, nonblock::SyncConnection};
 use dbus_crossroads::{Crossroads, IfaceToken};
 use dbus_tokio::connection;

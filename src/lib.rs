@@ -1,3 +1,5 @@
+//! Bluetooth library using Bluez.
+
 use dbus::{
     arg::{prop_cast, PropMap, RefArg, Variant},
     nonblock::{
@@ -310,24 +312,9 @@ mod adapter;
 mod advertising;
 mod device;
 pub mod gatt;
-//mod bluetooth_discovery_session;
-//mod bluetooth_event;
-//mod bluetooth_gatt_characteristic;
-//mod bluetooth_gatt_descriptor;
-//mod bluetooth_gatt_service;
-//mod bluetooth_le_advertising_data;
-//mod bluetooth_le_advertising_manager;
-//mod bluetooth_obex;
-//mod bluetooth_utils;
 mod session;
 
 pub use crate::{adapter::*, advertising::*, device::*, session::*};
-// pub use crate::bluetooth_gatt_characteristic::BluetoothGATTCharacteristic;
-// pub use crate::bluetooth_gatt_descriptor::BluetoothGATTDescriptor;
-// pub use crate::bluetooth_gatt_service::BluetoothGATTService;
-// pub use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-// pub use crate::bluetooth_le_advertising_manager::BluetoothAdvertisingManager;
-// pub use crate::bluetooth_obex::BluetoothOBEXSession;
 
 /// Bluetooth error.
 #[derive(Clone, Debug, Error, EnumString)]
@@ -424,7 +411,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Bluetooth address.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Address([u8; 6]);
+pub struct Address(pub [u8; 6]);
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -451,6 +438,18 @@ impl FromStr for Address {
             .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::InvalidAddress(s.to_string())))
             .collect::<Result<Vec<_>>>()?;
         Ok(Self(fields.try_into().map_err(|_| Error::InvalidAddress(s.to_string()))?))
+    }
+}
+
+impl From<[u8; 6]> for Address {
+    fn from(addr: [u8; 6]) -> Self {
+        Self(addr)
+    }
+}
+
+impl From<Address> for [u8; 6] {
+    fn from(addr: Address) -> Self {
+        addr.0
     }
 }
 

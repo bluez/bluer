@@ -1,3 +1,5 @@
+//! Bluetooth adapter.
+
 use dbus::{
     arg::{RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
@@ -17,12 +19,10 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device::Device, gatt, Address, AddressType, LeAdvertisement,
+    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Error, LeAdvertisement,
     LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities,
-    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, SessionInner, SERVICE_NAME, TIMEOUT,
+    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
 };
-//use crate::bluetooth_le_advertising_data::BluetoothAdvertisingData;
-use crate::{device, Error, Result};
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";

@@ -1,3 +1,5 @@
+//! Remote Bluetooth device.
+
 use dbus::{
     arg::{RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
@@ -12,7 +14,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapter, all_dbus_objects,
+    all_dbus_objects,
     gatt::{
         self,
         remote::{Service, SERVICE_INTERFACE},
