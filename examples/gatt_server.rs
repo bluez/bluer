@@ -1,5 +1,5 @@
 //! Serves a Bluetooth GATT application.
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use blurz::{gatt, LeAdvertisement};
 use futures::FutureExt;
@@ -20,8 +20,16 @@ async fn main() -> blurz::Result<()> {
 
     println!("Advertising on Bluetooth adapter {}: {}", &adapter_name, adapter.address().await?);
 
+    let mut manufacturer_data = BTreeMap::new();
+    manufacturer_data.insert(0xffff, vec![0x21, 0x22, 0x23, 0x24]);
+
+    // let mut service_data = BTreeMap::new();
+    // service_data.insert(service_uuid, vec![0x31, 0x32, 0x33, 0x34, 0x35]);
+
     let le_advertisement = LeAdvertisement {
         service_uuids: vec![service_uuid].into_iter().collect(),
+        manufacturer_data,
+        // service_data,
         discoverable: Some(true),
         local_name: Some("gatt_server".to_string()),
         ..Default::default()
