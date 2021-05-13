@@ -43,6 +43,7 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
 }
 
 async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
+    println!("    Characteristic flags: {:?}", char.flags().await?);
     println!("    Reading characteristic value");
     let value = char.read().await?;
     println!("    Read value: {:?}", &value);
