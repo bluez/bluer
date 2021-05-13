@@ -225,13 +225,13 @@ impl LeAdvertisement {
                 Some(la.service_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
             });
             cr_property!(ib, "ManufacturerData", la => {
-                Some(la.manufacturer_data.clone().into_iter().collect::<HashMap<_, _>>())
+                Some(la.manufacturer_data.clone().into_iter().map(|(k, v)| (k, Variant(v))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "SolicitUUIDs", la => {
                 Some(la.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
             });
             cr_property!(ib, "ServiceData", la => {
-                Some(la.service_data.iter().map(|(k, v)| (k.to_string(), v.clone())).collect::<HashMap<_, _>>())
+                Some(la.service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Data", la => {
                 Some(la.advertisting_data.clone().into_iter().collect::<HashMap<_, _>>())
