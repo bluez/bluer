@@ -1,4 +1,5 @@
 //! Connects to a Bluetooth GATT application.
+
 use blurz::{gatt::remote::Characteristic, Device, DeviceEvent, Result};
 use futures::{pin_mut, StreamExt};
 use uuid::Uuid;
@@ -14,9 +15,17 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
     if uuids.contains(&service_uuid) {
         println!("    Device provides our service!");
 
-        println!("    Connecting...");
-        device.connect().await?;
-        println!("    Connected");
+        if !device.is_connected().await? {
+            println!("    Connecting...");
+            device.connect().await?;
+            println!("    Connected");
+        } else {
+            println!("    Already connected");
+        }
+
+        println!("    Waiting for service resolution...");
+        device.wait_for_services_resolved().await?;
+        println!("    Services resolved");
 
         for service in device.services().await? {
             let uuid = service.uuid().await?;
@@ -34,9 +43,7 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
             }
         }
 
-        println!("    Disconnecting...");
-        device.disconnect().await?;
-        println!("    Disconnected");
+        println!("    Not found!");
     }
 
     Ok(None)
@@ -75,14 +82,13 @@ async fn main() -> blurz::Result<()> {
                     if let Err(err) = exercise_characteristic(&char).await {
                         println!("    Characteristic exercise failed: {}", &err);
                     }
-                    println!("    Disconnecting...");
-                    let _ = device.disconnect().await?;
                 }
                 Ok(None) => (),
                 Err(err) => {
                     println!("    Device failed: {}", &err);
                 }
             }
+            let _ = device.disconnect().await;
         }
     }
 

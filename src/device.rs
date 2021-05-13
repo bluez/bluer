@@ -5,12 +5,13 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{channel::mpsc, SinkExt, Stream, StreamExt};
+use futures::{channel::mpsc, pin_mut, select, FutureExt, SinkExt, Stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
     sync::Arc,
 };
+use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::{
@@ -106,9 +107,37 @@ impl Device {
         Ok(rx)
     }
 
+    /// Wait until remote GATT services are resolved.
+    pub async fn wait_for_services_resolved(&self) -> Result<()> {
+        let mut changes = self.changes().await?.fuse();
+        if self.is_services_resolved().await? {
+            return Ok(());
+        }
+
+        let timeout = sleep(TIMEOUT).fuse();
+        pin_mut!(timeout);
+
+        loop {
+            select! {
+                change_opt = changes.next() => {
+                    match change_opt {
+                        Some(DeviceChanged {property: DeviceProperty::ServicesResolved(true), ..} ) => return Ok(()),
+                        Some(_) => (),
+                        None => break,
+                    }
+                },
+                () = timeout => break,
+            }
+        }
+
+        Err(Error::ServicesUnresolved)
+    }
+
     /// Remote GATT services.
     ///
     /// The device must be connected for GATT services to be resolved.
+    /// Use `wait_for_services_resolved` after connecting to device to wait
+    /// until services have been resolved.
     pub async fn services(&self) -> Result<Vec<gatt::remote::Service>> {
         if !self.is_services_resolved().await? {
             return Err(Error::ServicesUnresolved);

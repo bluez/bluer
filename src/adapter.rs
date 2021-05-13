@@ -5,10 +5,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{
-    channel::{mpsc, oneshot},
-    stream, SinkExt, Stream, StreamExt,
-};
+use futures::{channel::mpsc, stream, SinkExt, Stream, StreamExt};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::{Debug, Formatter},

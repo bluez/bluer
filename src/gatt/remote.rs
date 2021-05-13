@@ -67,7 +67,7 @@ impl Service {
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16), &'a str)> {
         match Device::parse_dbus_path_prefix(path) {
-            Some(((adapter_name, device_address), p)) => match p.strip_prefix("service") {
+            Some(((adapter_name, device_address), p)) => match p.strip_prefix("/service") {
                 Some(p) => {
                     let sep = p.find('/').unwrap_or(p.len());
                     match u16::from_str_radix(&p[0..sep], 16) {
@@ -196,7 +196,7 @@ impl Characteristic {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, id)?,
+            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -208,14 +208,16 @@ impl Characteristic {
         Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
     }
 
-    pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<Path<'static>> {
-        let device_path = Device::dbus_path(adapter_name, device_address)?;
-        Ok(Path::new(format!("{}/char{:04x}", device_path, id)).unwrap())
+    pub(crate) fn dbus_path(
+        adapter_name: &str, device_address: Address, service_id: u16, id: u16,
+    ) -> Result<Path<'static>> {
+        let service_path = Service::dbus_path(adapter_name, device_address, service_id)?;
+        Ok(Path::new(format!("{}/char{:04x}", service_path, id)).unwrap())
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16, u16), &'a str)> {
         match Service::parse_dbus_path_prefix(path) {
-            Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("char") {
+            Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("/char") {
                 Some(p) => {
                     let sep = p.find('/').unwrap_or(p.len());
                     match u16::from_str_radix(&p[0..sep], 16) {
@@ -494,7 +496,7 @@ impl CharacteristicDescriptor {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, id)?,
+            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, characteristic_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -507,16 +509,18 @@ impl CharacteristicDescriptor {
         Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
     }
 
-    pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<Path<'static>> {
-        let device_path = Device::dbus_path(adapter_name, device_address)?;
-        Ok(Path::new(format!("{}/desc{:04x}", device_path, id)).unwrap())
+    pub(crate) fn dbus_path(
+        adapter_name: &str, device_address: Address, service_id: u16, characteristic_id: u16, id: u16,
+    ) -> Result<Path<'static>> {
+        let char_path = Characteristic::dbus_path(adapter_name, device_address, service_id, characteristic_id)?;
+        Ok(Path::new(format!("{}/desc{:04x}", char_path, id)).unwrap())
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(
         path: &'a Path,
     ) -> Option<((&'a str, Address, u16, u16, u16), &'a str)> {
         match Characteristic::parse_dbus_path_prefix(path) {
-            Some(((adapter_name, device_address, service_id, char_id), p)) => match p.strip_prefix("desc") {
+            Some(((adapter_name, device_address, service_id, char_id), p)) => match p.strip_prefix("/desc") {
                 Some(p) => {
                     let sep = p.find('/').unwrap_or(p.len());
                     match u16::from_str_radix(&p[0..sep], 16) {
