@@ -373,8 +373,6 @@ pub enum Error {
     InvalidValue,
     #[error("Key {0} is missing")]
     MissingKey(String),
-    #[error("Another Bluetooth device discovery is in progress")]
-    AnotherDiscoveryInProgress,
     #[error("GATT services have not been resolved for that Bluetooth device")]
     ServicesUnresolved,
     #[error("Bluetooth error: {0}")]

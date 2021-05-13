@@ -2,7 +2,7 @@
 
 use futures::{pin_mut, stream::SelectAll, StreamExt};
 
-use blurz::{Adapter, Address, DeviceEvent, DiscoveryFilter};
+use blurz::{Adapter, Address, DeviceEvent};
 
 async fn query_device(adapter: &Adapter, addr: Address) -> blurz::Result<()> {
     let device = adapter.device(addr)?;
@@ -30,8 +30,7 @@ async fn main() -> blurz::Result<()> {
     println!("Discovering devices using Bluetooth adapater {}\n", &adapter_name);
     let adapter = session.adapter(&adapter_name)?;
 
-    let _discovery_session = adapter.discover_devices(DiscoveryFilter::default()).await?;
-    let device_events = adapter.device_changes().await?;
+    let device_events = adapter.discover_devices().await?;
     pin_mut!(device_events);
 
     let mut all_change_events = SelectAll::new();

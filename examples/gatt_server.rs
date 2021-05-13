@@ -11,6 +11,7 @@ use tokio::{
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blurz::Result<()> {
     let service_uuid = "9643735b-c62e-4717-0000-61abaf5abc8e".parse().unwrap();
+    let characteristic_uuid = "9643735b-c62e-4717-0001-61abaf5abc8e".parse().unwrap();
 
     let session = blurz::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
@@ -40,7 +41,7 @@ async fn main() -> blurz::Result<()> {
             uuid: service_uuid,
             primary: true,
             characteristics: vec![gatt::local::Characteristic {
-                uuid: "9643735b-c62e-4717-0001-61abaf5abc8e".parse().unwrap(),
+                uuid: characteristic_uuid,
                 flags: flags,
                 descriptors: vec![],
                 read_value: Some(Box::new(|req| {

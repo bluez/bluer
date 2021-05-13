@@ -7,7 +7,7 @@ use dbus::{
 };
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt, Stream, StreamExt,
+    stream, SinkExt, Stream, StreamExt,
 };
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -21,7 +21,8 @@ use uuid::Uuid;
 use crate::{
     advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Error, LeAdvertisement,
     LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities,
-    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
+    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, Result, SessionInner, SingleSessionToken,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -39,15 +40,6 @@ impl Debug for Adapter {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "Adapter {{ name: {} }}", self.name())
     }
-}
-
-/// Bluetooth device event.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DeviceEvent {
-    /// Device added.
-    Added(Address),
-    /// Device removed.
-    Removed(Address),
 }
 
 impl Adapter {
@@ -138,35 +130,49 @@ impl Adapter {
 
     /// This method starts the device discovery session.
     ///
-    /// This
-    /// includes an inquiry procedure and remote device name
-    /// resolving.
+    /// This includes an inquiry procedure and remote device name resolving.
     ///
-    /// This process will start creating Device objects as
-    /// new devices are discovered.
-    /// During discovery RSSI delta-threshold is imposed.    
-    ///
-    /// When multiple clients create discovery sessions, their
-    /// filters are internally merged, and notifications about
-    /// new devices are sent to all clients. Therefore, each
-    /// client must check that device updates actually match
-    /// its filter.    
-    ///
-    /// Only one discovery session may be active per Bluetooth adapter.
-    /// Use the `device_events` method to get notified when a device is discovered.
-    /// Drop the `DeviceDiscovery` to stop the discovery process.
-    pub async fn discover_devices(&self, filter: DiscoveryFilter) -> Result<DeviceDiscovery> {
-        let mut discovery_slots = self.inner.discovery_slots.lock().await;
-        if let Some(mut rx) = discovery_slots.remove(&*self.name) {
-            if let Ok(None) = rx.try_recv() {
-                discovery_slots.insert((*self.name).clone(), rx);
-                return Err(Error::AnotherDiscoveryInProgress);
-            }
-        }
-        let (done_tx, done_rx) = oneshot::channel();
-        discovery_slots.insert((*self.name).clone(), done_rx);
+    /// This process will start streaming device addresses as new devices are discovered.
+    /// A device may be discovered multiple times.
+    /// All already known devices are also included in the device stream.
+    pub async fn discover_devices(&self) -> Result<impl Stream<Item = DeviceEvent>> {
+        let token = self.discovery_session().await?;
+        let change_events = self.device_changes().await?.map(move |evt| {
+            let _token = &token;
+            evt
+        });
 
-        DeviceDiscovery::new(self.inner.clone(), self.dbus_path.clone(), self.name.clone(), filter, done_tx).await
+        let known = self.device_addresses().await?;
+        let known_events = stream::iter(known).map(|addr| DeviceEvent::Added(addr));
+
+        let all_events = known_events.chain(change_events);
+
+        Ok(all_events)
+    }
+
+    async fn discovery_session(&self) -> Result<SingleSessionToken> {
+        let dbus_path = self.dbus_path.clone();
+        let connection = self.inner.connection.clone();
+        self.inner
+            .single_session(
+                &self.dbus_path,
+                async move {
+                    let filter = DiscoveryFilter {
+                        duplicate_data: true,
+                        transport: DiscoveryTransport::Auto,
+                        ..Default::default()
+                    };
+                    self.call_method("SetDiscoveryFilter", (filter.to_dict(),)).await?;
+                    self.call_method("StartDiscovery", ()).await?;
+                    Ok(())
+                },
+                async move {
+                    let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
+                    let _: std::result::Result<(), dbus::Error> =
+                        proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
+                },
+            )
+            .await
     }
 
     dbus_interface!();
@@ -557,9 +563,18 @@ pub struct AdapterChanged {
     pub property: AdapterProperty,
 }
 
+/// Bluetooth device event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DeviceEvent {
+    /// Bluetooth device with specified address was added.
+    Added(Address),
+    /// Bluetooth device with specified address was removed.
+    Removed(Address),
+}
+
 /// Transport parameter determines the type of scan.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
-pub enum DiscoveryTransport {
+pub(crate) enum DiscoveryTransport {
     /// interleaved scan
     #[strum(serialize = "auto")]
     Auto,
@@ -579,7 +594,7 @@ impl Default for DiscoveryTransport {
 
 /// Bluetooth device discovery filter.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DiscoveryFilter {
+pub(crate) struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match
     ///  _any_ UUID.
     ///
@@ -681,47 +696,5 @@ impl DiscoveryFilter {
             hm.insert("Pattern", Variant(Box::new(pattern)));
         }
         hm
-    }
-}
-
-/// Device discovery session.
-///
-/// Drop to stop discovery.
-pub struct DeviceDiscovery {
-    adapter_name: Arc<String>,
-    _term_tx: oneshot::Sender<()>,
-}
-
-impl Debug for DeviceDiscovery {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "DeviceDiscovery {{ adapter_name: {} }}", self.adapter_name)
-    }
-}
-
-impl DeviceDiscovery {
-    pub(crate) async fn new<'a>(
-        inner: Arc<SessionInner>, dbus_path: Path<'static>, adapter_name: Arc<String>, filter: DiscoveryFilter,
-        done_tx: oneshot::Sender<()>,
-    ) -> Result<Self> {
-        let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
-        proxy.method_call(INTERFACE, "SetDiscoveryFilter", (filter.to_dict(),)).await?;
-        proxy.method_call(INTERFACE, "StartDiscovery", ()).await?;
-
-        let (term_tx, term_rx) = oneshot::channel();
-        tokio::spawn(async move {
-            let _done_tx = done_tx;
-            let _ = term_rx.await;
-
-            let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*inner.connection);
-            let _: std::result::Result<(), dbus::Error> = proxy.method_call(INTERFACE, "StopDiscovery", ()).await;
-        });
-
-        Ok(Self { adapter_name, _term_tx: term_tx })
-    }
-}
-
-impl Drop for DeviceDiscovery {
-    fn drop(&mut self) {
-        // required for drop order
     }
 }

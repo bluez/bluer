@@ -22,7 +22,6 @@ pub(crate) struct SessionInner {
     pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
     pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
-    pub discovery_slots: Mutex<HashMap<String, oneshot::Receiver<()>>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
 }
 
@@ -117,7 +116,6 @@ impl Session {
             gatt_characteristic_token,
             gatt_characteristic_descriptor_token,
             gatt_profile_token,
-            discovery_slots: Mutex::new(HashMap::new()),
             single_sessions: Mutex::new(HashMap::new()),
         });
 

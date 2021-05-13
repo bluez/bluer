@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::time::sleep;
 
-use blurz::{Adapter, Address, DeviceChanged, DeviceEvent, DiscoveryFilter};
+use blurz::{Adapter, Address, DeviceChanged, DeviceEvent};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -48,19 +48,11 @@ impl DeviceMonitor {
     }
 
     async fn perform(&mut self) -> Result<()> {
-        let _discovery_session = self.adapter.discover_devices(DiscoveryFilter::default()).await?;
-
         let mut all_change_events = SelectAll::new();
-        let device_events = self.adapter.device_changes().await?;
+        let device_events = self.adapter.discover_devices().await?;
         pin_mut!(device_events);
 
         let mut next_update = sleep(UPDATE_INTERVAL).boxed();
-
-        for addr in self.adapter.device_addresses().await? {
-            self.add_device(addr).await;
-            let device = self.adapter.device(addr)?;
-            all_change_events.push(device.changes().await?);
-        }
 
         loop {
             tokio::select! {
