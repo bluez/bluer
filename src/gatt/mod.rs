@@ -1,3 +1,5 @@
+//! GATT services.
+
 use strum::{Display, EnumString};
 
 pub mod local;

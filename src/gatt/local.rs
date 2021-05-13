@@ -1,22 +1,15 @@
-use std::{
-    collections::HashSet,
-    fmt,
-    marker::PhantomData,
-    mem::{swap, take},
-    pin::Pin,
-    sync::Arc,
-};
+//! Local GATT services.
 
 use dbus::{
-    arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
+    arg::{AppendAll, PropMap},
     nonblock::Proxy,
     MethodErr,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::{channel::oneshot, future, Future};
-use strum::{Display, EnumString, IntoStaticStr};
+use futures::{channel::oneshot, Future};
+use std::{collections::HashSet, fmt, marker::PhantomData, mem::take, pin::Pin, sync::Arc};
+use strum::IntoStaticStr;
 use thiserror::Error;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
@@ -44,6 +37,7 @@ fn method_call<
 // ===========================================================================================
 
 /// Local GATT service exposed over Bluetooth.
+#[derive(Debug)]
 pub struct Service {
     /// 128-bit service UUID.
     pub uuid: Uuid,
@@ -108,6 +102,13 @@ pub struct Characteristic {
     // How to support notification session?
     // Or can't we do that? as a server?
     //
+}
+
+impl fmt::Debug for Characteristic {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Characteristic {{ uuid: {:?}, flags: {:?}, descriptors: {:?}, read_value: {:?}, write_value: {:?} }}",
+            &self.uuid, &self.flags, &self.descriptors, self.read_value.is_some(), self.write_value.is_some())
+    }
 }
 
 impl Characteristic {
@@ -314,39 +315,16 @@ pub struct CharacteristicDescriptor {
     >,
 }
 
-/// Read characteristic value request.
-#[derive(Debug, Clone)]
-pub struct ReadCharacteristicDescriptorValueRequest {
-    /// Offset.
-    pub offset: u16,
-    /// Link type.
-    pub link: String, // TODO
-}
-
-impl ReadCharacteristicDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self { offset: read_prop!(dict, "offset", u16), link: read_prop!(dict, "link", String) })
-    }
-}
-
-/// Write characteristic value request.
-#[derive(Debug, Clone)]
-pub struct WriteCharacteristicDescriptorValueRequest {
-    /// Offset.
-    pub offset: u16,
-    /// Link type.
-    pub link: String, // TODO
-    /// Is prepare authorization request?
-    pub prepare_authorize: bool,
-}
-
-impl WriteCharacteristicDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self {
-            offset: read_prop!(dict, "offset", u16),
-            link: read_prop!(dict, "link", String),
-            prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
-        })
+impl fmt::Debug for CharacteristicDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CharacteristicDescriptor {{ uuid: {:?}, flags: {:?}, read_value: {:?}, write_value: {:?} }}",
+            &self.uuid,
+            &self.flags,
+            self.read_value.is_some(),
+            self.write_value.is_some()
+        )
     }
 }
 
@@ -400,6 +378,42 @@ impl CharacteristicDescriptor {
     }
 }
 
+/// Read characteristic value request.
+#[derive(Debug, Clone)]
+pub struct ReadCharacteristicDescriptorValueRequest {
+    /// Offset.
+    pub offset: u16,
+    /// Link type.
+    pub link: String, // TODO
+}
+
+impl ReadCharacteristicDescriptorValueRequest {
+    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+        Ok(Self { offset: read_prop!(dict, "offset", u16), link: read_prop!(dict, "link", String) })
+    }
+}
+
+/// Write characteristic value request.
+#[derive(Debug, Clone)]
+pub struct WriteCharacteristicDescriptorValueRequest {
+    /// Offset.
+    pub offset: u16,
+    /// Link type.
+    pub link: String, // TODO
+    /// Is prepare authorization request?
+    pub prepare_authorize: bool,
+}
+
+impl WriteCharacteristicDescriptorValueRequest {
+    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+        Ok(Self {
+            offset: read_prop!(dict, "offset", u16),
+            link: read_prop!(dict, "link", String),
+            prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
+        })
+    }
+}
+
 // ===========================================================================================
 // Application
 // ===========================================================================================
@@ -407,6 +421,7 @@ impl CharacteristicDescriptor {
 pub(crate) const GATT_APP_PREFIX: &str = "/io/crates/tokio_bluez/gatt/app/";
 
 /// Local GATT application to publish over Bluetooth.
+#[derive(Debug)]
 pub struct Application {
     /// Services to publish.
     pub services: Vec<Service>,
@@ -508,6 +523,7 @@ pub(crate) const GATT_PROFILE_PREFIX: &str = "/io/crates/tokio_bluez/gatt/profil
 /// an application effectively indicates support for a specific GATT profile
 /// and requests automatic connections to be established to devices
 /// supporting it.
+#[derive(Debug, Clone)]
 pub struct Profile {
     /// 128-bit GATT service UUIDs to auto connect.
     pub uuids: HashSet<Uuid>,

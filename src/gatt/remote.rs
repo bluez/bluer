@@ -1,35 +1,25 @@
-use std::{
-    fmt,
-    marker::PhantomData,
-    mem::{swap, take},
-    pin::Pin,
-    sync::{Arc, Weak},
-};
+//! Remote GATT services.
 
 use dbus::{
-    arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
+    arg::{PropMap, RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
-    MethodErr, Path,
+    Path,
 };
-use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::{channel::oneshot, future, Future, Stream, StreamExt};
-use strum::{Display, EnumString, IntoStaticStr};
-use tokio::sync::mpsc;
+use futures::{Stream, StreamExt};
+use std::{fmt, sync::Arc};
 use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
 use crate::{
-    all_dbus_objects, Adapter, Address, Device, Error, ObjectEvent, PropertyEvent, Result, SessionInner,
-    SingleSessionToken, ERR_PREFIX, SERVICE_NAME, TIMEOUT,
+    all_dbus_objects, Address, Device, Error, PropertyEvent, Result, SessionInner, SingleSessionToken,
+    SERVICE_NAME, TIMEOUT,
 };
-
-pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
-pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
-pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 
 // ===========================================================================================
 // Service
 // ===========================================================================================
+
+pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 
 /// Interface to remote GATT service connected over Bluetooth.
 #[derive(Clone)]
@@ -173,6 +163,8 @@ define_properties!(
 // ===========================================================================================
 // Characteristic
 // ===========================================================================================
+
+pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 
 /// Interface to remote GATT characteristic connected over Bluetooth.
 #[derive(Clone)]
@@ -473,6 +465,8 @@ define_properties!(
 // ===========================================================================================
 // Characteristic descriptor
 // ===========================================================================================
+
+pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 
 /// Interface to remote GATT characteristic descriptor connected over Bluetooth.
 #[derive(Clone)]
