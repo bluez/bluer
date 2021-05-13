@@ -21,7 +21,7 @@ async fn main() -> blurz::Result<()> {
     println!("Advertising on Bluetooth adapter {}: {}", &adapter_name, adapter.address().await?);
 
     let mut manufacturer_data = BTreeMap::new();
-    manufacturer_data.insert(0xffff, vec![0x21, 0x22, 0x23, 0x24]);
+    manufacturer_data.insert(0xffff, vec![0x21, 0x22, 0x23, 102]);
 
     // let mut service_data = BTreeMap::new();
     // service_data.insert(service_uuid, vec![0x31, 0x32, 0x33, 0x34, 0x35]);
