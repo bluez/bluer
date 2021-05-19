@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
 use crate::{
-    all_dbus_objects, Address, Device, Error, PropertyEvent, Result, SessionInner, SingleSessionToken,
-    SERVICE_NAME, TIMEOUT,
+    all_dbus_objects, Address, Device, Error, Event, Result, SessionInner, SingleSessionToken, SERVICE_NAME,
+    TIMEOUT,
 };
 
 // ===========================================================================================
@@ -328,13 +328,15 @@ impl Characteristic {
     /// This will also notify after a read operation.
     pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>>> {
         let token = self.notify_session().await?;
-        let events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
+        let events = self.inner.events(self.dbus_path.clone()).await?;
         let values = events.filter_map(move |evt| {
             let _token = &token;
             async move {
-                for property in CharacteristicProperty::from_prop_map(evt.changed) {
-                    if let CharacteristicProperty::CachedValue(value) = property {
-                        return Some(value);
+                if let Event::PropertiesChanged { changed, .. } = evt {
+                    for property in CharacteristicProperty::from_prop_map(changed) {
+                        if let CharacteristicProperty::CachedValue(value) = property {
+                            return Some(value);
+                        }
                     }
                 }
                 None

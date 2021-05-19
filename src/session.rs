@@ -1,17 +1,32 @@
 //! Bluetooth session.
 
-use dbus::{message::MatchRule, nonblock::SyncConnection};
+use dbus::{
+    message::MatchRule,
+    nonblock::{
+        stdintf::org_freedesktop_dbus::{
+            ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved, PropertiesPropertiesChanged,
+        },
+        SyncConnection,
+    },
+    strings::BusName,
+    Message,
+};
 use dbus_crossroads::{Crossroads, IfaceToken};
 use dbus_tokio::connection;
-use futures::{channel::oneshot, lock::Mutex, Future, Stream, StreamExt};
+use futures::{
+    channel::{mpsc, oneshot},
+    lock::Mutex,
+    Future, SinkExt, Stream, StreamExt,
+};
+use lazy_static::lazy_static;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::{Debug, Formatter},
     sync::{Arc, Weak},
 };
-use tokio::task::spawn_blocking;
+use tokio::{select, task::spawn_blocking};
 
-use crate::{adapter, all_dbus_objects, gatt, Adapter, LeAdvertisement, ObjectEvent, Result};
+use crate::{adapter, all_dbus_objects, gatt, Adapter, Error, LeAdvertisement, Result, SERVICE_NAME};
 
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
@@ -23,6 +38,7 @@ pub(crate) struct SessionInner {
     pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
+    pub event_sub_tx: mpsc::Sender<SubscribeEvents>,
 }
 
 impl SessionInner {
@@ -56,6 +72,10 @@ impl SessionInner {
 
         Ok(SingleSessionToken(term_tx))
     }
+
+    pub async fn events(&self, path: dbus::Path<'static>) -> Result<mpsc::UnboundedReceiver<Event>> {
+        Event::subscribe(&mut self.event_sub_tx.clone(), path).await
+    }
 }
 
 #[derive(Clone)]
@@ -80,11 +100,11 @@ impl Debug for Session {
 
 /// Bluetooth adapter event.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AdapterEvent {
+pub enum SessionEvent {
     /// Adapter added.
-    Added(String),
+    AdapterAdded(String),
     /// Adapter removed.
-    Removed(String),
+    AdapterRemoved(String),
 }
 
 impl Session {
@@ -108,6 +128,9 @@ impl Session {
             gatt::local::CharacteristicDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
 
+        let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
+        Event::handle_connection(connection.clone(), event_sub_rx).await?;
+
         let inner = Arc::new(SessionInner {
             connection: connection.clone(),
             crossroads: Mutex::new(crossroads),
@@ -117,6 +140,7 @@ impl Session {
             gatt_characteristic_descriptor_token,
             gatt_profile_token,
             single_sessions: Mutex::new(HashMap::new()),
+            event_sub_tx,
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;
@@ -152,23 +176,23 @@ impl Session {
     }
 
     /// Stream adapter added and removed events.
-    pub async fn adapter_events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
-        let obj_events = ObjectEvent::stream(self.inner.connection.clone(), None).await?;
+    pub async fn events(&self) -> Result<impl Stream<Item = SessionEvent>> {
+        let obj_events = self.inner.events("/".into()).await?;
         let events = obj_events.filter_map(|evt| async move {
             match evt {
-                ObjectEvent::Added { object, interfaces }
+                Event::ObjectAdded { object, interfaces }
                     if interfaces.iter().any(|i| i == adapter::INTERFACE) =>
                 {
                     match Adapter::parse_dbus_path(&object) {
-                        Some(name) => Some(AdapterEvent::Added(name.to_string())),
+                        Some(name) => Some(SessionEvent::AdapterAdded(name.to_string())),
                         None => None,
                     }
                 }
-                ObjectEvent::Removed { object, interfaces }
+                Event::ObjectRemoved { object, interfaces }
                     if interfaces.iter().any(|i| i == adapter::INTERFACE) =>
                 {
                     match Adapter::parse_dbus_path(&object) {
-                        Some(name) => Some(AdapterEvent::Removed(name.to_string())),
+                        Some(name) => Some(SessionEvent::AdapterRemoved(name.to_string())),
                         None => None,
                     }
                 }
@@ -177,4 +201,136 @@ impl Session {
         });
         Ok(events)
     }
+}
+
+/// A D-Bus object or property event.
+#[derive(Debug)]
+pub(crate) enum Event {
+    /// Object or object interfaces added.
+    ObjectAdded { object: dbus::Path<'static>, interfaces: HashSet<String> },
+    /// Object or object interfaces removed.
+    ObjectRemoved { object: dbus::Path<'static>, interfaces: HashSet<String> },
+    /// Properties changed.
+    PropertiesChanged { object: dbus::Path<'static>, interface: String, changed: dbus::arg::PropMap },
+}
+
+impl Event {
+    /// Spawns a task that handles events for the specified connection.
+    pub(crate) async fn handle_connection(
+        connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<SubscribeEvents>,
+    ) -> Result<()> {
+        use dbus::message::SignalArgs;
+        lazy_static! {
+            static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
+            static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
+        }
+
+        let (msg_tx, mut msg_rx) = mpsc::unbounded();
+        let handle_msg = move |msg: Message| {
+            let _ = msg_tx.unbounded_send(msg);
+            true
+        };
+
+        let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None);
+        let msg_match_add = connection.add_match(rule_add).await?.msg_cb(handle_msg.clone());
+
+        let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None);
+        let msg_match_removed = connection.add_match(rule_removed).await?.msg_cb(handle_msg.clone());
+
+        let rule_prop = PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, None);
+        let msg_match_prop = connection.add_match(rule_prop).await?.msg_cb(handle_msg.clone());
+
+        tokio::spawn(async move {
+            let mut subs: Vec<SubscribeEvents> = Vec::new();
+
+            loop {
+                select! {
+                    msg_opt = msg_rx.next() => {
+                        match msg_opt {
+                            Some(msg) => {
+                                let mut keep = Vec::new();
+                                for sub in subs {
+                                    let mut force_remove = false;
+                                    let evt = {
+                                        if let Some(ObjectManagerInterfacesAdded { object, interfaces }) = ObjectManagerInterfacesAdded::from_message(&msg) {
+                                            if object.starts_with(&sub.path.to_string()) {
+                                                Some(Self::ObjectAdded {
+                                                    object,
+                                                    interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                                                })
+                                            } else {
+                                                None
+                                            }
+                                        } else if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) = ObjectManagerInterfacesRemoved::from_message(&msg) {
+                                            if object.starts_with(&sub.path.to_string()) {
+                                                force_remove = object == sub.path;
+                                                Some(Self::ObjectRemoved { object, interfaces: interfaces.into_iter().collect() })
+                                            } else {
+                                                None
+                                            }
+                                        } else if let Some(PropertiesPropertiesChanged { interface_name, changed_properties, .. }) = PropertiesPropertiesChanged::from_message(&msg) {
+                                            match msg.path() {
+                                                Some(object) if object == sub.path =>
+                                                    Some(Self::PropertiesChanged { object: sub.path.clone(), interface: interface_name, changed: changed_properties }),
+                                                _ => None,
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    };
+
+                                    let sent_ok = match evt {
+                                        Some(evt) => sub.tx.unbounded_send(evt).is_ok(),
+                                        None => true,
+                                    };
+
+                                    if sent_ok && !force_remove {
+                                        keep.push(sub);
+                                    }
+                                }
+                                subs = keep;
+                            },
+                            None => break,
+                        }
+                    },
+                    sub_opt = sub_rx.next() => {
+                        match sub_opt {
+                            Some(mut sub) => {
+                                if let Some(ready_tx) = sub.ready_tx.take() {
+                                    let _ = ready_tx.send(());
+                                }
+                                subs.push(sub);
+                            }
+                            None => break,
+                        }
+                    }
+                }
+            }
+
+            let _ = connection.remove_match(msg_match_add.token()).await;
+            let _ = connection.remove_match(msg_match_removed.token()).await;
+            let _ = connection.remove_match(msg_match_prop.token()).await;
+        });
+
+        Ok(())
+    }
+
+    pub(crate) async fn subscribe(
+        sub_tx: &mut mpsc::Sender<SubscribeEvents>, path: dbus::Path<'static>,
+    ) -> Result<mpsc::UnboundedReceiver<Event>> {
+        let (tx, rx) = mpsc::unbounded();
+        let (ready_tx, ready_rx) = oneshot::channel();
+        sub_tx
+            .send(SubscribeEvents { path, tx, ready_tx: Some(ready_tx) })
+            .await
+            .map_err(|_| Error::DBusConnectionLost)?;
+        ready_rx.await.map_err(|_| Error::DBusConnectionLost)?;
+        Ok(rx)
+    }
+}
+
+pub(crate) struct SubscribeEvents {
+    path: dbus::Path<'static>,
+    tx: mpsc::UnboundedSender<Event>,
+    ready_tx: Option<oneshot::Sender<()>>,
 }

@@ -5,7 +5,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{channel::mpsc, stream, SinkExt, Stream, StreamExt};
+use futures::{stream, Stream, StreamExt};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::{Debug, Formatter},
@@ -16,9 +16,9 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Error, LeAdvertisement,
-    LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel, LeAdvertisingCapabilities,
-    LeAdvertisingFeature, Modalias, ObjectEvent, PropertyEvent, Result, SessionInner, SingleSessionToken,
+    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Error, Event,
+    LeAdvertisement, LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel,
+    LeAdvertisingCapabilities, LeAdvertisingFeature, Modalias, Result, SessionInner, SingleSessionToken,
     SERVICE_NAME, TIMEOUT,
 };
 
@@ -101,30 +101,6 @@ impl Adapter {
         Device::new(self.inner.clone(), self.name.clone(), address)
     }
 
-    /// Stream device added and removed events.
-    pub async fn device_changes(&self) -> Result<impl Stream<Item = DeviceEvent>> {
-        let adapter_path = self.dbus_path.clone().into_static();
-        let obj_events = ObjectEvent::stream(self.inner.connection.clone(), Some(adapter_path.clone())).await?;
-
-        let my_name = self.name.clone();
-        let events = obj_events.filter_map(move |evt| {
-            let my_name = my_name.clone();
-            async move {
-                match evt {
-                    ObjectEvent::Added { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Added(address)),
-                        _ => None,
-                    },
-                    ObjectEvent::Removed { object, .. } => match Device::parse_dbus_path(&object) {
-                        Some((adapter, address)) if adapter == *my_name => Some(DeviceEvent::Removed(address)),
-                        _ => None,
-                    },
-                }
-            }
-        });
-        Ok(events)
-    }
-
     /// This method starts the device discovery session.
     ///
     /// This includes an inquiry procedure and remote device name resolving.
@@ -132,15 +108,15 @@ impl Adapter {
     /// This process will start streaming device addresses as new devices are discovered.
     /// A device may be discovered multiple times.
     /// All already known devices are also included in the device stream.
-    pub async fn discover_devices(&self) -> Result<impl Stream<Item = DeviceEvent>> {
+    pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let token = self.discovery_session().await?;
-        let change_events = self.device_changes().await?.map(move |evt| {
+        let change_events = self.events().await?.map(move |evt| {
             let _token = &token;
             evt
         });
 
         let known = self.device_addresses().await?;
-        let known_events = stream::iter(known).map(|addr| DeviceEvent::Added(addr));
+        let known_events = stream::iter(known).map(|addr| AdapterEvent::DeviceAdded(addr));
 
         let all_events = known_events.chain(change_events);
 
@@ -175,23 +151,29 @@ impl Adapter {
     dbus_interface!();
     dbus_default_interface!(INTERFACE);
 
-    /// Streams adapter property changes.
-    pub async fn changes(&self) -> Result<impl Stream<Item = AdapterChanged>> {
-        let mut events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
-
-        let (mut tx, rx) = mpsc::unbounded();
+    /// Streams adapter property and device changes.
+    pub async fn events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let name = self.name.clone();
-        tokio::spawn(async move {
-            while let Some(event) = events.next().await {
-                for property in AdapterProperty::from_prop_map(event.changed) {
-                    if tx.send(AdapterChanged { name: name.clone(), property }).await.is_err() {
-                        break;
-                    }
+        let events = self.inner.events(self.dbus_path.clone()).await?;
+        let stream = events.flat_map(move |event| match event {
+            Event::ObjectAdded { object, .. } => match Device::parse_dbus_path(&object) {
+                Some((adapter, address)) if adapter == *name => {
+                    stream::once(async move { AdapterEvent::DeviceAdded(address) }).boxed()
                 }
-            }
+                _ => stream::empty().boxed(),
+            },
+            Event::ObjectRemoved { object, .. } => match Device::parse_dbus_path(&object) {
+                Some((adapter, address)) if adapter == *name => {
+                    stream::once(async move { AdapterEvent::DeviceRemoved(address) }).boxed()
+                }
+                _ => stream::empty().boxed(),
+            },
+            Event::PropertiesChanged { changed, .. } => stream::iter(
+                AdapterProperty::from_prop_map(changed).into_iter().map(AdapterEvent::PropertyChanged),
+            )
+            .boxed(),
         });
-
-        Ok(rx)
+        Ok(stream)
     }
 
     /// Registers an advertisement object to be sent over the LE
@@ -551,22 +533,15 @@ define_properties!(
     }
 );
 
-/// Bluetooth adapter property change event.
-#[derive(Debug, Clone)]
-pub struct AdapterChanged {
-    /// Name of changed Bluetooth adapter.
-    pub name: Arc<String>,
-    /// Changed property.
-    pub property: AdapterProperty,
-}
-
 /// Bluetooth device event.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DeviceEvent {
+#[derive(Clone, Debug)]
+pub enum AdapterEvent {
     /// Bluetooth device with specified address was added.
-    Added(Address),
+    DeviceAdded(Address),
     /// Bluetooth device with specified address was removed.
-    Removed(Address),
+    DeviceRemoved(Address),
+    /// Bluetooth adapter property changed.
+    PropertyChanged(AdapterProperty),
 }
 
 /// Transport parameter determines the type of scan.

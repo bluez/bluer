@@ -5,7 +5,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{channel::mpsc, pin_mut, select, FutureExt, SinkExt, Stream, StreamExt};
+use futures::{pin_mut, select, stream, FutureExt, Stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -20,7 +20,7 @@ use crate::{
         self,
         remote::{Service, SERVICE_INTERFACE},
     },
-    Adapter, Address, AddressType, Error, Modalias, PropertyEvent, Result, SessionInner, SERVICE_NAME, TIMEOUT,
+    Adapter, Address, AddressType, Error, Event, Modalias, Result, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -89,27 +89,22 @@ impl Device {
     }
 
     /// Streams device property changes.
-    pub async fn changes(&self) -> Result<impl Stream<Item = DeviceChanged>> {
-        let mut events = PropertyEvent::stream(self.inner.connection.clone(), self.dbus_path.clone()).await?;
-
-        let (mut tx, rx) = mpsc::unbounded();
-        let address = self.address;
-        tokio::spawn(async move {
-            while let Some(event) = events.next().await {
-                for property in DeviceProperty::from_prop_map(event.changed) {
-                    if tx.send(DeviceChanged { address, property }).await.is_err() {
-                        break;
-                    }
-                }
+    pub async fn events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
+        let events = self.inner.events(self.dbus_path.clone()).await?;
+        let stream = events.flat_map(move |event| match event {
+            Event::PropertiesChanged { changed, .. } => {
+                stream::iter(DeviceProperty::from_prop_map(changed).into_iter().map(DeviceEvent::PropertyChanged))
+                    .boxed()
             }
+            _ => stream::empty().boxed(),
         });
 
-        Ok(rx)
+        Ok(stream)
     }
 
     /// Wait until remote GATT services are resolved.
     pub async fn wait_for_services_resolved(&self) -> Result<()> {
-        let mut changes = self.changes().await?.fuse();
+        let mut changes = self.events().await?.fuse();
         if self.is_services_resolved().await? {
             return Ok(());
         }
@@ -125,9 +120,9 @@ impl Device {
                 change_opt = changes.next() => {
                     dbg!(&change_opt);
                     match change_opt {
-                        Some(DeviceChanged {property: DeviceProperty::ServicesResolved(true), ..} ) => 
+                        Some(DeviceEvent::PropertyChanged (DeviceProperty::ServicesResolved(true)) ) =>
                             return Ok(()),
-                        Some(DeviceChanged {property: DeviceProperty::Connected(false), ..} ) => 
+                        Some(DeviceEvent::PropertyChanged (DeviceProperty::Connected(false)) ) =>
                             return Err(Error::ServicesUnresolved),
                         Some(_) => (),
                         None => break,
@@ -515,11 +510,9 @@ define_properties!(
     }
 );
 
-/// Bluetooth device property change event.
+/// Bluetooth device event.
 #[derive(Debug, Clone)]
-pub struct DeviceChanged {
-    /// Bluetooth address of changed Bluetooth device.
-    pub address: Address,
-    /// Changed property.
-    pub property: DeviceProperty,
+pub enum DeviceEvent {
+    /// Property changed.
+    PropertyChanged(DeviceProperty),
 }

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use blurz::{gatt::remote::Characteristic, Device, DeviceEvent, Result};
+use blurz::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
 use futures::{pin_mut, StreamExt};
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -90,7 +90,7 @@ async fn main() -> blurz::Result<()> {
 
     while let Some(evt) = device_events.next().await {
         match evt {
-            DeviceEvent::Added(addr) => {
+            AdapterEvent::DeviceAdded(addr) => {
                 let device = adapter.device(addr)?;
                 match find_our_characteristic(&device).await {
                     Ok(Some(char)) => {
@@ -106,9 +106,10 @@ async fn main() -> blurz::Result<()> {
                 }
                 let _ = device.disconnect().await;
             }
-            DeviceEvent::Removed(addr) => {
+            AdapterEvent::DeviceRemoved(addr) => {
                 println!("Device removed {}", addr);
             }
+            _ => (),
         }
     }
 

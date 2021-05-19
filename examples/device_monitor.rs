@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::time::sleep;
 
-use blurz::{Adapter, Address, DeviceChanged, DeviceEvent};
+use blurz::{Adapter, AdapterEvent, Address};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -58,15 +58,17 @@ impl DeviceMonitor {
             tokio::select! {
                 Some(device_event) = device_events.next() => {
                     match device_event {
-                        DeviceEvent::Added(addr) => {
+                        AdapterEvent::DeviceAdded(addr) => {
                             self.add_device(addr).await;
                             let device = self.adapter.device(addr)?;
-                            all_change_events.push(device.changes().await?);
+                            let change_events = device.events().await?.map(move |_| addr);
+                            all_change_events.push(change_events);
                         },
-                        DeviceEvent::Removed(addr) => self.remove_device(addr).await,
+                        AdapterEvent::DeviceRemoved(addr) => self.remove_device(addr).await,
+                        _ => (),
                     }
                 },
-                Some(DeviceChanged { address: addr, ..}) = all_change_events.next() => {
+                Some(addr) = all_change_events.next() => {
                     if let Some(data) = self.devices.get_mut(&addr) {
                         data.last_seen = Instant::now();
                     }

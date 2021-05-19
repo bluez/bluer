@@ -2,7 +2,7 @@
 
 use futures::{pin_mut, stream::SelectAll, StreamExt};
 
-use blurz::{Adapter, Address, DeviceEvent};
+use blurz::{Adapter, AdapterEvent, Address, DeviceEvent};
 
 async fn query_device(adapter: &Adapter, addr: Address) -> blurz::Result<()> {
     let device = adapter.device(addr)?;
@@ -39,24 +39,26 @@ async fn main() -> blurz::Result<()> {
         tokio::select! {
             Some(device_event) = device_events.next() => {
                 match device_event {
-                    DeviceEvent::Added(addr) => {
+                    AdapterEvent::DeviceAdded(addr) => {
                         println!("Device added: {}", addr);
                         if let Err(err) = query_device(&adapter, addr).await {
                             println!("    Error: {}", &err);
                         }
 
                         let device = adapter.device(addr)?;
-                        all_change_events.push(device.changes().await?);
+                        let change_events = device.events().await?.map(move |evt| (addr, evt));
+                        all_change_events.push(change_events);
                     }
-                    DeviceEvent::Removed(addr) => {
+                    AdapterEvent::DeviceRemoved(addr) => {
                         println!("Device removed: {}", addr);
                     }
+                    _ => (),
                 }
                 println!();
             }
-            Some(dev_change) = all_change_events.next() => {
-                println!("Device changed: {}", dev_change.address);
-                println!("    {:?}", &dev_change.property);
+            Some((addr, DeviceEvent::PropertyChanged(property))) = all_change_events.next() => {
+                println!("Device changed: {}", addr);
+                println!("    {:?}", property);
             }
             else => break
         }
