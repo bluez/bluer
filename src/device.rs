@@ -118,7 +118,6 @@ impl Device {
         loop {
             select! {
                 change_opt = changes.next() => {
-                    dbg!(&change_opt);
                     match change_opt {
                         Some(DeviceEvent::PropertyChanged (DeviceProperty::ServicesResolved(true)) ) =>
                             return Ok(()),
