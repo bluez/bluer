@@ -40,7 +40,9 @@ async fn main() -> blurz::Result<()> {
 
     let mut flags = gatt::CharacteristicFlags::default();
     flags.read = true;
-    flags.write_without_response = true;
+    //flags.write = true;
+    //flags.write_without_response = true;
+    flags.reliable_write = true;
     flags.notify = true;
     //flags.notify = true;
 

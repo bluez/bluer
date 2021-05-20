@@ -2,7 +2,10 @@
 
 use std::time::Duration;
 
-use blurz::{AdapterEvent, Device, Result, gatt::remote::{Characteristic, WriteCharacteristicValueRequest}};
+use blurz::{
+    gatt::remote::{Characteristic, WriteCharacteristicValueRequest},
+    AdapterEvent, Device, Result,
+};
 use futures::{pin_mut, StreamExt};
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -75,10 +78,11 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 
     let data2 = vec![20, 21, 22, 23];
     println!("    Writing characteristic value with response {:?}", &data2);
-    char.write_ext(&data2,  &WriteCharacteristicValueRequest {
-        op_type: blurz::gatt::WriteValueType::Request,
-        ..Default::default()
-    }).await?;
+    char.write_ext(
+        &data2,
+        &WriteCharacteristicValueRequest { op_type: blurz::gatt::WriteValueType::Request, ..Default::default() },
+    )
+    .await?;
 
     Ok(())
 }

@@ -1,13 +1,30 @@
 //! Local GATT services.
 
-use dbus::{MethodErr, arg::{AppendAll, OwnedFd, PropMap}, nonblock::Proxy};
+use dbus::{
+    arg::{AppendAll, OwnedFd, PropMap},
+    nonblock::Proxy,
+    MethodErr,
+};
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
 use futures::{channel::oneshot, Future};
-use libc::{AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET, c_int, socketpair};
-use tokio::{io::AsyncReadExt, net::UnixStream};
-use std::{collections::HashSet, fmt, marker::PhantomData, mem::take, os::unix::{io::RawFd, prelude::FromRawFd}, pin::Pin, sync::Arc};
+use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
+use std::{
+    collections::HashSet,
+    fmt,
+    marker::PhantomData,
+    mem::take,
+    os::unix::{io::RawFd, prelude::FromRawFd},
+    pin::Pin,
+    sync::Arc,
+    time::Duration,
+};
 use strum::IntoStaticStr;
 use thiserror::Error;
+use tokio::{
+    io::{self, AsyncReadExt, AsyncWriteExt},
+    net::UnixStream,
+    time::sleep,
+};
 use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
@@ -125,7 +142,10 @@ impl Characteristic {
                 dbg!(&service_path);
                 Ok(service_path)
             });
-            cr_property!(ib, "WriteAcquired", c => {
+            cr_property!(ib, "WriteAcquired", _c => {
+                Some(false)
+            });
+            cr_property!(ib, "NotifyAcquired", _c => {
                 Some(false)
             });
             ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
@@ -158,35 +178,16 @@ impl Characteristic {
                     })
                 },
             );
-            ib.method_with_cr_async("AcquireWrite", ("options",), ("fd", "mtu"), 
+            ib.method_with_cr_async(
+                "AcquireWrite",
+                ("options",),
+                ("fd", "mtu"),
                 |ctx, cr, (options,): (PropMap,)| {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
-                        dbg!(&options);                        
+                        dbg!(&options);
                         let options = AcquireWriteRequest::from_dict(&options)?;
 
-                        // so for testing, produce an fd.
-                        // so we need to create a file descriptor.
-                        // use Socketpair
-                        let mut sv: [RawFd; 2] = [0; 2];
-                        unsafe {
-                            if socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int) == -1 {
-                                eprintln!("socketpair failed");
-                                return Err(AcquireWriteError::Failed.into());
-                            }
-                        }
-                        let [fd1, fd2] = sv;
-                        dbg!(fd1);
-                        dbg!(fd2);
-                        let fd1 = unsafe { OwnedFd::new(fd1) };
-
-                        let us = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) };
-                        let mut us = match UnixStream::from_std(us) {
-                            Ok(us) => us,
-                            Err(err) => {
-                                eprintln!("from_std failed: {}", &err);
-                                return Err(AcquireWriteError::Failed.into());
-                            }
-                        };
+                        let (fd, mut us) = make_socket_pair().map_err(|_| AcquireWriteError::Failed)?;
                         let mtu = options.mtu;
                         tokio::spawn(async move {
                             let mut buf = vec![0u8; mtu as _];
@@ -206,34 +207,60 @@ impl Characteristic {
                             }
                         });
 
-                        Ok((fd1, options.mtu))
-
-                        // need to create file descriptor
-                        // need to 
-                        // how to present that to user?
-                        // probably cannot be done transparently.
-                        // since bluez may decide not to use it.
-                        // shall we provide it in the handle or as callback
-                        // user can then use it to handle fd.
-                        // but is this user-friendly?
-                        // also we need the MTU
-                        // if we do it FD-based, what would be optimal?
-                        // probably providing an AsyncRead would be nice
-                        // But it may be closed and reopened...
-                        // So it's a bit silly somehow.
-                        // Can we abstract that away?
-                        // Hmm...
-                        // We could of course have our own reader that waits 
-                        // until file is open.
-                        // Is definitely quite nice, but what about MTU?
-                        // We could let it be queried once connection is established.
-                        // But what shall we return as MTU?
-                        // Can we maybe first test if this gets called?
+                        Ok((fd, options.mtu))
                     })
-                }
+                },
+            );
+            ib.method_with_cr_async(
+                "AcquireNotify",
+                ("options",),
+                ("fd", "mtu"),
+                |ctx, cr, (options,): (PropMap,)| {
+                    method_call(ctx, cr, |c: Arc<Self>| async move {
+                        dbg!(&options);
+                        let options = AcquireNotifyRequest::from_dict(&options)?;
+
+                        let (fd, mut us) = make_socket_pair().map_err(|_| AcquireWriteError::Failed)?;
+                        let mtu = options.mtu;
+                        tokio::spawn(async move {
+                            let mut buf = vec![0u8; mtu as _];
+                            for i in 0..buf.len() {
+                                buf[i] = (i % u8::MAX as usize) as u8;
+                            }
+                            loop {
+                                match us.write(&buf).await {
+                                    Ok(n) => {
+                                        eprintln!("Notified {} bytes", n);
+                                    }
+                                    Err(err) => {
+                                        eprintln!("notify write failed: {}", &err);
+                                        break;
+                                    }
+                                }
+                                sleep(Duration::from_secs(10)).await;
+                            }
+                        });
+                        Ok((fd, options.mtu))
+                    })
+                },
             );
         })
     }
+}
+
+fn make_socket_pair() -> Result<(OwnedFd, UnixStream), io::Error> {
+    let mut sv: [RawFd; 2] = [0; 2];
+    unsafe {
+        if socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int) == -1 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    let [fd1, fd2] = sv;
+
+    let fd1 = unsafe { OwnedFd::new(fd1) };
+    let us = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) })?;
+
+    Ok((fd1, us))
 }
 
 /// Read value request.
@@ -368,10 +395,7 @@ struct AcquireWriteRequest {
 
 impl AcquireWriteRequest {
     fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self {
-            mtu: read_prop!(dict, "mtu", u16),
-            link: read_prop!(dict, "link", String),
-        })
+        Ok(Self { mtu: read_prop!(dict, "mtu", u16), link: read_prop!(dict, "link", String) })
     }
 }
 
@@ -380,11 +404,41 @@ enum AcquireWriteError {
     #[error("Failed")]
     Failed,
     #[error("Not supported")]
-    NotSupported
+    NotSupported,
 }
 
 impl From<AcquireWriteError> for dbus::MethodErr {
     fn from(err: AcquireWriteError) -> Self {
+        let name: &'static str = err.clone().into();
+        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+    }
+}
+
+/// Acquire write request.
+#[derive(Debug, Clone)]
+struct AcquireNotifyRequest {
+    /// Exchanged MTU.
+    pub mtu: u16,
+    /// Link type.
+    pub link: String, // TODO
+}
+
+impl AcquireNotifyRequest {
+    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+        Ok(Self { mtu: read_prop!(dict, "mtu", u16), link: read_prop!(dict, "link", String) })
+    }
+}
+
+#[derive(Clone, Debug, Error, IntoStaticStr)]
+enum AcquireNotifyError {
+    #[error("Failed")]
+    Failed,
+    #[error("Not supported")]
+    NotSupported,
+}
+
+impl From<AcquireNotifyError> for dbus::MethodErr {
+    fn from(err: AcquireNotifyError) -> Self {
         let name: &'static str = err.clone().into();
         Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
     }
