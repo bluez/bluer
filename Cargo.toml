@@ -29,6 +29,7 @@ thiserror = "1"
 lazy_static = "1"
 uuid = { version = "0.8", features = ["v4"] }
 strum = { version = "0.20", features = ["derive"] }
+libc = "0.2"
 
 [dev-dependencies]
 crossterm = "0.19"
