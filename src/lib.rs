@@ -1,21 +1,12 @@
 //! Bluetooth library using Bluez.
 
-use dbus::{
-    arg::{prop_cast, PropMap, RefArg, Variant},
-    nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
-    Path,
-};
+use dbus::{Path, arg::{OwnedFd, PropMap, RefArg, Variant, prop_cast}, nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection}};
 use hex::FromHex;
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    fmt::{self, Debug, Display, Formatter},
-    str::FromStr,
-    time::Duration,
-};
+use libc::{AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET, c_int, socketpair};
+use std::{collections::HashMap, convert::TryInto, fmt::{self, Debug, Display, Formatter}, os::unix::prelude::{FromRawFd, RawFd}, str::FromStr, time::Duration};
 use strum::{Display, EnumString};
 use thiserror::Error;
-use tokio::task::JoinError;
+use tokio::{net::UnixStream, task::JoinError};
 
 macro_rules! other_err {
     ($($e:tt)*) => {
@@ -503,4 +494,32 @@ pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
     prop_cast(dict, key).ok_or(Error::MissingKey(key.to_string()))
+}
+
+
+/// Creates a UNIX socket pair.
+pub(crate) fn make_socket_pair() -> std::result::Result<(OwnedFd, UnixStream), std::io::Error> {
+    let mut sv: [RawFd; 2] = [0; 2];
+    unsafe {
+        if socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int) == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    let [fd1, fd2] = sv;
+
+    let fd1 = unsafe { OwnedFd::new(fd1) };
+    let us = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) })?;
+
+    Ok((fd1, us))
+}
+
+/// Returns the parent path of the specified D-Bus path.
+pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
+    let mut comps: Vec<_> = path.split('/').collect();
+    comps.pop();
+    if comps.is_empty() {
+        Path::new("/").unwrap()
+    } else {
+        Path::new(comps.join("/")).unwrap()
+    }
 }

@@ -35,7 +35,7 @@ pub(crate) struct SessionInner {
     pub le_advertisment_token: IfaceToken<LeAdvertisement>,
     pub gatt_service_token: IfaceToken<Arc<gatt::local::Service>>,
     pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
-    pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::CharacteristicDescriptor>>,
+    pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::Descriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
     pub event_sub_tx: mpsc::Sender<SubscribeEvents>,
@@ -125,7 +125,7 @@ impl Session {
         let gatt_service_token = gatt::local::Service::register_interface(&mut crossroads);
         let gatt_characteristic_token = gatt::local::Characteristic::register_interface(&mut crossroads);
         let gatt_characteristic_descriptor_token =
-            gatt::local::CharacteristicDescriptor::register_interface(&mut crossroads);
+            gatt::local::Descriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);

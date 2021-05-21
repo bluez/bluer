@@ -52,16 +52,16 @@ async fn main() -> blurz::Result<()> {
             primary: true,
             characteristics: vec![gatt::local::Characteristic {
                 uuid: characteristic_uuid,
-                flags: flags,
+                other_flags: flags,
                 descriptors: vec![],
-                read_value: Some(Box::new(|req| {
+                read: Some(Box::new(|req| {
                     async move {
                         println!("Read request: {:?}", &req);
                         Ok(vec![1, 2, 3])
                     }
                     .boxed()
                 })),
-                write_value: Some(Box::new(|value, req| {
+                write: Some(Box::new(|value, req| {
                     async move {
                         println!("Write request {:?} with value {:?}", &req, &value);
                         Ok(())
