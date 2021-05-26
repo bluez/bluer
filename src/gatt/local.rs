@@ -2,10 +2,11 @@
 
 use dbus::{
     arg::{AppendAll, OwnedFd, PropMap},
-    nonblock::Proxy,
+    nonblock::{Proxy, SyncConnection},
     MethodErr,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
+use futures::stream::StreamExt;
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
@@ -22,12 +23,12 @@ use std::{
     os::unix::{io::RawFd, prelude::FromRawFd},
     pin::Pin,
     sync::{Arc, Weak},
+    task::Poll,
     time::Duration,
 };
 use strum::IntoStaticStr;
-use thiserror::Error;
 use tokio::{
-    io::{self, AsyncRead, AsyncReadExt, AsyncWriteExt},
+    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::UnixStream,
     sync::watch,
     time::sleep,
@@ -35,22 +36,57 @@ use tokio::{
 use uuid::Uuid;
 
 use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
-use crate::{make_socket_pair, parent_path, Adapter, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
+use crate::{
+    make_socket_pair, parent_path, Adapter, Error, LinkType, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
+    TIMEOUT,
+};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 
-fn method_call<
-    T: Send + Sync + 'static,
-    R: AppendAll,
-    F: Future<Output = Result<R, dbus::MethodErr>> + Send + 'static,
->(
+/// Error response from us to a Bluetooth request.
+#[derive(Clone, Copy, Debug, Error, IntoStaticStr)]
+pub enum Reject {
+    #[error("Bluetooth request failed")]
+    Failed,
+    #[error("Bluetooth request already in progress")]
+    InProgress,
+    #[error("Invalid offset for Bluetooth GATT property")]
+    InvalidOffset,
+    #[error("Invalid value length for Bluetooth GATT property")]
+    InvalidValueLength,
+    #[error("Bluetooth request not permitted")]
+    NotPermitted,
+    #[error("Bluetooth request not authorized")]
+    NotAuthorized,
+    #[error("Bluetooth request not supported")]
+    NotSupported,
+}
+
+impl Default for Reject {
+    fn default() -> Self {
+        Self::Failed
+    }
+}
+
+impl From<Reject> for dbus::MethodErr {
+    fn from(err: Reject) -> Self {
+        let name: &'static str = err.clone().into();
+        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+    }
+}
+
+/// Result of a Bluetooth request to us.
+pub type ReqResult<T> = std::result::Result<T, Reject>;
+
+/// Call method on Arc D-Bus object we are serving.
+fn method_call<T: Send + Sync + 'static, R: AppendAll, F: Future<Output = ReqResult<R>> + Send + 'static>(
     mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
 ) -> impl Future<Output = PhantomData<R>> {
     let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
     let data: Arc<T> = data_ref.clone();
     async move {
         let result = f(data).await;
-        ctx.reply(result)
+        ctx.reply(result.into())
     }
 }
 
@@ -124,9 +160,7 @@ impl From<CharacteristicFlags> for CharacteristicReadFlags {
 
 /// Characteristic read value function.
 pub type CharacteristicReadFn = Box<
-    dyn (Fn(
-            ReadCharacteristicValueRequest,
-        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ReadValueError>> + Send>>)
+    dyn (Fn(ReadCharacteristicValueRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>>)
         + Send
         + Sync,
 >;
@@ -201,10 +235,7 @@ pub struct CharacteristicWrite {
 
 /// Characteristic write value function.
 pub type CharacteristicWriteFn = Box<
-    dyn Fn(
-            Vec<u8>,
-            WriteCharacteristicValueRequest,
-        ) -> Pin<Box<dyn Future<Output = Result<(), WriteValueError>> + Send>>
+    dyn Fn(Vec<u8>, WriteCharacteristicValueRequest) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>
         + Send
         + Sync,
 >;
@@ -214,6 +245,8 @@ pub enum CharacteristicWriteMethod {
     /// Call specified function for each write request.
     Fun(CharacteristicWriteFn),
     /// Provide written data over `AsyncRead` IO.
+    ///
+    /// Use `CharacteristicControlHandle` to obtain reader.
     Io,
 }
 
@@ -232,6 +265,8 @@ pub struct CharacteristicNotifyFlags {
     /// If set allows the server to use the Handle Value Notification operation.
     pub notify: bool,
     /// If set allows the server to use the Handle Value Indication/Confirmation operation.
+    ///
+    /// Confirmations will only be provided when this is `true` and `notify` is `false`.
     pub indicate: bool,
 }
 
@@ -248,12 +283,63 @@ impl From<CharacteristicFlags> for CharacteristicNotifyFlags {
     }
 }
 
+/// Notification request.
+#[derive(Debug)]
+pub struct CharacteristicValueNotifier {
+    connection: Arc<SyncConnection>,
+    stop_notify_rx: watch::Receiver<bool>,
+    confirm_rx: Option<mpsc::Receiver<()>>,
+}
+
+impl CharacteristicValueNotifier {
+    /// True, if each notification is confirmed by the receiving device.
+    ///
+    /// This is the case when the Indication mechanism is used.
+    pub fn confirming(&self) -> bool {
+        self.confirm_rx.is_some()
+    }
+
+    /// True, if the notification session has been stopped by the receiving device.
+    pub fn is_closed(&self) -> bool {
+        *self.stop_notify_rx.borrow()
+    }
+
+    /// Returns a future that resolves once the notification has been stopped.
+    pub fn closed(&self) -> impl Future<Output = ()> {
+        let mut stop_notify_rx = self.stop_notify_rx.clone();
+        async move {
+            while !*stop_notify_rx.borrow() {
+                if stop_notify_rx.changed().await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Sends a notification or indication with the specified data to the receiving device.
+    ///
+    /// If `confirming` is true, the function waits until a confirmation is received from
+    /// the device before it returns.
+    pub async fn notify(&self, value: Vec<u8>) -> Result<()> {
+        todo!()
+    }
+}
+
+/// Characteristic start notifications function.
+///
+/// This function cannot fail, since there is to way to provide an error response to the
+/// requesting device.
+pub type CharacteristicStartNotifyFn =
+    Box<dyn Fn(CharacteristicValueNotifier) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
 /// Characteristic notify value method.
 #[derive(Debug)]
 pub enum CharacteristicNotifyMethod {
-    /// Call notify function to submit a value.
-    Fn,
+    /// Call specified function when client starts a notification session.
+    Fn(CharacteristicStartNotifyFn),
     /// Write notify data over `AsyncWrite` IO.
+    ///
+    /// Use `CharacteristicControlHandle` to obtain writer.
     Io,
 }
 
@@ -312,84 +398,227 @@ pub struct Characteristic {
     /// Notify client of characteristic value change.
     pub notify: Option<CharacteristicNotify>,
     /// Control handle for characteristic once it has been registered.
-    pub control: CharacteristicControlHandle,
+    pub control_handle: CharacteristicControlHandle,
 }
 
-
-// What control do we need?
-// Write stream (being called)
-// Notify stream  (being called)
-// Notify function (StartNotify and StopNotify, being called)
-// But how is notify implemented then? 
-// As a properties changed event on Value?
-// => Yes, seems so.
-//    And then maybe a callback on Confirm when it is an Indication.
-// So server initiates a notify session.
-// And server sets handle.
-// Make separte queues for notify and write, so we don't hang when one is not processed.
-// 
-
-
-/// A handle to control a characteristic once it has been registered.
-#[derive(Clone)]
-pub struct CharacteristicControlHandle(mpsc::Receiver<);
-
-impl CharacteristicControlHandle {
-    /// Create a new control handle.
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl Default for CharacteristicControl {
-    fn default() -> Self {
-        Self(Arc::new(Mutex::new(Weak::new())))
-    }
-}
-
-impl fmt::Debug for CharacteristicControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CharacteristicControl")
-    }
-}
-
-// How to store the ticket?
-// Well it will need a ticket field.
-//
-
-struct RegisteredCharacteristic {
-    reg: Characteristic,
-    write_tx: mpsc::Sender<CharacteristicWriteStream>,
-    write_rx: mpsc::Receiver<CharacteristicWriteStream>,
-}
-
-/// A stream that receives data written to a characteristic.
-#[pin_project(PinnedDrop)]
-pub struct CharacteristicWriteStream {
-    #[pin]
-    stream: UnixStream,
+/// A remote request to start writing to a characteristic via IO.
+pub struct CharacteristicWriteRequest {
     mtu: u16,
+    link: Option<LinkType>,
+    tx: oneshot::Sender<ReqResult<OwnedFd>>,
 }
 
-impl CharacteristicWriteStream {
+impl CharacteristicWriteRequest {
+    /// Maximum transmission unit.
     pub fn mtu(&self) -> u16 {
         self.mtu
     }
+
+    /// Link type.
+    pub fn link(&self) -> Option<LinkType> {
+        self.link
+    }
+
+    /// Accept the write request.
+    pub fn accept(self) -> Result<CharacteristicReader> {
+        let CharacteristicWriteRequest { mtu, link, tx } = self;
+        let (fd, stream) = make_socket_pair()?;
+        let _ = tx.send(Ok(fd));
+        Ok(CharacteristicReader { mtu: mtu.into(), link, stream })
+    }
+
+    /// Reject the write request.
+    pub fn reject(self, reason: Reject) {
+        let _ = self.tx.send(Err(reason));
+    }
 }
 
-impl AsyncRead for CharacteristicWriteStream {
+/// Provides write requests to a characteristic as an IO stream.
+#[pin_project]
+pub struct CharacteristicReader {
+    mtu: usize,
+    link: Option<LinkType>,
+    #[pin]
+    stream: UnixStream,
+}
+
+impl CharacteristicReader {
+    /// Maximum transmission unit.
+    pub fn mtu(&self) -> usize {
+        self.mtu
+    }
+
+    /// Link type.
+    pub fn link(&self) -> Option<LinkType> {
+        self.link
+    }
+
+    /// Gets the underlying UNIX socket.
+    pub fn get(&self) -> &UnixStream {
+        &self.stream
+    }
+
+    /// Gets the underlying UNIX socket mutably.
+    pub fn get_mut(&mut self) -> &mut UnixStream {
+        &mut self.stream
+    }
+
+    /// Transforms the reader into the underlying UNIX socket.
+    pub fn into_inner(self) -> UnixStream {
+        self.stream
+    }
+}
+
+impl fmt::Debug for CharacteristicReader {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicReader {{ {:?} }}", &self.stream)
+    }
+}
+
+impl AsyncRead for CharacteristicReader {
     fn poll_read(
         self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &mut io::ReadBuf,
-    ) -> std::task::Poll<io::Result<()>> {
+    ) -> Poll<std::io::Result<()>> {
         self.project().stream.poll_read(cx, buf)
     }
 }
 
-#[pinned_drop]
-impl PinnedDrop for CharacteristicWriteStream {
-    fn drop(self: Pin<&mut Self>) {
-        // required for drop order
+/// Allows sending of notifications of a characteristic via an IO stream.
+#[pin_project]
+pub struct CharacteristicWriter {
+    mtu: usize,
+    link: Option<LinkType>,
+    #[pin]
+    stream: UnixStream,
+}
+
+impl CharacteristicWriter {
+    /// Maximum transmission unit.
+    pub fn mtu(&self) -> usize {
+        self.mtu
     }
+
+    /// Link type.
+    pub fn link(&self) -> Option<LinkType> {
+        self.link
+    }
+
+    /// Gets the underlying UNIX socket.
+    pub fn get(&self) -> &UnixStream {
+        &self.stream
+    }
+
+    /// Gets the underlying UNIX socket mutably.
+    pub fn get_mut(&mut self) -> &mut UnixStream {
+        &mut self.stream
+    }
+
+    /// Transforms the reader into the underlying UNIX socket.
+    pub fn into_inner(self) -> UnixStream {
+        self.stream
+    }
+}
+
+impl fmt::Debug for CharacteristicWriter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicWriter {{ {:?} }}", &self.stream)
+    }
+}
+
+impl AsyncWrite for CharacteristicWriter {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+        self.project().stream.poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+        self.project().stream.poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+        self.project().stream.poll_shutdown(cx)
+    }
+}
+
+/// An object to control a characteristic once it has been registered.
+pub struct CharacteristicControl {
+    handle_rx: watch::Receiver<Option<NonZeroU16>>,
+    write_request_rx: mpsc::Receiver<CharacteristicWriteRequest>,
+    notifier_rx: mpsc::Receiver<CharacteristicWriter>,
+}
+
+impl fmt::Debug for CharacteristicControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicControl {{ handle: {} }}", self.handle().map(|h| h.get()).unwrap_or_default())
+    }
+}
+
+impl CharacteristicControl {
+    /// Gets the assigned handle of the characteristic.
+    pub fn handle(&self) -> crate::Result<NonZeroU16> {
+        match *self.handle_rx.borrow() {
+            Some(handle) => Ok(handle),
+            None => Err(Error::NotRegistered),
+        }
+    }
+
+    /// Gets the next request to start writing to the characteristic.
+    pub async fn write_request(&mut self) -> Result<CharacteristicWriteRequest> {
+        match self.write_request_rx.next().await {
+            Some(req) => Ok(req),
+            None => Err(Error::NotRegistered),
+        }
+    }
+
+    /// Gets the next notification session.
+    ///
+    /// Note that bluez acknowledges the client's request before notifying us
+    /// of the start of the notification session.
+    pub async fn notifier(&mut self) -> Result<CharacteristicWriter> {
+        match self.notifier_rx.next().await {
+            Some(writer) => Ok(writer),
+            None => Err(Error::NotRegistered),
+        }
+    }
+}
+
+/// A handle to control a characteristic once it has been registered.
+pub struct CharacteristicControlHandle {
+    handle_tx: watch::Sender<Option<NonZeroU16>>,
+    write_request_tx: mpsc::Sender<CharacteristicWriteRequest>,
+    notifier_tx: mpsc::Sender<CharacteristicWriter>,
+}
+
+impl Default for CharacteristicControlHandle {
+    fn default() -> Self {
+        Self {
+            handle_tx: watch::channel(None).0,
+            write_request_tx: mpsc::channel(0).0,
+            notifier_tx: mpsc::channel(0).0,
+        }
+    }
+}
+
+impl fmt::Debug for CharacteristicControlHandle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicControlHandle")
+    }
+}
+
+/// Creates a `CharacteristicControl` and its associated handle.
+pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControlHandle) {
+    let (handle_tx, handle_rx) = watch::channel(None);
+    let (write_request_tx, write_request_rx) = mpsc::channel(0);
+    let (notifier_tx, notifier_rx) = mpsc::channel(0);
+    (
+        CharacteristicControl { handle_rx, write_request_rx, notifier_rx },
+        CharacteristicControlHandle { handle_tx, write_request_tx, notifier_tx },
+    )
+}
+
+struct RegisteredCharacteristic {
+    reg: Characteristic,
+    // sense of this:
+    // probably none, since we can send all we need
 }
 
 impl RegisteredCharacteristic {
@@ -413,6 +642,14 @@ impl RegisteredCharacteristic {
                 Some(flags.to_vec())
             });
             ib.property("Service").get(|ctx, _| Ok(parent_path(ctx.path())));
+            ib.property("Handle").get(|ctx, c| Ok(c.reg.handle.map(|h| h.get()).unwrap_or_default())).set(
+                |ctx, c, v| {
+                    let handle = NonZeroU16::new(v);
+                    dbg!(&handle);
+                    c.reg.control_handle.handle_tx.send(handle);
+                    Ok(None)
+                },
+            );
             cr_property!(ib, "WriteAcquired", c => {
                 if let Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) = &c.reg.write {
                     Some(false)
@@ -435,7 +672,7 @@ impl RegisteredCharacteristic {
                             let value = (read.fun)(options).await?;
                             Ok((value,))
                         }
-                        None => Err(ReadValueError::NotSupported.into()),
+                        None => Err(Reject::NotSupported.into()),
                     }
                 })
             });
@@ -451,26 +688,49 @@ impl RegisteredCharacteristic {
                                 fun(value, options).await?;
                                 Ok(())
                             }
-                            _ => Err(WriteValueError::NotSupported.into()),
+                            _ => Err(Reject::NotSupported),
                         }
                     })
                 },
             );
+            ib.method_with_cr_async("StartNotify", (), (), |ctx, cr, ()| {
+                method_call(ctx, cr, |c: Arc<Self>| async move { 
+                    match &c.reg.notify {
+                        Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Fn(notify_fn), .. }) => {
+                            let notifier = CharacteristicValueNotifier {
+                                connection: (),
+                                stop_notify_rx: (),
+                                confirm_rx: (),
+                            };
+                        }
+                        _ => Err(Reject::NotSupported),
+                    }
+                 })
+            });
+            ib.method_with_cr_async("StopNotify", (), (), |ctx, cr, ()| {
+                method_call(ctx, cr, |c: Arc<Self>| async move { todo!() })
+            });
             ib.method_with_cr_async(
                 "AcquireWrite",
                 ("options",),
                 ("fd", "mtu"),
                 |ctx, cr, (options,): (PropMap,)| {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
-                        let options = AcquireWriteRequest::from_dict(&options)?;
+                        let options = AcquireRequest::from_dict(&options)?;
                         match &c.reg.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
-                                let (fd, stream) = make_socket_pair().map_err(|_| AcquireWriteError::Failed)?;
-                                let cws = CharacteristicWriteStream { stream, mtu: options.mtu };
-                                c.write_tx.clone().send(cws).await;
+                                let (tx, rx) = oneshot::channel();
+                                let req = CharacteristicWriteRequest { mtu: options.mtu, link: options.link, tx };
+                                c.reg
+                                    .control_handle
+                                    .write_request_tx
+                                    .send(req)
+                                    .await
+                                    .map_err(|_| Reject::Failed)?;
+                                let fd = rx.await.map_err(|_| Reject::Failed)??;
                                 Ok((fd, options.mtu))
                             }
-                            _ => Err(AcquireWriteError::NotSupported.into()),
+                            _ => Err(Reject::NotSupported),
                         }
                     })
                 },
@@ -481,30 +741,17 @@ impl RegisteredCharacteristic {
                 ("fd", "mtu"),
                 |ctx, cr, (options,): (PropMap,)| {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
-                        dbg!(&options);
-                        let options = AcquireNotifyRequest::from_dict(&options)?;
-
-                        let (fd, mut us) = make_socket_pair().map_err(|_| AcquireWriteError::Failed)?;
-                        let mtu = options.mtu;
-                        tokio::spawn(async move {
-                            let mut buf = vec![0u8; mtu as _];
-                            for i in 0..buf.len() {
-                                buf[i] = (i % u8::MAX as usize) as u8;
+                        let options = AcquireRequest::from_dict(&options)?;
+                        match &c.reg.notify {
+                            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
+                                let (fd, stream) = make_socket_pair().map_err(|_| Reject::Failed)?;
+                                let writer =
+                                    CharacteristicWriter { mtu: options.mtu.into(), link: options.link, stream };
+                                let _ = c.reg.control_handle.notifier_tx.send(writer).await;
+                                Ok((fd, options.mtu))
                             }
-                            loop {
-                                match us.write(&buf).await {
-                                    Ok(n) => {
-                                        eprintln!("Notified {} bytes", n);
-                                    }
-                                    Err(err) => {
-                                        eprintln!("notify write failed: {}", &err);
-                                        break;
-                                    }
-                                }
-                                sleep(Duration::from_secs(10)).await;
-                            }
-                        });
-                        Ok((fd, options.mtu))
+                            _ => Err(Reject::NotSupported),
+                        }
                     })
                 },
             );
@@ -520,40 +767,16 @@ pub struct ReadCharacteristicValueRequest {
     /// Exchanged MTU.
     pub mtu: u16,
     /// Link type.
-    pub link: String,
+    pub link: Option<LinkType>,
 }
 
 impl ReadCharacteristicValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
         Ok(Self {
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             mtu: read_prop!(dict, "mtu", u16),
-            link: read_prop!(dict, "link", String),
+            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
         })
-    }
-}
-
-/// Read value operation error.
-#[derive(Clone, Debug, Error, IntoStaticStr)]
-pub enum ReadValueError {
-    #[error("Bluetooth operation failed")]
-    Failed,
-    #[error("Bluetooth operation in progress")]
-    InProgress,
-    #[error("Bluetooth operation not permitted")]
-    NotPermitted,
-    #[error("Bluetooth operation not authorized")]
-    NotAuthorized,
-    #[error("Invalid offset for Bluetooth GATT property")]
-    InvalidOffset,
-    #[error("Bluetooth operation not supported")]
-    NotSupported,
-}
-
-impl From<ReadValueError> for dbus::MethodErr {
-    fn from(err: ReadValueError) -> Self {
-        let name: &'static str = err.clone().into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
     }
 }
 
@@ -567,13 +790,13 @@ pub struct WriteCharacteristicValueRequest {
     /// Exchanged MTU.
     pub mtu: u16,
     /// Link type.
-    pub link: String, // TODO
+    pub link: Option<LinkType>,
     /// True if prepare authorization request.
     pub prepare_authorize: bool,
 }
 
 impl WriteCharacteristicValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
         Ok(Self {
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             op_type: read_opt_prop!(dict, "type", String)
@@ -581,115 +804,27 @@ impl WriteCharacteristicValueRequest {
                 .transpose()?
                 .unwrap_or_default(),
             mtu: read_prop!(dict, "mtu", u16),
-            link: read_prop!(dict, "link", String),
+            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
             prepare_authorize: read_opt_prop!(dict, "prepare-authorize", bool).unwrap_or_default(),
         })
     }
 }
 
-/// Write value operation error.
-#[derive(Clone, Debug, Error, IntoStaticStr)]
-pub enum WriteValueError {
-    #[error("Bluetooth operation failed")]
-    Failed,
-    #[error("Bluetooth operation in progress")]
-    InProgress,
-    #[error("Bluetooth operation not permitted")]
-    NotPermitted,
-    #[error("Invalid value length for Bluetooth GATT property")]
-    InvalidValueLength,
-    #[error("Bluetooth operation not authorized")]
-    NotAuthorized,
-    #[error("Bluetooth operation not supported")]
-    NotSupported,
-}
-
-impl From<WriteValueError> for dbus::MethodErr {
-    fn from(err: WriteValueError) -> Self {
-        let name: &'static str = err.clone().into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
-    }
-}
-
-/// Notify operation error.
-#[derive(Clone, Debug, Error, IntoStaticStr)]
-pub enum NotifyError {
-    #[error("Bluetooth operation failed")]
-    Failed,
-    #[error("Bluetooth operation in progress")]
-    InProgress,
-    #[error("Bluetooth operation not permitted")]
-    NotPermitted,
-    #[error("Bluetooth device not connected")]
-    NotConnected,
-    #[error("Bluetooth operation not supported")]
-    NotSupported,
-}
-
-impl From<NotifyError> for dbus::Error {
-    fn from(err: NotifyError) -> Self {
-        let name: &'static str = err.clone().into();
-        Self::new_custom(ERR_PREFIX.to_string() + name, &err.to_string())
-    }
-}
-
-/// Acquire write request.
+/// Acquire request.
 #[derive(Debug, Clone)]
-struct AcquireWriteRequest {
+struct AcquireRequest {
     /// Exchanged MTU.
     pub mtu: u16,
     /// Link type.
-    pub link: String, // TODO
+    pub link: Option<LinkType>,
 }
 
-impl AcquireWriteRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self { mtu: read_prop!(dict, "mtu", u16), link: read_prop!(dict, "link", String) })
-    }
-}
-
-#[derive(Clone, Debug, Error, IntoStaticStr)]
-enum AcquireWriteError {
-    #[error("Failed")]
-    Failed,
-    #[error("Not supported")]
-    NotSupported,
-}
-
-impl From<AcquireWriteError> for dbus::MethodErr {
-    fn from(err: AcquireWriteError) -> Self {
-        let name: &'static str = err.clone().into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
-    }
-}
-
-/// Acquire write request.
-#[derive(Debug, Clone)]
-struct AcquireNotifyRequest {
-    /// Exchanged MTU.
-    pub mtu: u16,
-    /// Link type.
-    pub link: String, // TODO
-}
-
-impl AcquireNotifyRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self { mtu: read_prop!(dict, "mtu", u16), link: read_prop!(dict, "link", String) })
-    }
-}
-
-#[derive(Clone, Debug, Error, IntoStaticStr)]
-enum AcquireNotifyError {
-    #[error("Failed")]
-    Failed,
-    #[error("Not supported")]
-    NotSupported,
-}
-
-impl From<AcquireNotifyError> for dbus::MethodErr {
-    fn from(err: AcquireNotifyError) -> Self {
-        let name: &'static str = err.clone().into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+impl AcquireRequest {
+    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+        Ok(Self {
+            mtu: read_prop!(dict, "mtu", u16),
+            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
+        })
     }
 }
 
@@ -706,9 +841,7 @@ pub struct Descriptor {
     /// Read value of characteristic descriptor.
     pub read_value: Option<
         Box<
-            dyn Fn(
-                    ReadCharacteristicDescriptorValueRequest,
-                ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ReadValueError>> + Send>>
+            dyn Fn(ReadDescriptorValueRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>>
                 + Send
                 + Sync,
         >,
@@ -716,10 +849,7 @@ pub struct Descriptor {
     /// Write value of characteristic descriptor.
     pub write_value: Option<
         Box<
-            dyn Fn(
-                    Vec<u8>,
-                    WriteCharacteristicDescriptorValueRequest,
-                ) -> Pin<Box<dyn Future<Output = Result<(), WriteValueError>> + Send>>
+            dyn Fn(Vec<u8>, WriteDescriptorValueRequest) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>
                 + Send
                 + Sync,
         >,
@@ -758,13 +888,13 @@ impl Descriptor {
             ib.method_with_cr_async("ReadValue", ("flags",), ("value",), |ctx, cr, (flags,): (PropMap,)| {
                 method_call(ctx, cr, |c: Arc<Self>| async move {
                     dbg!(&flags);
-                    let options = ReadCharacteristicDescriptorValueRequest::from_dict(&flags)?;
+                    let options = ReadDescriptorValueRequest::from_dict(&flags)?;
                     match &c.read_value {
                         Some(read_value) => {
                             let value = read_value(options).await?;
                             Ok((value,))
                         }
-                        None => Err(ReadValueError::NotSupported.into()),
+                        None => Err(Reject::NotSupported),
                     }
                 })
             });
@@ -774,13 +904,13 @@ impl Descriptor {
                 (),
                 |ctx, cr, (value, flags): (Vec<u8>, PropMap)| {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
-                        let options = WriteCharacteristicDescriptorValueRequest::from_dict(&flags)?;
+                        let options = WriteDescriptorValueRequest::from_dict(&flags)?;
                         match &c.write_value {
                             Some(write_value) => {
                                 write_value(value, options).await?;
                                 Ok(())
                             }
-                            None => Err(WriteValueError::NotSupported.into()),
+                            None => Err(Reject::NotSupported),
                         }
                     })
                 },
@@ -791,35 +921,38 @@ impl Descriptor {
 
 /// Read characteristic value request.
 #[derive(Debug, Clone)]
-pub struct ReadCharacteristicDescriptorValueRequest {
+pub struct ReadDescriptorValueRequest {
     /// Offset.
     pub offset: u16,
     /// Link type.
-    pub link: String, // TODO
+    pub link: Option<LinkType>,
 }
 
-impl ReadCharacteristicDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
-        Ok(Self { offset: read_prop!(dict, "offset", u16), link: read_prop!(dict, "link", String) })
+impl ReadDescriptorValueRequest {
+    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+        Ok(Self {
+            offset: read_prop!(dict, "offset", u16),
+            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
+        })
     }
 }
 
 /// Write characteristic value request.
 #[derive(Debug, Clone)]
-pub struct WriteCharacteristicDescriptorValueRequest {
+pub struct WriteDescriptorValueRequest {
     /// Offset.
     pub offset: u16,
     /// Link type.
-    pub link: String, // TODO
+    pub link: Option<LinkType>,
     /// Is prepare authorization request?
     pub prepare_authorize: bool,
 }
 
-impl WriteCharacteristicDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> Result<Self, dbus::MethodErr> {
+impl WriteDescriptorValueRequest {
+    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
         Ok(Self {
             offset: read_prop!(dict, "offset", u16),
-            link: read_prop!(dict, "link", String),
+            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
             prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
         })
     }

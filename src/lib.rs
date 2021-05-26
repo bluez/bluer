@@ -358,6 +358,10 @@ pub enum Error {
     MissingKey(String),
     #[error("GATT services have not been resolved for that Bluetooth device")]
     ServicesUnresolved,
+    #[error("Bluetooth application is not registered")]
+    NotRegistered,
+    #[error("IO error {kind}: {msg}")]
+    Io {kind: std::io::ErrorKind, msg: String},
     #[error("Bluetooth error: {0}")]
     Other(String),
 }
@@ -384,6 +388,15 @@ impl From<JoinError> for Error {
 impl From<strum::ParseError> for Error {
     fn from(_: strum::ParseError) -> Self {
         Self::InvalidValue
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) {
+        Self::Io{
+            kind: err.kind(),
+            msg: err.to_string(),
+        }
     }
 }
 
@@ -480,6 +493,18 @@ impl FromStr for Modalias {
         do_parse(m).ok_or_else(|| other_err!("invalid modalias: {}", m))
     }
 }
+
+/// Link type.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
+pub enum LinkType {
+    /// BR/EDR
+    #[strum(serialize = "BR/EDR")]
+    BrEdr,
+    /// LE
+    #[strum(serialize = "LE")]
+    Le,
+}
+
 
 /// Gets all D-Bus objects from the bluez service.
 async fn all_dbus_objects(
