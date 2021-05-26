@@ -243,7 +243,7 @@ pub type CharacteristicWriteFn = Box<
 /// Characteristic write value method.
 pub enum CharacteristicWriteMethod {
     /// Call specified function for each write request.
-    Fun(CharacteristicWriteFn),
+    Fn(CharacteristicWriteFn),
     /// Provide written data over `AsyncRead` IO.
     ///
     /// Use `CharacteristicControlHandle` to obtain reader.
@@ -253,7 +253,7 @@ pub enum CharacteristicWriteMethod {
 impl fmt::Debug for CharacteristicWriteMethod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Fun(_) => write!(f, "Fun"),
+            Self::Fn(_) => write!(f, "Fn"),
             Self::Io => write!(f, "Io"),
         }
     }
@@ -262,9 +262,9 @@ impl fmt::Debug for CharacteristicWriteMethod {
 /// Characteristic notify flags.
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct CharacteristicNotifyFlags {
-    /// If set allows the server to use the Handle Value Notification operation.
+    /// If set allows the client to use the Handle Value Notification operation.
     pub notify: bool,
-    /// If set allows the server to use the Handle Value Indication/Confirmation operation.
+    /// If set allows the client to use the Handle Value Indication/Confirmation operation.
     ///
     /// Confirmations will only be provided when this is `true` and `notify` is `false`.
     pub indicate: bool,
@@ -284,7 +284,6 @@ impl From<CharacteristicFlags> for CharacteristicNotifyFlags {
 }
 
 /// Notification request.
-#[derive(Debug)]
 pub struct CharacteristicValueNotifier {
     connection: Arc<SyncConnection>,
     stop_notify_rx: watch::Receiver<bool>,
@@ -333,7 +332,6 @@ pub type CharacteristicStartNotifyFn =
     Box<dyn Fn(CharacteristicValueNotifier) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// Characteristic notify value method.
-#[derive(Debug)]
 pub enum CharacteristicNotifyMethod {
     /// Call specified function when client starts a notification session.
     Fn(CharacteristicStartNotifyFn),
@@ -341,6 +339,16 @@ pub enum CharacteristicNotifyMethod {
     ///
     /// Use `CharacteristicControlHandle` to obtain writer.
     Io,
+}
+
+
+impl fmt::Debug for CharacteristicNotifyMethod {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Fn(_) => write!(f, "Fn"),
+            Self::Io => write!(f, "Io"),
+        }
+    }
 }
 
 /// Characteristic notify.
@@ -684,7 +692,7 @@ impl RegisteredCharacteristic {
                     method_call(ctx, cr, |c: Arc<Self>| async move {
                         let options = WriteCharacteristicValueRequest::from_dict(&options)?;
                         match &c.reg.write {
-                            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Fun(fun), .. }) => {
+                            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Fn(fun), .. }) => {
                                 fun(value, options).await?;
                                 Ok(())
                             }
@@ -697,6 +705,9 @@ impl RegisteredCharacteristic {
                 method_call(ctx, cr, |c: Arc<Self>| async move { 
                     match &c.reg.notify {
                         Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Fn(notify_fn), .. }) => {
+                            // check if we are indicate or notify
+                            // create stopper tx/rx and store tx here
+                            // create confirm tx/rx if indicate and store tx here
                             let notifier = CharacteristicValueNotifier {
                                 connection: (),
                                 stop_notify_rx: (),

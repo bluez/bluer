@@ -360,7 +360,8 @@ pub enum Error {
     ServicesUnresolved,
     #[error("Bluetooth application is not registered")]
     NotRegistered,
-    #[error("IO error {kind}: {msg}")]
+    #[error("IO error {kind:?}: {msg}")]
+    #[strum(disabled)]
     Io {kind: std::io::ErrorKind, msg: String},
     #[error("Bluetooth error: {0}")]
     Other(String),
@@ -392,7 +393,7 @@ impl From<strum::ParseError> for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) {
+    fn from(err: std::io::Error) -> Self {
         Self::Io{
             kind: err.kind(),
             msg: err.to_string(),
