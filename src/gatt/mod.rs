@@ -21,34 +21,61 @@ pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1
 pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 
 define_flags!(CharacteristicFlags, "Bluetooth GATT characteristic flags." => {
+    /// If set, permits broadcasts of the Characteristic Value using
+    /// Server Characteristic Configuration Descriptor.
     broadcast ("broadcast"),
+    /// If set allows clients to read this characteristic.
     read ("read"),
+    /// If set allows clients to use the Write Request/Response operation.
     write_without_response ("write-without-response"),
+    /// If set allows clients to use the Write Command ATT operation.
     write ("write"),
+    /// If set allows the client to use the Handle Value Notification operation.
     notify ("notify"),
+    /// If set allows the client to use the Handle Value Indication/Confirmation operation.
     indicate ("indicate"),
+    /// If set allows clients to use the Signed Write Without Response procedure.
     authenticated_signed_writes ("authenticated-signed-writes"),
+    /// Extended properties available.
     extended_properties ("extended-properties"),
+    /// If set allows clients to use the Reliable Writes procedure.
     reliable_write ("reliable-write"),
+    /// If set a client can write to the Characteristic User Description Descriptor.
     writable_auxiliaries ("writable-auxiliaries"),
+    /// Require encryption for reading.
     encrypt_read ("encrypt-read"),
+    /// Require encryption for writing.
     encrypt_write ("encrypt-write"),
+    /// Require authentication for reading.
     encrypt_authenticated_read ("encrypt-authenticated-read"),
+    /// Require authentication for writing.
     encrypt_authenticated_write ("encrypt-authenticated-write"),
+    /// Require security for reading.
     secure_read ("secure-read"),
+    /// Require security for writing.
     secure_write ("secure-write"),
+    /// Authorize flag.
     authorize ("authorize"),
 });
 
 define_flags!(CharacteristicDescriptorFlags, "Bluetooth GATT characteristic descriptor flags." => {
+    /// If set allows clients to read this characteristic descriptor.
     read ("read"),
+    /// If set allows clients to use the Write Command ATT operation.
     write ("write"),
+    /// Require encryption for reading.
     encrypt_read ("encrypt-read"),
+    /// Require encryption for writing.
     encrypt_write ("encrypt-write"),
+    /// Require authentication for reading.
     encrypt_authenticated_read ("encrypt-authenticated-read"),
+    /// Require authentication for writing.
     encrypt_authenticated_write ("encrypt-authenticated-write"),
+    /// Require security for reading.
     secure_read ("secure-read"),
+    /// Require security for writing.
     secure_write ("secure-write"),
+    /// Authorize flag.
     authorize ("authorize"),
 });
 

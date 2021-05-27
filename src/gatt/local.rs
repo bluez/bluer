@@ -882,7 +882,7 @@ pub type DescriptorReadFun =
 /// Characteristic descriptor read.
 #[derive(custom_debug::Debug)]
 pub struct DescriptorRead {
-    /// If set allows clients to read this characteristic.
+    /// If set allows clients to read this characteristic descriptor.
     pub read: bool,
     /// Require encryption.
     pub encrypt_read: bool,
