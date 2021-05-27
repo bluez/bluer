@@ -33,9 +33,9 @@ pub(crate) struct SessionInner {
     pub connection: Arc<SyncConnection>,
     pub crossroads: Mutex<Crossroads>,
     pub le_advertisment_token: IfaceToken<LeAdvertisement>,
-    pub gatt_service_token: IfaceToken<Arc<gatt::local::Service>>,
+    pub gatt_reg_service_token: IfaceToken<Arc<gatt::local::RegisteredService>>,
     pub gatt_reg_characteristic_token: IfaceToken<Arc<gatt::local::RegisteredCharacteristic>>,
-    pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::Descriptor>>,
+    pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
     pub event_sub_tx: mpsc::Sender<SubscribeEvents>,
@@ -122,10 +122,11 @@ impl Session {
         )));
 
         let le_advertisment_token = LeAdvertisement::register_interface(&mut crossroads);
-        let gatt_service_token = gatt::local::Service::register_interface(&mut crossroads);
+        let gatt_service_token = gatt::local::RegisteredService::register_interface(&mut crossroads);
         let gatt_reg_characteristic_token =
             gatt::local::RegisteredCharacteristic::register_interface(&mut crossroads);
-        let gatt_characteristic_descriptor_token = gatt::local::Descriptor::register_interface(&mut crossroads);
+        let gatt_characteristic_descriptor_token =
+            gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
@@ -135,9 +136,9 @@ impl Session {
             connection: connection.clone(),
             crossroads: Mutex::new(crossroads),
             le_advertisment_token,
-            gatt_service_token,
+            gatt_reg_service_token: gatt_service_token,
             gatt_reg_characteristic_token,
-            gatt_characteristic_descriptor_token,
+            gatt_reg_characteristic_descriptor_token: gatt_characteristic_descriptor_token,
             gatt_profile_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,

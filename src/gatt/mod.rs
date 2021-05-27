@@ -50,7 +50,7 @@ pub enum WriteValueType {
     /// Write with response.
     #[strum(serialize = "request")]
     Request,
-    /// Reliable Write.
+    /// Reliable write.
     #[strum(serialize = "reliable")]
     Reliable,
 }

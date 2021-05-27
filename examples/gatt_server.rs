@@ -52,20 +52,23 @@ async fn main() -> blurz::Result<()> {
                         }
                         .boxed()
                     }),
-                    flags: gatt::local::CharacteristicReadFlags { read: true, ..Default::default() },
+                    read: true,
+                    ..Default::default()
                 }),
                 write: Some(gatt::local::CharacteristicWrite {
-                    method: gatt::local::CharacteristicWriteMethod::Fn(Box::new(|value, req| {
+                    method: gatt::local::CharacteristicWriteMethod::Fun(Box::new(|value, req| {
                         async move {
                             println!("Write request {:?} with value {:?}", &req, &value);
                             Ok(())
                         }
                         .boxed()
                     })),
-                    flags: gatt::local::CharacteristicWriteFlags { write: true, ..Default::default() },
+                    write: true,
+                    ..Default::default()
                 }),
                 ..Default::default()
             }],
+            ..Default::default()
         }],
     };
     let app_handle = adapter.serve_gatt_application(app).await?;
