@@ -9,7 +9,6 @@ use dbus::{
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
 use futures::{channel::oneshot, lock::Mutex, Future, FutureExt};
-use pin_project::pin_project;
 use std::{
     collections::HashSet,
     fmt,
@@ -18,19 +17,14 @@ use std::{
     num::NonZeroU16,
     pin::Pin,
     sync::{Arc, Weak},
-    task::Poll,
 };
 use strum::IntoStaticStr;
-use tokio::{
-    io::{self, AsyncRead, AsyncWrite},
-    net::UnixStream,
-    sync::{mpsc, watch},
-};
+use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 use super::{
-    CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType, CHARACTERISTIC_INTERFACE,
-    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CharacteristicDescriptorFlags, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
+    WriteValueType, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     make_socket_pair, parent_path, Adapter, Error, LinkType, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
@@ -561,121 +555,15 @@ impl CharacteristicWriteIoRequest {
 
     /// Accept the write request.
     pub fn accept(self) -> Result<CharacteristicReader> {
-        let CharacteristicWriteIoRequest { mtu, link, tx } = self;
+        let CharacteristicWriteIoRequest { mtu, tx, .. } = self;
         let (fd, stream) = make_socket_pair()?;
         let _ = tx.send(Ok(fd));
-        Ok(CharacteristicReader { mtu: mtu.into(), link, stream })
+        Ok(CharacteristicReader { mtu: mtu.into(), stream })
     }
 
     /// Reject the write request.
     pub fn reject(self, reason: Reject) {
         let _ = self.tx.send(Err(reason));
-    }
-}
-
-/// Provides write requests to a characteristic as an IO stream.
-#[pin_project]
-pub struct CharacteristicReader {
-    mtu: usize,
-    link: Option<LinkType>,
-    #[pin]
-    stream: UnixStream,
-}
-
-impl CharacteristicReader {
-    /// Maximum transmission unit.
-    pub fn mtu(&self) -> usize {
-        self.mtu
-    }
-
-    /// Link type.
-    pub fn link(&self) -> Option<LinkType> {
-        self.link
-    }
-
-    /// Gets the underlying UNIX socket.
-    pub fn get(&self) -> &UnixStream {
-        &self.stream
-    }
-
-    /// Gets the underlying UNIX socket mutably.
-    pub fn get_mut(&mut self) -> &mut UnixStream {
-        &mut self.stream
-    }
-
-    /// Transforms the reader into the underlying UNIX socket.
-    pub fn into_inner(self) -> UnixStream {
-        self.stream
-    }
-}
-
-impl fmt::Debug for CharacteristicReader {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CharacteristicReader {{ {:?} }}", &self.stream)
-    }
-}
-
-impl AsyncRead for CharacteristicReader {
-    fn poll_read(
-        self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &mut io::ReadBuf,
-    ) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_read(cx, buf)
-    }
-}
-
-/// Allows sending of notifications of a characteristic via an IO stream.
-#[pin_project]
-pub struct CharacteristicWriter {
-    mtu: usize,
-    link: Option<LinkType>,
-    #[pin]
-    stream: UnixStream,
-}
-
-impl CharacteristicWriter {
-    /// Maximum transmission unit.
-    pub fn mtu(&self) -> usize {
-        self.mtu
-    }
-
-    /// Link type.
-    pub fn link(&self) -> Option<LinkType> {
-        self.link
-    }
-
-    /// Gets the underlying UNIX socket.
-    pub fn get(&self) -> &UnixStream {
-        &self.stream
-    }
-
-    /// Gets the underlying UNIX socket mutably.
-    pub fn get_mut(&mut self) -> &mut UnixStream {
-        &mut self.stream
-    }
-
-    /// Transforms the reader into the underlying UNIX socket.
-    pub fn into_inner(self) -> UnixStream {
-        self.stream
-    }
-}
-
-impl fmt::Debug for CharacteristicWriter {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CharacteristicWriter {{ {:?} }}", &self.stream)
-    }
-}
-
-impl AsyncWrite for CharacteristicWriter {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
-        self.project().stream.poll_write(cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_flush(cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_shutdown(cx)
     }
 }
 
@@ -966,8 +854,7 @@ impl RegisteredCharacteristic {
                                 // bluez has already confirmed the start of the notification session.
                                 // So there is no point in making this failable by our users.
                                 let (fd, stream) = make_socket_pair().map_err(|_| Reject::Failed)?;
-                                let writer =
-                                    CharacteristicWriter { mtu: options.mtu.into(), link: options.link, stream };
+                                let writer = CharacteristicWriter { mtu: options.mtu.into(), stream };
                                 let _ = notify_writer_tx.send(writer).await;
                                 Ok((fd, options.mtu))
                             }

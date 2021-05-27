@@ -1,6 +1,17 @@
 //! GATT services.
 
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use pin_project::pin_project;
 use strum::{Display, EnumString};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    net::UnixStream,
+};
 
 pub mod local;
 pub mod remote;
@@ -58,5 +69,97 @@ pub enum WriteValueType {
 impl Default for WriteValueType {
     fn default() -> Self {
         Self::Command
+    }
+}
+
+/// Provides write requests to a characteristic as an IO stream.
+#[pin_project]
+pub struct CharacteristicReader {
+    mtu: usize,
+    #[pin]
+    stream: UnixStream,
+}
+
+impl CharacteristicReader {
+    /// Maximum transmission unit.
+    pub fn mtu(&self) -> usize {
+        self.mtu
+    }
+
+    /// Gets the underlying UNIX socket.
+    pub fn get(&self) -> &UnixStream {
+        &self.stream
+    }
+
+    /// Gets the underlying UNIX socket mutably.
+    pub fn get_mut(&mut self) -> &mut UnixStream {
+        &mut self.stream
+    }
+
+    /// Transforms the reader into the underlying UNIX socket.
+    pub fn into_inner(self) -> UnixStream {
+        self.stream
+    }
+}
+
+impl fmt::Debug for CharacteristicReader {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicReader {{ {:?} }}", &self.stream)
+    }
+}
+
+impl AsyncRead for CharacteristicReader {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<std::io::Result<()>> {
+        self.project().stream.poll_read(cx, buf)
+    }
+}
+
+/// Allows sending of notifications of a characteristic via an IO stream.
+#[pin_project]
+pub struct CharacteristicWriter {
+    mtu: usize,
+    #[pin]
+    stream: UnixStream,
+}
+
+impl CharacteristicWriter {
+    /// Maximum transmission unit.
+    pub fn mtu(&self) -> usize {
+        self.mtu
+    }
+
+    /// Gets the underlying UNIX socket.
+    pub fn get(&self) -> &UnixStream {
+        &self.stream
+    }
+
+    /// Gets the underlying UNIX socket mutably.
+    pub fn get_mut(&mut self) -> &mut UnixStream {
+        &mut self.stream
+    }
+
+    /// Transforms the reader into the underlying UNIX socket.
+    pub fn into_inner(self) -> UnixStream {
+        self.stream
+    }
+}
+
+impl fmt::Debug for CharacteristicWriter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CharacteristicWriter {{ {:?} }}", &self.stream)
+    }
+}
+
+impl AsyncWrite for CharacteristicWriter {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+        self.project().stream.poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+        self.project().stream.poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }

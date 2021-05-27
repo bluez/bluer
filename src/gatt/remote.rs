@@ -1,17 +1,18 @@
 //! Remote GATT services.
 
 use dbus::{
-    arg::{PropMap, RefArg, Variant},
+    arg::{OwnedFd, PropMap, RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
     Path,
 };
 use futures::{Stream, StreamExt};
-use std::{fmt, sync::Arc};
+use std::{fmt, os::unix::prelude::FromRawFd, sync::Arc};
+use tokio::net::UnixStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType, CHARACTERISTIC_INTERFACE,
-    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CharacteristicDescriptorFlags, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
+    WriteValueType, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     all_dbus_objects, Address, Device, Error, Event, Result, SessionInner, SingleSessionToken, SERVICE_NAME,
@@ -148,7 +149,7 @@ define_properties!(
         /// If false, the service is secondary.
         property(
             Primary, bool,
-            dbus: (SERVICE_INTERFACE, "primary", bool, MANDATORY),
+            dbus: (SERVICE_INTERFACE, "Primary", bool, MANDATORY),
             get: (primary, v => { v.to_owned() }),
         );
 
@@ -162,7 +163,7 @@ define_properties!(
         /// Service handle.
         property(
             Handle, u16,
-            dbus: (SERVICE_INTERFACE, "u16", u16, MANDATORY),
+            dbus: (SERVICE_INTERFACE, "Handle", u16, MANDATORY),
             get: (handle, v => { v.to_owned() }),
         );
     }
@@ -328,7 +329,28 @@ impl Characteristic {
         Ok(())
     }
 
-    /// Starts a notification session from this characteristic
+    /// Acquire file descriptor and MTU for writing.
+    ///
+    /// It only works with characteristic that has
+    /// the `write_without_response` flag set.
+    ///
+    /// Usage of `write` will be
+    /// locked causing it to return NotPermitted error.
+    /// To release the lock the client shall drop the writer.
+    ///
+    /// Note: the MTU can only be negotiated once and is
+    ///	symmetric therefore this method may be delayed in
+    ///	order to have the exchange MTU completed, because of
+    ///	that the file descriptor is closed during
+    ///	reconnections as the MTU has to be renegotiated.
+    pub async fn write_io(&self) -> Result<CharacteristicWriter> {
+        let options = PropMap::new();
+        let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
+        let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
+        Ok(CharacteristicWriter { mtu: mtu.into(), stream })
+    }
+
+    /// Starts a notification or indication session from this characteristic
     /// if it supports value notifications or indications.    
     ///
     /// This will also notify after a read operation.
@@ -368,6 +390,34 @@ impl Characteristic {
                 },
             )
             .await
+    }
+
+    /// Acquire file descriptor and MTU for notify.
+    ///
+    /// It only works with characteristic that has
+    /// the `notify` flag set and no other client has called
+    /// `StartNotify`.
+    ///
+    /// Notification are enabled during this procedure so
+    /// `notify` shall not be called, any notification
+    /// will be dispatched via file descriptor therefore the
+    /// Value property is not affected during the time where
+    ///	notify has been acquired.
+    ///
+    /// Usage of `noify` will be
+    /// locked causing it to return NotPermitted error.
+    /// To release the lock the client shall drop the writer.
+    ///
+    /// Note: the MTU can only be negotiated once and is
+    ///	symmetric therefore this method may be delayed in
+    ///	order to have the exchange MTU completed, because of
+    ///	that the file descriptor is closed during
+    ///	reconnections as the MTU has to be renegotiated.
+    pub async fn notify_io(&self) -> Result<CharacteristicReader> {
+        let options = PropMap::new();
+        let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
+        let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
+        Ok(CharacteristicReader { mtu: mtu.into(), stream })
     }
 
     dbus_interface!();
@@ -422,7 +472,7 @@ define_properties!(
         /// Characteristic handle.
         property(
             Handle, u16,
-            dbus: (CHARACTERISTIC_INTERFACE, "u16", u16, MANDATORY),
+            dbus: (CHARACTERISTIC_INTERFACE, "Handle", u16, MANDATORY),
             get: (handle, v => { v.to_owned() }),
         );
 
@@ -640,7 +690,7 @@ define_properties!(
         /// Characteristic descriptor handle.
         property(
             Handle, u16,
-            dbus: (DESCRIPTOR_INTERFACE, "u16", u16, MANDATORY),
+            dbus: (DESCRIPTOR_INTERFACE, "Handle", u16, MANDATORY),
             get: (handle, v => { v.to_owned() }),
         );
 
