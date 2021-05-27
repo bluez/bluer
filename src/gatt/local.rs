@@ -23,8 +23,8 @@ use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 use super::{
-    CharacteristicDescriptorFlags, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
-    WriteValueType, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteValueType,
+    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     make_socket_pair, parent_path, Adapter, Error, LinkType, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
@@ -908,7 +908,7 @@ impl Default for DescriptorRead {
 }
 
 impl DescriptorRead {
-    fn set_descriptor_flags(&self, f: &mut CharacteristicDescriptorFlags) {
+    fn set_descriptor_flags(&self, f: &mut DescriptorFlags) {
         f.read = self.read;
         f.encrypt_read = self.encrypt_read;
         f.encrypt_authenticated_read = self.encrypt_authenticated_read;
@@ -950,7 +950,7 @@ impl Default for DescriptorWrite {
 }
 
 impl DescriptorWrite {
-    fn set_descriptor_flags(&self, f: &mut CharacteristicDescriptorFlags) {
+    fn set_descriptor_flags(&self, f: &mut DescriptorFlags) {
         f.write = self.write;
         f.encrypt_write = self.encrypt_write;
         f.encrypt_authenticated_write = self.encrypt_authenticated_write;
@@ -978,7 +978,7 @@ pub struct Descriptor {
 }
 
 impl Descriptor {
-    fn set_descriptor_flags(&self, f: &mut CharacteristicDescriptorFlags) {
+    fn set_descriptor_flags(&self, f: &mut DescriptorFlags) {
         f.authorize = self.authorize;
     }
 }
@@ -1097,7 +1097,7 @@ impl RegisteredDescriptor {
                 Some(reg.d.uuid.to_string())
             });
             cr_property!(ib, "Flags", reg => {
-                let mut flags = CharacteristicDescriptorFlags::default();
+                let mut flags = DescriptorFlags::default();
                 reg.d.set_descriptor_flags(&mut flags);
                 if let Some(read) = &reg.d.read {
                     read.set_descriptor_flags(&mut flags);

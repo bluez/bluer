@@ -11,8 +11,8 @@ use tokio::net::UnixStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicDescriptorFlags, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
-    WriteValueType, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteValueType,
+    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     all_dbus_objects, Address, Device, Error, Event, Result, SessionInner, SingleSessionToken, SERVICE_NAME,
@@ -696,9 +696,9 @@ define_properties!(
 
         /// Defines how the descriptor value can be used.
         property(
-            Flags, CharacteristicDescriptorFlags,
+            Flags, DescriptorFlags,
             dbus: (DESCRIPTOR_INTERFACE, "Flags", Vec<String>, MANDATORY),
-            get: (flags, v => {CharacteristicDescriptorFlags::from_slice(v)}),
+            get: (flags, v => {DescriptorFlags::from_slice(v)}),
         );
 
         /// The cached value of the descriptor.

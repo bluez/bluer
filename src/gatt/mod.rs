@@ -58,7 +58,7 @@ define_flags!(CharacteristicFlags, "Bluetooth GATT characteristic flags." => {
     authorize ("authorize"),
 });
 
-define_flags!(CharacteristicDescriptorFlags, "Bluetooth GATT characteristic descriptor flags." => {
+define_flags!(DescriptorFlags, "Bluetooth GATT characteristic descriptor flags." => {
     /// If set allows clients to read this characteristic descriptor.
     read ("read"),
     /// If set allows clients to use the Write Command ATT operation.
@@ -99,7 +99,7 @@ impl Default for WriteValueType {
     }
 }
 
-/// Provides write requests to a characteristic as an IO stream.
+/// Streams data from a characteristic.
 #[pin_project]
 pub struct CharacteristicReader {
     mtu: usize,
@@ -141,7 +141,7 @@ impl AsyncRead for CharacteristicReader {
     }
 }
 
-/// Allows sending of notifications of a characteristic via an IO stream.
+/// Streams data to a characteristic.
 #[pin_project]
 pub struct CharacteristicWriter {
     mtu: usize,
