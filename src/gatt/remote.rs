@@ -158,6 +158,13 @@ define_properties!(
             dbus: (SERVICE_INTERFACE, "UUID", String, MANDATORY),
             get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
         );
+
+        /// Service handle.
+        property(
+            Handle, u16,
+            dbus: (SERVICE_INTERFACE, "u16", u16, MANDATORY),
+            get: (handle, v => { v.to_owned() }),
+        );
     }
 );
 
@@ -260,10 +267,10 @@ impl Characteristic {
     }
 
     /// GATT descriptors belonging to this characteristic.
-    pub async fn descriptors(&self) -> Result<Vec<CharacteristicDescriptor>> {
+    pub async fn descriptors(&self) -> Result<Vec<Descriptor>> {
         let mut chars = Vec::new();
         for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
-            match CharacteristicDescriptor::parse_dbus_path(&path) {
+            match Descriptor::parse_dbus_path(&path) {
                 Some((adapter, device_address, service_id, char_id, id))
                     if adapter == *self.adapter_name
                         && device_address == self.device_address
@@ -280,8 +287,8 @@ impl Characteristic {
     }
 
     /// GATT descriptor with specified id.
-    pub async fn descriptor(&self, descriptor_id: u16) -> Result<CharacteristicDescriptor> {
-        CharacteristicDescriptor::new(
+    pub async fn descriptor(&self, descriptor_id: u16) -> Result<Descriptor> {
+        Descriptor::new(
             self.inner.clone(),
             self.adapter_name.clone(),
             self.device_address,
@@ -295,7 +302,7 @@ impl Characteristic {
     /// characteristic and returns the value if the
     /// operation was successful.    
     pub async fn read(&self) -> Result<Vec<u8>> {
-        self.read_ext(&ReadCharacteristicValueRequest::default()).await
+        self.read_ext(&CharacteristicReadRequest::default()).await
     }
 
     /// Issues a request to read the value of the
@@ -303,20 +310,20 @@ impl Characteristic {
     /// operation was successful.    
     ///
     /// Takes extended options for the read operation.
-    pub async fn read_ext(&self, req: &ReadCharacteristicValueRequest) -> Result<Vec<u8>> {
+    pub async fn read_ext(&self, req: &CharacteristicReadRequest) -> Result<Vec<u8>> {
         let (value,): (Vec<u8>,) = self.call_method("ReadValue", (req.to_dict(),)).await?;
         Ok(value)
     }
 
     /// Issues a request to write the value of the characteristic.
     pub async fn write(&self, value: &[u8]) -> Result<()> {
-        self.write_ext(value, &WriteCharacteristicValueRequest::default()).await
+        self.write_ext(value, &CharacteristicWriteRequest::default()).await
     }
 
     /// Issues a request to write the value of the characteristic.
     ///
     /// Takes extended options for the write operation.
-    pub async fn write_ext(&self, value: &[u8], req: &WriteCharacteristicValueRequest) -> Result<()> {
+    pub async fn write_ext(&self, value: &[u8], req: &CharacteristicWriteRequest) -> Result<()> {
         let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
@@ -369,12 +376,12 @@ impl Characteristic {
 
 /// Read characteristic value extended request.
 #[derive(Debug, Default, Clone)]
-pub struct ReadCharacteristicValueRequest {
+pub struct CharacteristicReadRequest {
     /// Offset.
     pub offset: u16,
 }
 
-impl ReadCharacteristicValueRequest {
+impl CharacteristicReadRequest {
     fn to_dict(&self) -> PropMap {
         let mut pm = PropMap::new();
         pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
@@ -384,7 +391,7 @@ impl ReadCharacteristicValueRequest {
 
 /// Write characteristic value extended request.
 #[derive(Debug, Default, Clone)]
-pub struct WriteCharacteristicValueRequest {
+pub struct CharacteristicWriteRequest {
     /// Start offset.
     pub offset: u16,
     /// Write operation type.
@@ -393,7 +400,7 @@ pub struct WriteCharacteristicValueRequest {
     pub prepare_authorize: bool,
 }
 
-impl WriteCharacteristicValueRequest {
+impl CharacteristicWriteRequest {
     fn to_dict(&self) -> PropMap {
         let mut pm = PropMap::new();
         pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
@@ -412,24 +419,11 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
         );
 
-        /// True, if this characteristic has been acquired by any
-        /// client using AcquireWrite.
-        ///
-        /// It is ommited in case the 'write-without-response' flag is not set.
+        /// Characteristic handle.
         property(
-            WriteAcquired, bool,
-            dbus: (CHARACTERISTIC_INTERFACE, "WriteAcquired", bool, OPTIONAL),
-            get: (write_acquired, v => {v.to_owned()}),
-        );
-
-        /// True, if this characteristic has been acquired by any
-        /// client using AcquireNotify.
-        ///
-        /// It is ommited in case the 'notify' flag is not set.
-        property(
-            NotifyAcquired, bool,
-            dbus: (CHARACTERISTIC_INTERFACE, "NotifyAcquired", bool, OPTIONAL),
-            get: (notify_acquired, v => {v.to_owned()}),
+            Handle, u16,
+            dbus: (CHARACTERISTIC_INTERFACE, "u16", u16, MANDATORY),
+            get: (handle, v => { v.to_owned() }),
         );
 
         ///	True, if notifications or indications on this
@@ -471,7 +465,7 @@ define_properties!(
 
 /// Interface to remote GATT characteristic descriptor connected over Bluetooth.
 #[derive(Clone)]
-pub struct CharacteristicDescriptor {
+pub struct Descriptor {
     inner: Arc<SessionInner>,
     dbus_path: Path<'static>,
     adapter_name: Arc<String>,
@@ -481,14 +475,14 @@ pub struct CharacteristicDescriptor {
     id: u16,
 }
 
-impl fmt::Debug for CharacteristicDescriptor {
+impl fmt::Debug for Descriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "CharacteristicDescriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}", 
+        write!(f, "Descriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}", 
             self.adapter_name(), self.device_address(), self.service_id(), self.characteristic_id(), self.id())
     }
 }
 
-impl CharacteristicDescriptor {
+impl Descriptor {
     pub(crate) fn new(
         inner: Arc<SessionInner>, adapter_name: Arc<String>, device_address: Address, service_id: u16,
         characteristic_id: u16, id: u16,
@@ -574,7 +568,7 @@ impl CharacteristicDescriptor {
     /// descriptor and returns the value if the
     /// operation was successful.    
     pub async fn read(&self) -> Result<Vec<u8>> {
-        self.read_ext(&ReadCharacteristicDescriptorValueRequest::default()).await
+        self.read_ext(&DescriptorReadRequest::default()).await
     }
 
     /// Issues a request to read the value of the
@@ -582,20 +576,20 @@ impl CharacteristicDescriptor {
     /// operation was successful.    
     ///
     /// Takes extended options for the read operation.
-    pub async fn read_ext(&self, req: &ReadCharacteristicDescriptorValueRequest) -> Result<Vec<u8>> {
+    pub async fn read_ext(&self, req: &DescriptorReadRequest) -> Result<Vec<u8>> {
         let (value,): (Vec<u8>,) = self.call_method("ReadValue", (req.to_dict(),)).await?;
         Ok(value)
     }
 
     /// Issues a request to write the value of the descriptor.
     pub async fn write(&self, value: &[u8]) -> Result<()> {
-        self.write_ext(value, &WriteCharacteristicDescriptorValueRequest::default()).await
+        self.write_ext(value, &DescriptorWriteRequest::default()).await
     }
 
     /// Issues a request to write the value of the descriptor.
     ///
     /// Takes extended options for the write operation.
-    pub async fn write_ext(&self, value: &[u8], req: &WriteCharacteristicDescriptorValueRequest) -> Result<()> {
+    pub async fn write_ext(&self, value: &[u8], req: &DescriptorWriteRequest) -> Result<()> {
         let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
@@ -603,12 +597,12 @@ impl CharacteristicDescriptor {
 
 /// Read characteristic descriptor value extended request.
 #[derive(Debug, Default, Clone)]
-pub struct ReadCharacteristicDescriptorValueRequest {
+pub struct DescriptorReadRequest {
     /// Offset.
     pub offset: u16,
 }
 
-impl ReadCharacteristicDescriptorValueRequest {
+impl DescriptorReadRequest {
     fn to_dict(&self) -> PropMap {
         let mut pm = PropMap::new();
         pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
@@ -618,14 +612,14 @@ impl ReadCharacteristicDescriptorValueRequest {
 
 /// Write characteristic descriptor value extended request.
 #[derive(Debug, Default, Clone)]
-pub struct WriteCharacteristicDescriptorValueRequest {
+pub struct DescriptorWriteRequest {
     /// Start offset.
     pub offset: u16,
     /// True if prepare authorization request.
     pub prepare_authorize: bool,
 }
 
-impl WriteCharacteristicDescriptorValueRequest {
+impl DescriptorWriteRequest {
     fn to_dict(&self) -> PropMap {
         let mut pm = PropMap::new();
         pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
@@ -635,12 +629,19 @@ impl WriteCharacteristicDescriptorValueRequest {
 }
 
 define_properties!(
-    CharacteristicDescriptor, CharacteristicDescriptorProperty => {
+    Descriptor, CharacteristicDescriptorProperty => {
         /// 128-bit descriptor UUID.
         property(
             Uuid, Uuid,
             dbus: (DESCRIPTOR_INTERFACE, "UUID", String, MANDATORY),
             get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
+        );
+
+        /// Characteristic descriptor handle.
+        property(
+            Handle, u16,
+            dbus: (DESCRIPTOR_INTERFACE, "u16", u16, MANDATORY),
+            get: (handle, v => { v.to_owned() }),
         );
 
         /// Defines how the descriptor value can be used.
@@ -652,9 +653,7 @@ define_properties!(
 
         /// The cached value of the descriptor.
         ///
-        /// This property
-        /// gets updated only after a successful read request and
-        /// when a notification or indication is received.
+        /// This property gets updated only after a successful read request.
         property(
             CachedValue, Vec<u8>,
             dbus: (DESCRIPTOR_INTERFACE, "Value", Vec<u8>, MANDATORY),

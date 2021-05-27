@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use blurz::{
-    gatt::remote::{Characteristic, WriteCharacteristicValueRequest},
+    gatt::remote::{Characteristic, CharacteristicWriteRequest},
     AdapterEvent, Device, Result,
 };
 use futures::{pin_mut, StreamExt};
@@ -80,7 +80,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Writing characteristic value with response {:?}", &data2);
     char.write_ext(
         &data2,
-        &WriteCharacteristicValueRequest { op_type: blurz::gatt::WriteValueType::Request, ..Default::default() },
+        &CharacteristicWriteRequest { op_type: blurz::gatt::WriteValueType::Request, ..Default::default() },
     )
     .await?;
 
