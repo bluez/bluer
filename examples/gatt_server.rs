@@ -38,36 +38,33 @@ async fn main() -> blurz::Result<()> {
 
     println!("Serving GATT application on Bluetooth adapter {}", &adapter_name);
 
-    let mut flags = gatt::CharacteristicFlags::default();
-    flags.read = true;
-    //flags.write = true;
-    //flags.write_without_response = true;
-    flags.reliable_write = true;
-    flags.notify = true;
-    //flags.notify = true;
-
     let app = gatt::local::Application {
         services: vec![gatt::local::Service {
             uuid: service_uuid,
             primary: true,
             characteristics: vec![gatt::local::Characteristic {
                 uuid: characteristic_uuid,
-                other_flags: flags,
-                descriptors: vec![],
-                read: Some(Box::new(|req| {
-                    async move {
-                        println!("Read request: {:?}", &req);
-                        Ok(vec![1, 2, 3])
-                    }
-                    .boxed()
-                })),
-                write: Some(Box::new(|value, req| {
-                    async move {
-                        println!("Write request {:?} with value {:?}", &req, &value);
-                        Ok(())
-                    }
-                    .boxed()
-                })),
+                read: Some(gatt::local::CharacteristicRead {
+                    fun: Box::new(|req| {
+                        async move {
+                            println!("Read request: {:?}", &req);
+                            Ok(vec![1, 2, 3])
+                        }
+                        .boxed()
+                    }),
+                    flags: gatt::local::CharacteristicReadFlags { read: true, ..Default::default() },
+                }),
+                write: Some(gatt::local::CharacteristicWrite {
+                    method: gatt::local::CharacteristicWriteMethod::Fn(Box::new(|value, req| {
+                        async move {
+                            println!("Write request {:?} with value {:?}", &req, &value);
+                            Ok(())
+                        }
+                        .boxed()
+                    })),
+                    flags: gatt::local::CharacteristicWriteFlags { write: true, ..Default::default() },
+                }),
+                ..Default::default()
             }],
         }],
     };

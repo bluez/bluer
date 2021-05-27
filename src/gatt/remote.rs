@@ -9,7 +9,10 @@ use futures::{Stream, StreamExt};
 use std::{fmt, sync::Arc};
 use uuid::Uuid;
 
-use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
+use super::{
+    CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType, CHARACTERISTIC_INTERFACE,
+    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+};
 use crate::{
     all_dbus_objects, Address, Device, Error, Event, Result, SessionInner, SingleSessionToken, SERVICE_NAME,
     TIMEOUT,
@@ -18,8 +21,6 @@ use crate::{
 // ===========================================================================================
 // Service
 // ===========================================================================================
-
-pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 
 /// Interface to remote GATT service connected over Bluetooth.
 #[derive(Clone)]
@@ -163,8 +164,6 @@ define_properties!(
 // ===========================================================================================
 // Characteristic
 // ===========================================================================================
-
-pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 
 /// Interface to remote GATT characteristic connected over Bluetooth.
 #[derive(Clone)]
@@ -469,8 +468,6 @@ define_properties!(
 // ===========================================================================================
 // Characteristic descriptor
 // ===========================================================================================
-
-pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 
 /// Interface to remote GATT characteristic descriptor connected over Bluetooth.
 #[derive(Clone)]

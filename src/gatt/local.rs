@@ -1,41 +1,37 @@
 //! Local GATT services.
 
 use dbus::{
-    arg::{AppendAll, OwnedFd, PropMap},
-    nonblock::{Proxy, SyncConnection},
-    MethodErr,
+    arg::{AppendAll, OwnedFd, PropMap, Variant},
+    channel::Sender,
+    message::SignalArgs,
+    nonblock::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
+    MethodErr, Path,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::stream::StreamExt;
-use futures::{
-    channel::{mpsc, oneshot},
-    lock::Mutex,
-    Future, SinkExt,
-};
-use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
-use pin_project::{pin_project, pinned_drop};
+use futures::{channel::oneshot, lock::Mutex, Future, FutureExt};
+use pin_project::pin_project;
 use std::{
     collections::HashSet,
     fmt,
     marker::PhantomData,
     mem::take,
     num::NonZeroU16,
-    os::unix::{io::RawFd, prelude::FromRawFd},
     pin::Pin,
     sync::{Arc, Weak},
     task::Poll,
-    time::Duration,
 };
 use strum::IntoStaticStr;
 use tokio::{
-    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{self, AsyncRead, AsyncWrite},
     net::UnixStream,
-    sync::watch,
-    time::sleep,
+    sync::{mpsc, watch},
 };
 use uuid::Uuid;
 
-use super::{CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType};
+use super::{
+    CharacteristicDescriptorFlags, CharacteristicFlags, WriteValueType, CHARACTERISTIC_INTERFACE,
+    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+};
 use crate::{
     make_socket_pair, parent_path, Adapter, Error, LinkType, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
     TIMEOUT,
@@ -78,15 +74,18 @@ impl From<Reject> for dbus::MethodErr {
 /// Result of a Bluetooth request to us.
 pub type ReqResult<T> = std::result::Result<T, Reject>;
 
+/// Result of calling one of our D-Bus methods.
+type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
+
 /// Call method on Arc D-Bus object we are serving.
-fn method_call<T: Send + Sync + 'static, R: AppendAll, F: Future<Output = ReqResult<R>> + Send + 'static>(
+fn method_call<T: Send + Sync + 'static, R: AppendAll, F: Future<Output = DbusResult<R>> + Send + 'static>(
     mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
 ) -> impl Future<Output = PhantomData<R>> {
     let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
     let data: Arc<T> = data_ref.clone();
     async move {
         let result = f(data).await;
-        ctx.reply(result.into())
+        ctx.reply(result)
     }
 }
 
@@ -110,7 +109,7 @@ pub struct Service {
 
 impl Service {
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register("org.bluez.GattService1", |ib: &mut IfaceBuilder<Arc<Self>>| {
+        cr.register(SERVICE_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
             cr_property!(ib, "UUID", s => {
                 Some(s.uuid.to_string())
             });
@@ -285,8 +284,9 @@ impl From<CharacteristicFlags> for CharacteristicNotifyFlags {
 
 /// Notification request.
 pub struct CharacteristicValueNotifier {
-    connection: Arc<SyncConnection>,
-    stop_notify_rx: watch::Receiver<bool>,
+    connection: Weak<SyncConnection>,
+    path: Path<'static>,
+    stop_notify_tx: mpsc::Sender<()>,
     confirm_rx: Option<mpsc::Receiver<()>>,
 }
 
@@ -299,28 +299,55 @@ impl CharacteristicValueNotifier {
     }
 
     /// True, if the notification session has been stopped by the receiving device.
-    pub fn is_closed(&self) -> bool {
-        *self.stop_notify_rx.borrow()
+    pub fn is_stopped(&self) -> bool {
+        self.stop_notify_tx.is_closed()
     }
 
-    /// Returns a future that resolves once the notification has been stopped.
-    pub fn closed(&self) -> impl Future<Output = ()> {
-        let mut stop_notify_rx = self.stop_notify_rx.clone();
-        async move {
-            while !*stop_notify_rx.borrow() {
-                if stop_notify_rx.changed().await.is_err() {
-                    break;
-                }
-            }
-        }
+    /// Resolves once the notification sesstion has been stopped by the receiving device.
+    pub fn stopped(&self) -> impl Future<Output = ()> {
+        let stop_notify_tx = self.stop_notify_tx.clone();
+        async move { stop_notify_tx.closed().await }
     }
 
     /// Sends a notification or indication with the specified data to the receiving device.
     ///
     /// If `confirming` is true, the function waits until a confirmation is received from
     /// the device before it returns.
-    pub async fn notify(&self, value: Vec<u8>) -> Result<()> {
-        todo!()
+    pub async fn notify(&mut self, value: Vec<u8>) -> Result<()> {
+        let connection = self.connection.upgrade().ok_or(Error::DBusConnectionLost)?;
+        if self.is_stopped() {
+            return Err(Error::NotificationSessionStopped);
+        }
+
+        // Flush confirmation queue.
+        // This is necessary because previous notify call could have been aborted
+        // before receiving the confirmation.
+        if let Some(confirm_rx) = &mut self.confirm_rx {
+            while let Some(Some(())) = confirm_rx.recv().now_or_never() {}
+        }
+
+        // Send notification.
+        let mut changed_properties = PropMap::new();
+        changed_properties.insert("Value".to_string(), Variant(Box::new(value)));
+        let ppc = PropertiesPropertiesChanged {
+            interface_name: CHARACTERISTIC_INTERFACE.to_string(),
+            changed_properties,
+            invalidated_properties: Vec::new(),
+        };
+        let msg = ppc.to_emit_message(&self.path);
+        connection.send(msg).map_err(|_| Error::DBusConnectionLost)?;
+        drop(connection);
+
+        // Wait for confirmation if this is an indication session.
+        // Note that we can be aborted before we receive the confirmation.
+        if let Some(confirm_rx) = &mut self.confirm_rx {
+            match confirm_rx.recv().await {
+                Some(()) => Ok(()),
+                None => Err(Error::IndicationUnconfirmed),
+            }
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -340,7 +367,6 @@ pub enum CharacteristicNotifyMethod {
     /// Use `CharacteristicControlHandle` to obtain writer.
     Io,
 }
-
 
 impl fmt::Debug for CharacteristicNotifyMethod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -571,7 +597,7 @@ impl CharacteristicControl {
 
     /// Gets the next request to start writing to the characteristic.
     pub async fn write_request(&mut self) -> Result<CharacteristicWriteRequest> {
-        match self.write_request_rx.next().await {
+        match self.write_request_rx.recv().await {
             Some(req) => Ok(req),
             None => Err(Error::NotRegistered),
         }
@@ -582,7 +608,7 @@ impl CharacteristicControl {
     /// Note that bluez acknowledges the client's request before notifying us
     /// of the start of the notification session.
     pub async fn notifier(&mut self) -> Result<CharacteristicWriter> {
-        match self.notifier_rx.next().await {
+        match self.notifier_rx.recv().await {
             Some(writer) => Ok(writer),
             None => Err(Error::NotRegistered),
         }
@@ -623,59 +649,73 @@ pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControl
     )
 }
 
-struct RegisteredCharacteristic {
-    reg: Characteristic,
-    // sense of this:
-    // probably none, since we can send all we need
+/// Notification state of a registered characteristic.
+struct NotifyState {
+    _stop_notify_rx: mpsc::Receiver<()>,
+    confirm_tx: Option<mpsc::Sender<()>>,
+}
+
+/// A characteristic exposed over D-Bus to bluez.
+pub(crate) struct RegisteredCharacteristic {
+    c: Characteristic,
+    notify: Mutex<Option<NotifyState>>,
+    connection: Weak<SyncConnection>,
 }
 
 impl RegisteredCharacteristic {
+    fn new(c: Characteristic, connection: &Arc<SyncConnection>) -> Self {
+        if let Some(handle) = c.handle {
+            let _ = c.control_handle.handle_tx.send(Some(handle));
+        }
+        Self { c, notify: Mutex::new(None), connection: Arc::downgrade(&connection) }
+    }
+
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register("org.bluez.GattCharacteristic1", |ib: &mut IfaceBuilder<Arc<Self>>| {
-            cr_property!(ib, "UUID", c => {
-                Some(c.reg.uuid.to_string())
+        cr.register(CHARACTERISTIC_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
+            cr_property!(ib, "UUID", reg => {
+                Some(reg.c.uuid.to_string())
             });
-            cr_property!(ib, "Flags", c => {
+            cr_property!(ib, "Flags", reg => {
                 let mut flags = CharacteristicFlags::default();
-                c.reg.other_flags.set_characteristic_flags(&mut flags);
-                if let Some(read) = &c.reg.read {
+                reg.c.other_flags.set_characteristic_flags(&mut flags);
+                if let Some(read) = &reg.c.read {
                     read.flags.set_characteristic_flags(&mut flags);
                 }
-                if let Some(write) = &c.reg.write {
+                if let Some(write) = &reg.c.write {
                     write.flags.set_characteristic_flags(&mut flags);
                 }
-                if let Some(notify) = &c.reg.notify {
+                if let Some(notify) = &reg.c.notify {
                     notify.flags.set_characteristic_flags(&mut flags);
                 }
                 Some(flags.to_vec())
             });
             ib.property("Service").get(|ctx, _| Ok(parent_path(ctx.path())));
-            ib.property("Handle").get(|ctx, c| Ok(c.reg.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |ctx, c, v| {
+            ib.property("Handle").get(|_ctx, reg| Ok(reg.c.handle.map(|h| h.get()).unwrap_or_default())).set(
+                |_ctx, reg, v| {
                     let handle = NonZeroU16::new(v);
                     dbg!(&handle);
-                    c.reg.control_handle.handle_tx.send(handle);
+                    let _ = reg.c.control_handle.handle_tx.send(handle);
                     Ok(None)
                 },
             );
-            cr_property!(ib, "WriteAcquired", c => {
-                if let Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) = &c.reg.write {
+            cr_property!(ib, "WriteAcquired", reg => {
+                if let Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) = &reg.c.write {
                     Some(false)
                 } else {
                     None
                 }
             });
-            cr_property!(ib, "NotifyAcquired", c => {
-                if let Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) = &c.reg.notify {
+            cr_property!(ib, "NotifyAcquired", reg => {
+                if let Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) = &reg.c.notify {
                     Some(false)
                 } else {
                     None
                 }
             });
             ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
-                method_call(ctx, cr, |c: Arc<Self>| async move {
+                method_call(ctx, cr, |reg: Arc<Self>| async move {
                     let options = ReadCharacteristicValueRequest::from_dict(&options)?;
-                    match &c.reg.read {
+                    match &reg.c.read {
                         Some(read) => {
                             let value = (read.fun)(options).await?;
                             Ok((value,))
@@ -689,50 +729,78 @@ impl RegisteredCharacteristic {
                 ("value", "options"),
                 (),
                 |ctx, cr, (value, options): (Vec<u8>, PropMap)| {
-                    method_call(ctx, cr, |c: Arc<Self>| async move {
+                    method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let options = WriteCharacteristicValueRequest::from_dict(&options)?;
-                        match &c.reg.write {
+                        match &reg.c.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Fn(fun), .. }) => {
                                 fun(value, options).await?;
                                 Ok(())
                             }
-                            _ => Err(Reject::NotSupported),
+                            _ => Err(Reject::NotSupported.into()),
                         }
                     })
                 },
             );
             ib.method_with_cr_async("StartNotify", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |c: Arc<Self>| async move { 
-                    match &c.reg.notify {
-                        Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Fn(notify_fn), .. }) => {
-                            // check if we are indicate or notify
-                            // create stopper tx/rx and store tx here
-                            // create confirm tx/rx if indicate and store tx here
-                            let notifier = CharacteristicValueNotifier {
-                                connection: (),
-                                stop_notify_rx: (),
-                                confirm_rx: (),
+                let path = ctx.path().clone();
+                method_call(ctx, cr, |reg: Arc<Self>| async move {
+                    match &reg.c.notify {
+                        Some(CharacteristicNotify {
+                            method: CharacteristicNotifyMethod::Fn(notify_fn),
+                            flags,
+                        }) => {
+                            let (stop_notify_tx, stop_notify_rx) = mpsc::channel(0);
+                            let (confirm_tx, confirm_rx) = if flags.indicate && !flags.notify {
+                                let (tx, rx) = mpsc::channel(0);
+                                (Some(tx), Some(rx))
+                            } else {
+                                (None, None)
                             };
+                            {
+                                let mut notify = reg.notify.lock().await;
+                                *notify = Some(NotifyState { _stop_notify_rx: stop_notify_rx, confirm_tx });
+                            }
+                            let notifier = CharacteristicValueNotifier {
+                                connection: reg.connection.clone(),
+                                path,
+                                stop_notify_tx,
+                                confirm_rx,
+                            };
+                            notify_fn(notifier).await;
+                            Ok(())
                         }
-                        _ => Err(Reject::NotSupported),
+                        _ => Err(Reject::NotSupported.into()),
                     }
-                 })
+                })
             });
             ib.method_with_cr_async("StopNotify", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |c: Arc<Self>| async move { todo!() })
+                method_call(ctx, cr, |reg: Arc<Self>| async move {
+                    let mut notify = reg.notify.lock().await;
+                    *notify = None;
+                    Ok(())
+                })
+            });
+            ib.method_with_cr_async("Confirm", (), (), |ctx, cr, ()| {
+                method_call(ctx, cr, |reg: Arc<Self>| async move {
+                    let mut notify = reg.notify.lock().await;
+                    if let Some(NotifyState { confirm_tx: Some(confirm_tx), .. }) = &mut *notify {
+                        let _ = confirm_tx.send(()).await;
+                    }
+                    Ok(())
+                })
             });
             ib.method_with_cr_async(
                 "AcquireWrite",
                 ("options",),
                 ("fd", "mtu"),
                 |ctx, cr, (options,): (PropMap,)| {
-                    method_call(ctx, cr, |c: Arc<Self>| async move {
+                    method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let options = AcquireRequest::from_dict(&options)?;
-                        match &c.reg.write {
+                        match &reg.c.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
                                 let (tx, rx) = oneshot::channel();
                                 let req = CharacteristicWriteRequest { mtu: options.mtu, link: options.link, tx };
-                                c.reg
+                                reg.c
                                     .control_handle
                                     .write_request_tx
                                     .send(req)
@@ -741,7 +809,7 @@ impl RegisteredCharacteristic {
                                 let fd = rx.await.map_err(|_| Reject::Failed)??;
                                 Ok((fd, options.mtu))
                             }
-                            _ => Err(Reject::NotSupported),
+                            _ => Err(Reject::NotSupported.into()),
                         }
                     })
                 },
@@ -751,17 +819,19 @@ impl RegisteredCharacteristic {
                 ("options",),
                 ("fd", "mtu"),
                 |ctx, cr, (options,): (PropMap,)| {
-                    method_call(ctx, cr, |c: Arc<Self>| async move {
+                    method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let options = AcquireRequest::from_dict(&options)?;
-                        match &c.reg.notify {
+                        match &reg.c.notify {
                             Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
+                                // bluez has already confirmed the start of the notification session.
+                                // So there is no point in making this failable by our users.
                                 let (fd, stream) = make_socket_pair().map_err(|_| Reject::Failed)?;
                                 let writer =
                                     CharacteristicWriter { mtu: options.mtu.into(), link: options.link, stream };
-                                let _ = c.reg.control_handle.notifier_tx.send(writer).await;
+                                let _ = reg.c.control_handle.notifier_tx.send(writer).await;
                                 Ok((fd, options.mtu))
                             }
-                            _ => Err(Reject::NotSupported),
+                            _ => Err(Reject::NotSupported.into()),
                         }
                     })
                 },
@@ -782,7 +852,7 @@ pub struct ReadCharacteristicValueRequest {
 }
 
 impl ReadCharacteristicValueRequest {
-    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             mtu: read_prop!(dict, "mtu", u16),
@@ -807,7 +877,7 @@ pub struct WriteCharacteristicValueRequest {
 }
 
 impl WriteCharacteristicValueRequest {
-    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             op_type: read_opt_prop!(dict, "type", String)
@@ -831,7 +901,7 @@ struct AcquireRequest {
 }
 
 impl AcquireRequest {
-    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             mtu: read_prop!(dict, "mtu", u16),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
@@ -871,7 +941,7 @@ impl fmt::Debug for Descriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "CharacteristicDescriptor {{ uuid: {:?}, flags: {:?}, read_value: {:?}, write_value: {:?} }}",
+            "Descriptor {{ uuid: {:?}, flags: {:?}, read_value: {:?}, write_value: {:?} }}",
             &self.uuid,
             &self.flags,
             self.read_value.is_some(),
@@ -882,20 +952,14 @@ impl fmt::Debug for Descriptor {
 
 impl Descriptor {
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register("org.bluez.GattDescriptor1", |ib: &mut IfaceBuilder<Arc<Self>>| {
+        cr.register(DESCRIPTOR_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
             cr_property!(ib, "UUID", cd => {
                 Some(cd.uuid.to_string())
             });
             cr_property!(ib, "Flags", cd => {
                 Some(cd.flags.to_vec())
             });
-            ib.property("Characteristic").get(|ctx, _| {
-                let mut comps: Vec<_> = ctx.path().split('/').collect();
-                comps.pop();
-                let char_path = dbus::Path::new(comps.join("/")).unwrap();
-                dbg!(&char_path);
-                Ok(char_path)
-            });
+            ib.property("Characteristic").get(|ctx, _| Ok(parent_path(ctx.path())));
             ib.method_with_cr_async("ReadValue", ("flags",), ("value",), |ctx, cr, (flags,): (PropMap,)| {
                 method_call(ctx, cr, |c: Arc<Self>| async move {
                     dbg!(&flags);
@@ -905,7 +969,7 @@ impl Descriptor {
                             let value = read_value(options).await?;
                             Ok((value,))
                         }
-                        None => Err(Reject::NotSupported),
+                        None => Err(Reject::NotSupported.into()),
                     }
                 })
             });
@@ -921,7 +985,7 @@ impl Descriptor {
                                 write_value(value, options).await?;
                                 Ok(())
                             }
-                            None => Err(Reject::NotSupported),
+                            None => Err(Reject::NotSupported.into()),
                         }
                     })
                 },
@@ -940,7 +1004,7 @@ pub struct ReadDescriptorValueRequest {
 }
 
 impl ReadDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_prop!(dict, "offset", u16),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
@@ -960,7 +1024,7 @@ pub struct WriteDescriptorValueRequest {
 }
 
 impl WriteDescriptorValueRequest {
-    fn from_dict(dict: &PropMap) -> ReqResult<Self> {
+    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_prop!(dict, "offset", u16),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
@@ -1008,10 +1072,11 @@ impl Application {
                 for (char_idx, mut char) in chars.into_iter().enumerate() {
                     let descs = take(&mut char.descriptors);
 
+                    let reg_char = RegisteredCharacteristic::new(char, &inner.connection);
                     let char_path = format!("{}/char{}", &service_path, char_idx);
                     let char_path = dbus::Path::new(char_path).unwrap();
                     reg_paths.push(char_path.clone());
-                    cr.insert(char_path.clone(), &[inner.gatt_characteristic_token], Arc::new(char));
+                    cr.insert(char_path.clone(), &[inner.gatt_reg_characteristic_token], Arc::new(reg_char));
 
                     for (desc_idx, desc) in descs.into_iter().enumerate() {
                         let desc_path = format!("{}/desc{}", &char_path, desc_idx);

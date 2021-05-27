@@ -16,10 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     all_dbus_objects,
-    gatt::{
-        self,
-        remote::{Service, SERVICE_INTERFACE},
-    },
+    gatt::{self, remote::Service, SERVICE_INTERFACE},
     Adapter, Address, AddressType, Error, Event, Modalias, Result, SessionInner, SERVICE_NAME, TIMEOUT,
 };
 

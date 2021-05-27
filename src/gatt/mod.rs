@@ -5,6 +5,10 @@ use strum::{Display, EnumString};
 pub mod local;
 pub mod remote;
 
+pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
+pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
+pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
+
 define_flags!(CharacteristicFlags, "Bluetooth GATT characteristic flags." => {
     broadcast ("broadcast"),
     read ("read"),

@@ -34,7 +34,7 @@ pub(crate) struct SessionInner {
     pub crossroads: Mutex<Crossroads>,
     pub le_advertisment_token: IfaceToken<LeAdvertisement>,
     pub gatt_service_token: IfaceToken<Arc<gatt::local::Service>>,
-    pub gatt_characteristic_token: IfaceToken<Arc<gatt::local::Characteristic>>,
+    pub gatt_reg_characteristic_token: IfaceToken<Arc<gatt::local::RegisteredCharacteristic>>,
     pub gatt_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::Descriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
@@ -123,9 +123,9 @@ impl Session {
 
         let le_advertisment_token = LeAdvertisement::register_interface(&mut crossroads);
         let gatt_service_token = gatt::local::Service::register_interface(&mut crossroads);
-        let gatt_characteristic_token = gatt::local::Characteristic::register_interface(&mut crossroads);
-        let gatt_characteristic_descriptor_token =
-            gatt::local::Descriptor::register_interface(&mut crossroads);
+        let gatt_reg_characteristic_token =
+            gatt::local::RegisteredCharacteristic::register_interface(&mut crossroads);
+        let gatt_characteristic_descriptor_token = gatt::local::Descriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
@@ -136,7 +136,7 @@ impl Session {
             crossroads: Mutex::new(crossroads),
             le_advertisment_token,
             gatt_service_token,
-            gatt_characteristic_token,
+            gatt_reg_characteristic_token,
             gatt_characteristic_descriptor_token,
             gatt_profile_token,
             single_sessions: Mutex::new(HashMap::new()),
@@ -212,6 +212,13 @@ pub(crate) enum Event {
     ObjectRemoved { object: dbus::Path<'static>, interfaces: HashSet<String> },
     /// Properties changed.
     PropertiesChanged { object: dbus::Path<'static>, interface: String, changed: dbus::arg::PropMap },
+}
+
+/// Subscribe to D-Bus events request.
+pub(crate) struct SubscribeEvents {
+    path: dbus::Path<'static>,
+    tx: mpsc::UnboundedSender<Event>,
+    ready_tx: Option<oneshot::Sender<()>>,
 }
 
 impl Event {
@@ -315,6 +322,7 @@ impl Event {
         Ok(())
     }
 
+    /// Subscribe to D-Bus events for specified path.
     pub(crate) async fn subscribe(
         sub_tx: &mut mpsc::Sender<SubscribeEvents>, path: dbus::Path<'static>,
     ) -> Result<mpsc::UnboundedReceiver<Event>> {
@@ -327,10 +335,4 @@ impl Event {
         ready_rx.await.map_err(|_| Error::DBusConnectionLost)?;
         Ok(rx)
     }
-}
-
-pub(crate) struct SubscribeEvents {
-    path: dbus::Path<'static>,
-    tx: mpsc::UnboundedSender<Event>,
-    ready_tx: Option<oneshot::Sender<()>>,
 }

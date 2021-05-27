@@ -1,9 +1,20 @@
 //! Bluetooth library using Bluez.
 
-use dbus::{Path, arg::{OwnedFd, PropMap, RefArg, Variant, prop_cast}, nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection}};
+use dbus::{
+    arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
+    nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
+    Path,
+};
 use hex::FromHex;
-use libc::{AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET, c_int, socketpair};
-use std::{collections::HashMap, convert::TryInto, fmt::{self, Debug, Display, Formatter}, os::unix::prelude::{FromRawFd, RawFd}, str::FromStr, time::Duration};
+use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    fmt::{self, Debug, Display, Formatter},
+    os::unix::prelude::{FromRawFd, RawFd},
+    str::FromStr,
+    time::Duration,
+};
 use strum::{Display, EnumString};
 use thiserror::Error;
 use tokio::{net::UnixStream, task::JoinError};
@@ -360,9 +371,13 @@ pub enum Error {
     ServicesUnresolved,
     #[error("Bluetooth application is not registered")]
     NotRegistered,
+    #[error("The receiving Bluetooth device has stopped the notification session")]
+    NotificationSessionStopped,
+    #[error("The indication was not confirmed by the receiving device")]
+    IndicationUnconfirmed,
     #[error("IO error {kind:?}: {msg}")]
     #[strum(disabled)]
-    Io {kind: std::io::ErrorKind, msg: String},
+    Io { kind: std::io::ErrorKind, msg: String },
     #[error("Bluetooth error: {0}")]
     Other(String),
 }
@@ -394,10 +409,7 @@ impl From<strum::ParseError> for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::Io{
-            kind: err.kind(),
-            msg: err.to_string(),
-        }
+        Self::Io { kind: err.kind(), msg: err.to_string() }
     }
 }
 
@@ -506,7 +518,6 @@ pub enum LinkType {
     Le,
 }
 
-
 /// Gets all D-Bus objects from the bluez service.
 async fn all_dbus_objects(
     connection: &SyncConnection,
@@ -521,7 +532,6 @@ pub(crate) fn read_dict<'a, T: 'static>(
 ) -> Result<&'a T> {
     prop_cast(dict, key).ok_or(Error::MissingKey(key.to_string()))
 }
-
 
 /// Creates a UNIX socket pair.
 pub(crate) fn make_socket_pair() -> std::result::Result<(OwnedFd, UnixStream), std::io::Error> {
