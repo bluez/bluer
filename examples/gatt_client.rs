@@ -141,48 +141,47 @@ async fn main() -> blez::Result<()> {
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
 
-    println!("Discovering on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
-
-    let discover = adapter.discover_devices().await?;
-    pin_mut!(discover);
-    let mut done = false;
-    while let Some(evt) = discover.next().await {
-        match evt {
-            AdapterEvent::DeviceAdded(addr) => {
-                let device = adapter.device(addr)?;
-                match find_our_characteristic(&device).await {
-                    Ok(Some(char)) => match exercise_characteristic(&char).await {
-                        Ok(()) => {
-                            println!("    Characteristic exercise completed");
-                            done = true;
-                        }
+    {
+        println!("Discovering on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
+        let discover = adapter.discover_devices().await?;
+        pin_mut!(discover);
+        let mut done = false;
+        while let Some(evt) = discover.next().await {
+            match evt {
+                AdapterEvent::DeviceAdded(addr) => {
+                    let device = adapter.device(addr)?;
+                    match find_our_characteristic(&device).await {
+                        Ok(Some(char)) => match exercise_characteristic(&char).await {
+                            Ok(()) => {
+                                println!("    Characteristic exercise completed");
+                                done = true;
+                            }
+                            Err(err) => {
+                                println!("    Characteristic exercise failed: {}", &err);
+                            }
+                        },
+                        Ok(None) => (),
                         Err(err) => {
-                            println!("    Characteristic exercise failed: {}", &err);
+                            println!("    Device failed: {}", &err);
+                            let _ = adapter.remove_device(device.address()).await;
                         }
-                    },
-                    Ok(None) => (),
-                    Err(err) => {
-                        println!("    Device failed: {}", &err);
-                        let _ = adapter.remove_device(device.address()).await;
                     }
+                    match device.disconnect().await {
+                        Ok(()) => println!("    Device disconnected"),
+                        Err(err) => println!("    Device disconnection failed: {}", &err),
+                    }
+                    println!();
                 }
-                match device.disconnect().await {
-                    Ok(()) => println!("    Device disconnected"),
-                    Err(err) => println!("    Device disconnection failed: {}", &err),
+                AdapterEvent::DeviceRemoved(addr) => {
+                    println!("Device removed {}", addr);
                 }
-                println!();
+                _ => (),
             }
-            AdapterEvent::DeviceRemoved(addr) => {
-                println!("Device removed {}", addr);
-            }
-            _ => (),
+            if done { break; }
         }
-        if done { break; }
+        println!("Stopping discovery");
     }
 
-    println!("Stopping discovery");
-    drop(discover);
     sleep(Duration::from_secs(1)).await;
-
     Ok(())
 }
