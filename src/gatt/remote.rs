@@ -384,9 +384,11 @@ impl Characteristic {
                     Ok(())
                 },
                 async move {
+                    log::trace!("{}: {}.StopNotify ()", &dbus_path, SERVICE_NAME);
                     let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
-                    let _: std::result::Result<(), dbus::Error> =
+                    let result: std::result::Result<(), dbus::Error> =
                         proxy.method_call(CHARACTERISTIC_INTERFACE, "StopNotify", ()).await;
+                    log::trace!("{}: {}.StopNotify () -> {:?}", &dbus_path, SERVICE_NAME, &result);
                 },
             )
             .await
