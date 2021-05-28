@@ -90,23 +90,6 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     drop(write_io);
     sleep(Duration::from_secs(1)).await;
 
-    println!("    Starting notification session");
-    let notify = char.notify().await?;
-    pin_mut!(notify);
-    for _ in 0..5u8 {
-        match notify.next().await {
-            Some(value) => {
-                println!("    Notification value: {:x?}", &value);
-            }
-            None => {
-                println!("    Notification session was terminated");
-            }
-        }
-    }
-    println!("    Stopping notification session");
-    drop(notify);
-    sleep(Duration::from_secs(15)).await;
-
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
     let mut buf = vec![0; notify_io.mtu()];
@@ -129,11 +112,29 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     drop(notify_io);
     sleep(Duration::from_secs(1)).await;
 
+    println!("    Starting notification session");
+    let notify = char.notify().await?;
+    pin_mut!(notify);
+    for _ in 0..5u8 {
+        match notify.next().await {
+            Some(value) => {
+                println!("    Notification value: {:x?}", &value);
+            }
+            None => {
+                println!("    Notification session was terminated");
+            }
+        }
+    }
+    println!("    Stopping notification session");
+    drop(notify);
+    sleep(Duration::from_secs(15)).await;
+
     Ok(())
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blez::Result<()> {
+    env_logger::init();
     let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");

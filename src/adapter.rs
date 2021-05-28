@@ -194,7 +194,7 @@ impl Adapter {
     /// reached it will result in NotPermitted error.    
     ///
     /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
-    pub async fn le_advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
+    pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
         le_advertisement.register(self.inner.clone(), self.name.clone()).await
     }
 

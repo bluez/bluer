@@ -38,7 +38,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
-    pub event_sub_tx: mpsc::Sender<SubscribeEvents>,
+    pub event_sub_tx: mpsc::Sender<Subscription>,
 }
 
 impl SessionInner {
@@ -57,6 +57,7 @@ impl SessionInner {
             }
         }
 
+        log::trace!("Starting new single session for {}", &path);
         start_fn.await?;
 
         let (term_tx, term_rx) = oneshot::channel();
@@ -64,10 +65,12 @@ impl SessionInner {
         let (termed_tx, termed_rx) = oneshot::channel();
         single_sessions.insert(path.clone(), (Arc::downgrade(&term_tx), termed_rx));
 
+        let path = path.clone();
         tokio::spawn(async move {
             let _ = term_rx.await;
             stop_fn.await;
             let _ = termed_tx.send(());
+            log::trace!("Terminated single session for {}", &path);
         });
 
         Ok(SingleSessionToken(term_tx))
@@ -215,8 +218,8 @@ pub(crate) enum Event {
     PropertiesChanged { object: dbus::Path<'static>, interface: String, changed: dbus::arg::PropMap },
 }
 
-/// Subscribe to D-Bus events request.
-pub(crate) struct SubscribeEvents {
+/// D-Bus events subscription.
+pub(crate) struct Subscription {
     path: dbus::Path<'static>,
     tx: mpsc::UnboundedSender<Event>,
     ready_tx: Option<oneshot::Sender<()>>,
@@ -225,7 +228,7 @@ pub(crate) struct SubscribeEvents {
 impl Event {
     /// Spawns a task that handles events for the specified connection.
     pub(crate) async fn handle_connection(
-        connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<SubscribeEvents>,
+        connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<Subscription>,
     ) -> Result<()> {
         use dbus::message::SignalArgs;
         lazy_static! {
@@ -249,7 +252,8 @@ impl Event {
         let msg_match_prop = connection.add_match(rule_prop).await?.msg_cb(handle_msg.clone());
 
         tokio::spawn(async move {
-            let mut subs: Vec<SubscribeEvents> = Vec::new();
+            log::trace!("Starting event loop for {:?}", &connection.unique_name());
+            let mut subs: Vec<Subscription> = Vec::new();
 
             loop {
                 select! {
@@ -288,12 +292,17 @@ impl Event {
                                     };
 
                                     let sent_ok = match evt {
-                                        Some(evt) => sub.tx.unbounded_send(evt).is_ok(),
+                                        Some(evt) => {
+                                            log::trace!("Event: {:?}", &evt);
+                                            sub.tx.unbounded_send(evt).is_ok()
+                                        }
                                         None => true,
                                     };
 
                                     if sent_ok && !force_remove {
                                         keep.push(sub);
+                                    } else {
+                                        log::trace!("Removing event subscription for {}", &sub.path);
                                     }
                                 }
                                 subs = keep;
@@ -304,6 +313,7 @@ impl Event {
                     sub_opt = sub_rx.next() => {
                         match sub_opt {
                             Some(mut sub) => {
+                                log::trace!("Adding event subscription for {}", &sub.path);
                                 if let Some(ready_tx) = sub.ready_tx.take() {
                                     let _ = ready_tx.send(());
                                 }
@@ -318,6 +328,7 @@ impl Event {
             let _ = connection.remove_match(msg_match_add.token()).await;
             let _ = connection.remove_match(msg_match_removed.token()).await;
             let _ = connection.remove_match(msg_match_prop.token()).await;
+            log::trace!("Terminated event loop for {:?}", &connection.unique_name());
         });
 
         Ok(())
@@ -325,12 +336,12 @@ impl Event {
 
     /// Subscribe to D-Bus events for specified path.
     pub(crate) async fn subscribe(
-        sub_tx: &mut mpsc::Sender<SubscribeEvents>, path: dbus::Path<'static>,
+        sub_tx: &mut mpsc::Sender<Subscription>, path: dbus::Path<'static>,
     ) -> Result<mpsc::UnboundedReceiver<Event>> {
         let (tx, rx) = mpsc::unbounded();
         let (ready_tx, ready_rx) = oneshot::channel();
         sub_tx
-            .send(SubscribeEvents { path, tx, ready_tx: Some(ready_tx) })
+            .send(Subscription { path, tx, ready_tx: Some(ready_tx) })
             .await
             .map_err(|_| Error::DBusConnectionLost)?;
         ready_rx.await.map_err(|_| Error::DBusConnectionLost)?;

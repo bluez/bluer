@@ -54,7 +54,9 @@ Troubleshooting
 
 The library returns detailed errors received from BlueZ.
 
-However, in some cases checking the Bluetooth system log might provide more insights.
+Set the Rust log level to `trace` to see all D-Bus communications with BlueZ.
+
+In some cases checking the Bluetooth system log might provide further insights.
 On Debian-based systems it can be displayed by executing `journalctl -u bluetooth`.
 Check the `bluetoothd` man page for increasing the log level.
 

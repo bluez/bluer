@@ -19,6 +19,7 @@ include!("gatt.inc");
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blez::Result<()> {
+    env_logger::init();
     let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
@@ -34,7 +35,7 @@ async fn main() -> blez::Result<()> {
         local_name: Some("gatt_server".to_string()),
         ..Default::default()
     };
-    let adv_handle = adapter.le_advertise(le_advertisement).await?;
+    let adv_handle = adapter.advertise(le_advertisement).await?;
 
     println!("Serving GATT service on Bluetooth adapter {}", &adapter_name);
     let value = Arc::new(Mutex::new(vec![0x10, 0x01, 0x01, 0x10]));

@@ -1,5 +1,6 @@
 //! Scans for and monitors Bluetooth devices.
 
+use blez::{Adapter, AdapterEvent, Address};
 use crossterm::{
     cursor, execute, queue,
     style::{self, Colorize},
@@ -12,7 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::sleep;
-use blez::{Adapter, AdapterEvent, Address};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -164,6 +164,7 @@ impl DeviceMonitor {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+    env_logger::init();
     let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");

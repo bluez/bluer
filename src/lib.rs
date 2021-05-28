@@ -35,10 +35,12 @@ macro_rules! dbus_interface {
         #[allow(dead_code)]
         async fn get_property_with_interface<R>(&self, name: &str, interface: &str) -> crate::Result<R>
         where
-            R: for<'b> dbus::arg::Get<'b> + 'static,
+            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            Ok(self.proxy().get(interface, name).await?)
+            let value = self.proxy().get(interface, name).await?;
+            log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
+            Ok(value)
         }
 
         #[allow(dead_code)]
@@ -46,12 +48,18 @@ macro_rules! dbus_interface {
             &self, name: &str, interface: &str,
         ) -> crate::Result<Option<R>>
         where
-            R: for<'b> dbus::arg::Get<'b> + 'static,
+            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
             match self.proxy().get(interface, name).await {
-                Ok(v) => Ok(Some(v)),
-                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => Ok(None),
+                Ok(value) => {
+                    log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
+                    Ok(Some(value))
+                }
+                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
+                    log::trace!("{}: {}.{} = None", &self.proxy().path, &interface, &name);
+                    Ok(None)
+                }
                 Err(err) => Err(err.into()),
             }
         }
@@ -59,9 +67,10 @@ macro_rules! dbus_interface {
         #[allow(dead_code)]
         async fn set_property_with_interface<T>(&self, name: &str, value: T, interface: &str) -> crate::Result<()>
         where
-            T: dbus::arg::Arg + dbus::arg::Append,
+            T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
         {
             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
+            log::trace!("{}: {}.{} := {:?}", &self.proxy().path, &interface, &name, &value);
             self.proxy().set(interface, name, value).await?;
             Ok(())
         }
@@ -69,10 +78,13 @@ macro_rules! dbus_interface {
         #[allow(dead_code)]
         async fn call_method_with_interface<A, R>(&self, name: &str, args: A, interface: &str) -> crate::Result<R>
         where
-            A: dbus::arg::AppendAll,
-            R: dbus::arg::ReadAll + 'static,
+            A: dbus::arg::AppendAll + std::fmt::Debug,
+            R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
         {
-            Ok(self.proxy().method_call(interface, name, args).await?)
+            log::trace!("{}: {}.{} ({:?})", &self.proxy().path, &interface, &name, &args);
+            let result = self.proxy().method_call(interface, name, args).await;
+            log::trace!("{}: {}.{} (...) -> {:?}", &self.proxy().path, &interface, &name, &result);
+            Ok(result?)
         }
     };
 }
@@ -82,7 +94,7 @@ macro_rules! dbus_default_interface {
         #[allow(dead_code)]
         async fn get_property<R>(&self, name: &str) -> crate::Result<R>
         where
-            R: for<'b> dbus::arg::Get<'b> + 'static,
+            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
         {
             self.get_property_with_interface(name, $interface).await
         }
@@ -90,7 +102,7 @@ macro_rules! dbus_default_interface {
         #[allow(dead_code)]
         async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
         where
-            R: for<'b> dbus::arg::Get<'b> + 'static,
+            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
         {
             self.get_opt_property_with_interface(name, $interface).await
         }
@@ -98,7 +110,7 @@ macro_rules! dbus_default_interface {
         #[allow(dead_code)]
         async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
         where
-            T: dbus::arg::Arg + dbus::arg::Append,
+            T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
         {
             self.set_property_with_interface(name, value, $interface).await
         }
@@ -106,8 +118,8 @@ macro_rules! dbus_default_interface {
         #[allow(dead_code)]
         async fn call_method<A, R>(&self, name: &str, args: A) -> crate::Result<R>
         where
-            A: dbus::arg::AppendAll,
-            R: dbus::arg::ReadAll + 'static,
+            A: dbus::arg::AppendAll + std::fmt::Debug,
+            R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
         {
             self.call_method_with_interface(name, args, $interface).await
         }
