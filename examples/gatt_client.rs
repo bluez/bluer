@@ -91,20 +91,21 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     sleep(Duration::from_secs(5)).await;
 
     println!("    Starting notification session");
-    let notify = char.notify().await?;
-    pin_mut!(notify);
-    for _ in 0..5u8 {
-        match notify.next().await {
-            Some(value) => {
-                println!("    Notification value: {:x?}", &value);
-            }
-            None => {
-                println!("    Notification session was terminated");
+    {
+        let notify = char.notify().await?;
+        pin_mut!(notify);
+        for _ in 0..5u8 {
+            match notify.next().await {
+                Some(value) => {
+                    println!("    Notification value: {:x?}", &value);
+                }
+                None => {
+                    println!("    Notification session was terminated");
+                }
             }
         }
+        println!("    Stopping notification session");
     }
-    println!("    Stopping notification session");
-    drop(notify);
     sleep(Duration::from_secs(15)).await;
 
     println!("    Obtaining notification IO");
