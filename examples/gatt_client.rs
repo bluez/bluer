@@ -110,6 +110,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
+    println!("    Obtained notification IO with MTU={}", notify_io.mtu());
     let mut buf = vec![0; notify_io.mtu()];
     for _ in 0..5u8 {
         match notify_io.read_buf(&mut buf).await {
