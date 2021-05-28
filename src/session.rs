@@ -115,6 +115,7 @@ impl Session {
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);
+        log::trace!("Connected to D-Bus with unique name {}", &connection.unique_name());
 
         let mut crossroads = Crossroads::new();
         crossroads.set_async_support(Some((
