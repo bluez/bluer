@@ -15,8 +15,8 @@ use super::{
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    all_dbus_objects, Address, Device, Error, Event, Result, SessionInner, SingleSessionToken, SERVICE_NAME,
-    TIMEOUT,
+    all_dbus_objects, Address, Device, Error, ErrorKind, Event, Result, SessionInner, SingleSessionToken,
+    SERVICE_NAME, TIMEOUT,
 };
 
 // ===========================================================================================
@@ -157,7 +157,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (SERVICE_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
         );
 
         /// Service handle.
@@ -468,7 +468,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (CHARACTERISTIC_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
         );
 
         /// Characteristic handle.
@@ -686,7 +686,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (DESCRIPTOR_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::InvalidUuid(v.to_string()))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
         );
 
         /// Characteristic descriptor handle.

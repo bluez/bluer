@@ -20,15 +20,14 @@ dbus-tokio = "0.7"
 dbus-crossroads = "0.3"
 futures = "0.3"
 pin-project = "1"
-tokio = { version = "1", features = ["macros", "rt"] }
-tokio-stream = "0.1"
+tokio = { version = "1", features = ["macros", "rt", "sync"] }
 hex = "0.4"
-thiserror = "1"
 lazy_static = "1"
 uuid = { version = "0.8", features = ["v4"] }
 strum = { version = "0.20", features = ["derive"] }
 libc = "0.2"
 custom_debug = "0.5"
+displaydoc = "0.2"
 log = "0.4"
 
 [dev-dependencies]

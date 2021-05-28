@@ -17,14 +17,7 @@ use std::{
     time::Duration,
 };
 use strum::{Display, EnumString};
-use thiserror::Error;
 use tokio::{net::UnixStream, task::JoinError};
-
-macro_rules! other_err {
-    ($($e:tt)*) => {
-        crate::Error::Other(format!($($e)*))
-    };
-}
 
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
 pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
@@ -33,6 +26,15 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 macro_rules! publish_path {
     ($path:expr) => {
         concat!("/io/crates/", env!("CARGO_PKG_NAME"), "/", $path)
+    };
+}
+
+macro_rules! other_err {
+    ($($e:tt)*) => {
+        crate::Error {
+            kind: crate::ErrorKind::Other,
+            message: format!($($e)*),
+        }
     };
 }
 
@@ -329,107 +331,152 @@ mod session;
 pub use crate::{adapter::*, advertising::*, device::*, session::*};
 
 /// Bluetooth error.
-#[derive(Clone, Debug, Error, EnumString)]
-pub enum Error {
-    #[error("Bluetooth device already connected")]
-    AlreadyConnected,
-    #[error("Bluetooth device already exists")]
-    AlreadyExists,
-    #[error("Bluetooth authentication canceled")]
-    AuthenticationCanceled,
-    #[error("Bluetooth authentication failed")]
-    AuthenticationFailed,
-    #[error("Bluetooth authentication rejected")]
-    AuthenticationRejected,
-    #[error("Bluetooth authentication timeout")]
-    AuthenticationTimeout,
-    #[error("Bluetooth connection attempt failed")]
-    ConnectionAttemptFailed,
-    #[error("Bluetooth device does not exist")]
-    DoesNotExist,
-    #[error("Bluetooth operation failed")]
-    Failed,
-    #[error("Bluetooth operation in progress")]
-    InProgress,
-    #[error("invalid arguments for Bluetooth operation")]
-    InvalidArguments,
-    #[error("the data provided generates a Bluetooth data packet which is too long")]
-    InvalidLength,
-    #[error("Bluetooth operation not available")]
-    NotAvailable,
-    #[error("Bluetooth operation not authorized")]
-    NotAuthorized,
-    #[error("Bluetooth device not ready")]
-    NotReady,
-    #[error("Bluetooth operation not supported")]
-    NotSupported,
-    #[error("Bluetooth operation not permitted")]
-    NotPermitted,
-    #[error("Invalid offset for Bluetooth GATT property")]
-    InvalidOffset,
-    #[error("Bluetooth D-Bus error {name}: {message}")]
-    DBus { name: String, message: String },
-    #[error("Lost connection to D-Bus")]
-    DBusConnectionLost,
-    #[error("No Bluetooth adapter available")]
-    NoAdapterAvailable,
-    #[error("Bluetooth adapter {0} is not available")]
-    AdapterNotAvailable(String),
-    #[error("Join error: {0}")]
-    JoinError(String),
-    #[error("Invalid Bluetooth address: {0}")]
-    InvalidAddress(String),
-    #[error("Invalid Bluetooth adapter name: {0}")]
-    InvalidName(String),
-    #[error("Invalid UUID: {0}")]
-    InvalidUuid(String),
-    #[error("Invalid value")]
-    InvalidValue,
-    #[error("Key {0} is missing")]
-    MissingKey(String),
-    #[error("GATT services have not been resolved for that Bluetooth device")]
-    ServicesUnresolved,
-    #[error("Bluetooth application is not registered")]
-    NotRegistered,
-    #[error("The receiving Bluetooth device has stopped the notification session")]
-    NotificationSessionStopped,
-    #[error("The indication was not confirmed by the receiving device")]
-    IndicationUnconfirmed,
-    #[error("IO error {kind:?}: {msg}")]
-    #[strum(disabled)]
-    Io { kind: std::io::ErrorKind, msg: String },
-    #[error("Bluetooth error: {0}")]
-    Other(String),
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Error {
+    /// Error kind
+    pub kind: ErrorKind,
+    /// Message
+    pub message: String,
 }
+
+/// Bluetooth error kind.
+#[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
+#[non_exhaustive]
+pub enum ErrorKind {
+    /// Bluetooth device already connected
+    AlreadyConnected,
+    /// Bluetooth device already exists
+    AlreadyExists,
+    /// Bluetooth authentication canceled
+    AuthenticationCanceled,
+    /// Bluetooth authentication failed
+    AuthenticationFailed,
+    /// Bluetooth authentication rejected
+    AuthenticationRejected,
+    /// Bluetooth authentication timeout
+    AuthenticationTimeout,
+    /// Bluetooth connection attempt failed
+    ConnectionAttemptFailed,
+    /// Bluetooth device does not exist
+    DoesNotExist,
+    /// Bluetooth operation failed
+    Failed,
+    /// Bluetooth operation in progress
+    InProgress,
+    /// invalid arguments for Bluetooth operation
+    InvalidArguments,
+    /// the data provided generates a Bluetooth data packet which is too long
+    InvalidLength,
+    /// Bluetooth operation not available
+    NotAvailable,
+    /// Bluetooth operation not authorized
+    NotAuthorized,
+    /// Bluetooth device not ready
+    NotReady,
+    /// Bluetooth operation not supported
+    NotSupported,
+    /// Bluetooth operation not permitted
+    NotPermitted,
+    /// Invalid offset for Bluetooth GATT property
+    InvalidOffset,
+    /// D-Bus error {0}
+    #[strum(disabled)]
+    DBus(String),
+    /// Lost connection to D-Bus
+    #[strum(disabled)]
+    DBusConnectionLost,
+    /// No Bluetooth adapter available
+    #[strum(disabled)]
+    NoAdapterAvailable,
+    /// Bluetooth adapter {0} is not available
+    #[strum(disabled)]
+    AdapterNotAvailable(String),
+    /// Join error
+    #[strum(disabled)]
+    JoinError,
+    /// Invalid Bluetooth address: {0}
+    #[strum(disabled)]
+    InvalidAddress(String),
+    /// Invalid Bluetooth adapter name: {0}
+    #[strum(disabled)]
+    InvalidName(String),
+    /// Invalid UUID: {0}
+    #[strum(disabled)]
+    InvalidUuid(String),
+    /// Invalid value
+    #[strum(disabled)]
+    InvalidValue,
+    /// Key {0} is missing
+    #[strum(disabled)]
+    MissingKey(String),
+    /// GATT services have not been resolved for that Bluetooth device
+    #[strum(disabled)]
+    ServicesUnresolved,
+    /// Bluetooth application is not registered
+    #[strum(disabled)]
+    NotRegistered,
+    /// The receiving Bluetooth device has stopped the notification session
+    #[strum(disabled)]
+    NotificationSessionStopped,
+    /// The indication was not confirmed by the receiving device
+    #[strum(disabled)]
+    IndicationUnconfirmed,
+    /// IO error {0:?}
+    #[strum(disabled)]
+    Io(std::io::ErrorKind),
+    /// Other error
+    #[strum(disabled)]
+    Other,
+}
+
+impl Error {
+    pub(crate) fn new(kind: ErrorKind) -> Self {
+        Self { kind, message: String::new() }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.message.is_empty() {
+            write!(f, "{}", &self.kind)
+        } else {
+            write!(f, "{}: {}", &self.kind, &self.message)
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
-        eprintln!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
-        match err.name().and_then(|name| name.strip_prefix(ERR_PREFIX)).and_then(|s| Self::from_str(s).ok()) {
-            Some(err) => err,
-            _ => Self::DBus {
-                name: err.name().unwrap_or_default().to_string(),
-                message: err.message().unwrap_or_default().to_string(),
-            },
-        }
+        log::trace!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
+        let kind = match err
+            .name()
+            .and_then(|name| name.strip_prefix(ERR_PREFIX))
+            .and_then(|s| ErrorKind::from_str(s).ok())
+        {
+            Some(kind) => kind,
+            _ => ErrorKind::DBus(err.name().unwrap_or_default().to_string()),
+        };
+        Self { kind, message: err.message().unwrap_or_default().to_string() }
     }
 }
 
 impl From<JoinError> for Error {
     fn from(err: JoinError) -> Self {
-        Self::JoinError(err.to_string())
+        Self { kind: ErrorKind::JoinError, message: err.to_string() }
     }
 }
 
 impl From<strum::ParseError> for Error {
     fn from(_: strum::ParseError) -> Self {
-        Self::InvalidValue
+        Self { kind: ErrorKind::InvalidValue, message: String::new() }
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::Io { kind: err.kind(), msg: err.to_string() }
+        Self { kind: ErrorKind::Io(err.kind()), message: err.to_string() }
     }
 }
 
@@ -462,9 +509,9 @@ impl FromStr for Address {
     fn from_str(s: &str) -> Result<Self> {
         let fields = s
             .split(':')
-            .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::InvalidAddress(s.to_string())))
+            .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::new(ErrorKind::InvalidAddress(s.to_string()))))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self(fields.try_into().map_err(|_| Error::InvalidAddress(s.to_string()))?))
+        Ok(Self(fields.try_into().map_err(|_| Error::new(ErrorKind::InvalidAddress(s.to_string())))?))
     }
 }
 
@@ -550,7 +597,7 @@ async fn all_dbus_objects(
 pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
-    prop_cast(dict, key).ok_or(Error::MissingKey(key.to_string()))
+    prop_cast(dict, key).ok_or(Error::new(ErrorKind::MissingKey(key.to_string())))
 }
 
 /// Creates a UNIX socket pair.

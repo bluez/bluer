@@ -18,7 +18,8 @@ use uuid::Uuid;
 use crate::{
     advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Advertisement,
     AdvertisementFeature, AdvertisementHandle, AdvertisementSecondaryChannel, AdvertisingCapabilities,
-    AdvertisingFeature, Error, Event, Modalias, Result, SessionInner, SingleSessionToken, SERVICE_NAME, TIMEOUT,
+    AdvertisingFeature, Error, ErrorKind, Event, Modalias, Result, SessionInner, SingleSessionToken,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -43,7 +44,8 @@ impl Adapter {
     pub(crate) fn new(inner: Arc<SessionInner>, name: &str) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Path::new(PREFIX.to_string() + name).map_err(|_| Error::InvalidName(name.to_string()))?,
+            dbus_path: Path::new(PREFIX.to_string() + name)
+                .map_err(|_| Error::new(ErrorKind::InvalidName(name.to_string())))?,
             name: Arc::new(name.to_string()),
         })
     }
@@ -54,7 +56,7 @@ impl Adapter {
 
     pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
         Path::new(format!("{}{}", PREFIX, adapter_name,))
-            .map_err(|_| Error::InvalidName((*adapter_name).to_string()))
+            .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<(&'a str, &'a str)> {
@@ -455,7 +457,7 @@ define_properties!(
                 .into_iter()
                 .map(|uuid| {
                     uuid.parse()
-                        .map_err(|_| Error::InvalidUuid(uuid.to_string()))
+                        .map_err(|_| Error::new(ErrorKind::InvalidUuid(uuid.to_string())))
                 })
                 .collect::<Result<HashSet<Uuid>>>()?
             }),

@@ -27,8 +27,8 @@ use super::{
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    make_socket_pair, parent_path, Adapter, Error, LinkType, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
-    TIMEOUT,
+    make_socket_pair, parent_path, Adapter, Error, ErrorKind, LinkType, Result, SessionInner, ERR_PREFIX,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
@@ -76,23 +76,25 @@ fn method_call<
 // ===========================================================================================
 
 /// Error response from us to a Bluetooth request.
-#[derive(Clone, Copy, Debug, Error, Eq, PartialEq, IntoStaticStr)]
+#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
 pub enum Reject {
-    #[error("Bluetooth request failed")]
+    /// Bluetooth request failed
     Failed,
-    #[error("Bluetooth request already in progress")]
+    /// Bluetooth request already in progress
     InProgress,
-    #[error("Invalid offset for Bluetooth GATT property")]
+    /// Invalid offset for Bluetooth GATT property
     InvalidOffset,
-    #[error("Invalid value length for Bluetooth GATT property")]
+    /// Invalid value length for Bluetooth GATT property
     InvalidValueLength,
-    #[error("Bluetooth request not permitted")]
+    /// Bluetooth request not permitted
     NotPermitted,
-    #[error("Bluetooth request not authorized")]
+    /// Bluetooth request not authorized
     NotAuthorized,
-    #[error("Bluetooth request not supported")]
+    /// Bluetooth request not supported
     NotSupported,
 }
+
+impl std::error::Error for Reject {}
 
 impl Default for Reject {
     fn default() -> Self {
@@ -161,7 +163,7 @@ impl ServiceControl {
     pub fn handle(&self) -> crate::Result<NonZeroU16> {
         match *self.handle_rx.borrow() {
             Some(handle) => Ok(handle),
-            None => Err(Error::NotRegistered),
+            None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
 }
@@ -520,9 +522,9 @@ impl CharacteristicNotifier {
     ///
     /// This fails when the notification session has been stopped by the receiving device.
     pub async fn notify(&mut self, value: Vec<u8>) -> Result<()> {
-        let connection = self.connection.upgrade().ok_or(Error::DBusConnectionLost)?;
+        let connection = self.connection.upgrade().ok_or(Error::new(ErrorKind::NotificationSessionStopped))?;
         if self.is_stopped() {
-            return Err(Error::NotificationSessionStopped);
+            return Err(Error::new(ErrorKind::NotificationSessionStopped));
         }
 
         // Flush confirmation queue.
@@ -541,7 +543,7 @@ impl CharacteristicNotifier {
             invalidated_properties: Vec::new(),
         };
         let msg = ppc.to_emit_message(&self.path);
-        connection.send(msg).map_err(|_| Error::DBusConnectionLost)?;
+        connection.send(msg).map_err(|_| Error::new(ErrorKind::NotificationSessionStopped))?;
         drop(connection);
 
         // Wait for confirmation if this is an indication session.
@@ -549,7 +551,7 @@ impl CharacteristicNotifier {
         if let Some(confirm_rx) = &mut self.confirm_rx {
             match confirm_rx.recv().await {
                 Some(()) => Ok(()),
-                None => Err(Error::IndicationUnconfirmed),
+                None => Err(Error::new(ErrorKind::IndicationUnconfirmed)),
             }
         } else {
             Ok(())
@@ -615,7 +617,7 @@ impl CharacteristicControl {
     pub fn handle(&self) -> crate::Result<NonZeroU16> {
         match *self.handle_rx.borrow() {
             Some(handle) => Ok(handle),
-            None => Err(Error::NotRegistered),
+            None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
 
@@ -623,7 +625,7 @@ impl CharacteristicControl {
     pub async fn write_request(&mut self) -> Result<CharacteristicWriteIoRequest> {
         match self.write_request_rx.recv().await {
             Some(req) => Ok(req),
-            None => Err(Error::NotRegistered),
+            None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
 
@@ -634,7 +636,7 @@ impl CharacteristicControl {
     pub async fn notifier(&mut self) -> Result<CharacteristicWriter> {
         match self.notify_writer_rx.recv().await {
             Some(writer) => Ok(writer),
-            None => Err(Error::NotRegistered),
+            None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
 }
@@ -1072,7 +1074,7 @@ impl DescriptorControl {
     pub fn handle(&self) -> crate::Result<NonZeroU16> {
         match *self.handle_rx.borrow() {
             Some(handle) => Ok(handle),
-            None => Err(Error::NotRegistered),
+            None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
 }
