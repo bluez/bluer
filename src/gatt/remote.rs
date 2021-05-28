@@ -1,4 +1,4 @@
-//! Remote GATT services.
+//! Consume remote GATT services of connected devices.
 
 use dbus::{
     arg::{OwnedFd, PropMap, RefArg, Variant},

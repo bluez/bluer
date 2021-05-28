@@ -1,5 +1,43 @@
-//! BLEZ - Asynchronous Bluetooth Low Energy using BlueZ
-//! ====================================================
+//! # BLEZ - Asynchronous Bluetooth Low Energy using BlueZ
+//!
+//! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
+//! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
+//! Both publishing local and consuming remote GATT services using *idiotmatic* Rust code is supported.
+//!
+//! The following features are provided:
+//!
+//! * Bluetooth adapters
+//!     * enumeration
+//!     * configuration of power, discoverability, name, etc.
+//!     * hotplug support through change events stream
+//! * Bluetooth devices
+//!     * discovery
+//!     * querying of address, name, class, signal strength (RSSI), etc.
+//!     * Bluetooth Low Energy advertisements
+//!     * change events stream
+//!     * connecting and pairing
+//! * consumption of remote GATT services
+//!     * GATT service discovery
+//!     * read, write and notify operations on characteristics
+//!     * read and write operations on characteristic descriptors
+//!     * optional use of low-overhead `AsyncRead` and `AsyncWrite` streams for notify and write operations
+//! * publishing local GATT services
+//!     * read, write and notify operations on characteristics
+//!     * read and write operations on characteristic descriptors
+//!     * two programming models supported
+//!         * callback-based interface
+//!         * low-overhead `AsyncRead` and `AsyncWrite` streams
+//! * sending Bluetooth Low Energy advertisements
+//!
+//! Classic Bluetooth is unsupported except for device discovery.
+//!
+//! ## Basic usage
+//! Create a [Session] using [Session::new]. This will establish a conection to BlueZ.
+//! Then obtain a Bluetooth adapter using [Session::adapter].
+//! From there on you can access most of the functionality using the methods provided by [Adapter].
+//!
+//! ## Examples
+//! See the `examples` folder of the repository for usage examples.
 
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
@@ -329,8 +367,6 @@ pub mod gatt;
 mod session;
 
 pub use crate::{adapter::*, advertising::*, device::*, session::*};
-
-/// Bluetooth UUID.
 pub use uuid::Uuid;
 
 /// Bluetooth error.

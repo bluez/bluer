@@ -1,4 +1,4 @@
-//! Local GATT services.
+//! Publish local GATT services to remove devices.
 
 use dbus::{
     arg::{AppendAll, OwnedFd, PropMap, Variant},

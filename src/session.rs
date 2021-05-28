@@ -112,6 +112,8 @@ pub enum SessionEvent {
 
 impl Session {
     /// Create a new Bluetooth session.
+    ///
+    /// This establishes a connection to BlueZ.
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);

@@ -1,12 +1,11 @@
-//! GATT services.
+//! Local and remote GATT services.
 
+use pin_project::pin_project;
 use std::{
     fmt,
     pin::Pin,
     task::{Context, Poll},
 };
-
-use pin_project::pin_project;
 use strum::{Display, EnumString};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
