@@ -61,7 +61,7 @@ fn method_call<
         }
         let result = f(data).await;
         log::trace!(
-            "{}: {}.{} (...) = {:?}",
+            "{}: {}.{} (...) -> {:?}",
             ctx.path(),
             ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
             ctx.method(),
