@@ -421,6 +421,9 @@ pub enum ErrorKind {
     /// The indication was not confirmed by the receiving device
     #[strum(disabled)]
     IndicationUnconfirmed,
+    /// The target object was either not present or removed.
+    #[strum(disabled)]
+    NotFound,
     /// IO error {0:?}
     #[strum(disabled)]
     Io(std::io::ErrorKind),
@@ -450,6 +453,9 @@ impl std::error::Error for Error {}
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
         log::trace!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
+        if err.name() == Some("org.freedesktop.DBus.Error.UnknownObject") {
+            return Self::new(ErrorKind::NotFound);
+        }
         let kind = match err
             .name()
             .and_then(|name| name.strip_prefix(ERR_PREFIX))
