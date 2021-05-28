@@ -17,7 +17,7 @@ use crate::{read_dict, Adapter, Result, SessionInner, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 pub(crate) const ADVERTISEMENT_INTERFACE: &str = "org.bluez.LEAdvertisement1";
-pub(crate) const ADVERTISEMENT_PREFIX: &str = "/io/crates/tokio_bluez/advertising/";
+pub(crate) const ADVERTISEMENT_PREFIX: &str = publish_path!("advertising/");
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]

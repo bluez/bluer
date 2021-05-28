@@ -30,6 +30,12 @@ pub(crate) const SERVICE_NAME: &str = "org.bluez";
 pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
+macro_rules! publish_path {
+    ($path:expr) => {
+        concat!("/io/crates/", env!("CARGO_PKG_NAME"), "/", $path)
+    };
+}
+
 macro_rules! dbus_interface {
     () => {
         #[allow(dead_code)]

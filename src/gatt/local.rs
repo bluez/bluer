@@ -1179,7 +1179,7 @@ impl RegisteredDescriptor {
 // Application
 // ===========================================================================================
 
-pub(crate) const GATT_APP_PREFIX: &str = "/io/crates/tokio_bluez/gatt/app/";
+pub(crate) const GATT_APP_PREFIX: &str = publish_path!("gatt/app/");
 
 /// Local GATT application to publish over Bluetooth.
 #[derive(Debug)]
@@ -1290,7 +1290,7 @@ impl fmt::Debug for ApplicationHandle {
 // GATT profile
 // ===========================================================================================
 
-pub(crate) const GATT_PROFILE_PREFIX: &str = "/io/crates/tokio_bluez/gatt/profile/";
+pub(crate) const GATT_PROFILE_PREFIX: &str = publish_path!("gatt/profile/");
 
 /// Local profile (GATT client) instance.
 ///
