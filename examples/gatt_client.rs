@@ -105,7 +105,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     }
     println!("    Stopping notification session");
     drop(notify);
-    sleep(Duration::from_secs(8)).await;
+    sleep(Duration::from_secs(15)).await;
 
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
