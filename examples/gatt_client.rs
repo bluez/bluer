@@ -12,7 +12,7 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
     let uuids = device.uuids().await?.unwrap_or_default();
     println!("Discovered device {} with service UUIDs {:?}", addr, &uuids);
     let md = device.manufacturer_data().await?;
-    println!("Manufacturer data: {:x?}", &md);
+    println!("    Manufacturer data: {:x?}", &md);
 
     if uuids.contains(&SERVICE_UUID) {
         println!("    Device provides our service!");
@@ -67,7 +67,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Read value: {:x?}", &value);
 
     let data = vec![0xee, 0x11, 0x11, 0x0];
-    println!("    Writing characteristic value {:?}", &data);
+    println!("    Writing characteristic value {:x?}", &data);
     char.write(&data).await?;
     let value = char.read().await?;
     println!("    Read value back: {:x?}", &value);
@@ -125,6 +125,7 @@ async fn main() -> blez::Result<()> {
                     Ok(()) => println!("    Device disconnected"),
                     Err(err) => println!("    Device disconnection failed: {}", &err),
                 }
+                println!();
             }
             AdapterEvent::DeviceRemoved(addr) => {
                 println!("Device removed {}", addr);
