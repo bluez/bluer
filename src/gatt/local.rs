@@ -635,8 +635,8 @@ impl fmt::Debug for CharacteristicControlHandle {
 /// Creates a `CharacteristicControl` and its associated handle.
 pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControlHandle) {
     let (handle_tx, handle_rx) = watch::channel(None);
-    let (write_request_tx, write_request_rx) = mpsc::channel(0);
-    let (notify_writer_tx, notify_writer_rx) = mpsc::channel(0);
+    let (write_request_tx, write_request_rx) = mpsc::channel(1);
+    let (notify_writer_tx, notify_writer_rx) = mpsc::channel(1);
     (
         CharacteristicControl { handle_rx, write_request_rx, notify_writer_rx },
         CharacteristicControlHandle {
@@ -778,9 +778,9 @@ impl RegisteredCharacteristic {
                             indicate,
                             notify,
                         }) => {
-                            let (stop_notify_tx, stop_notify_rx) = mpsc::channel(0);
+                            let (stop_notify_tx, stop_notify_rx) = mpsc::channel(1);
                             let (confirm_tx, confirm_rx) = if *indicate && !*notify {
-                                let (tx, rx) = mpsc::channel(0);
+                                let (tx, rx) = mpsc::channel(1);
                                 (Some(tx), Some(rx))
                             } else {
                                 (None, None)

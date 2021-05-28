@@ -11,10 +11,12 @@ since then become a full rewrite.
 
 The following features are provided:
 
-* adapter enumeration
+* Bluetooth adapters
+    * enumeration
     * configuration of power, discoverability, name, etc.
     * hotplug support through change events stream
-* device discovery and querying of their properties
+* Bluetooth devices
+    * discovery
     * querying of address, name, class, signal strength (RSSI), etc.
     * Bluetooth Low Energy advertisements
     * change events stream
@@ -34,13 +36,18 @@ The following features are provided:
 
 Classic Bluetooth is unsupported except for device discovery.
 
-Supported BlueZ versions
-------------------------
+Requirements
+------------
 
 This libray has been tested with BlueZ version 5.56.
-
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
+
+`bluetoothd` must be running and configured for access over D-Bus.
+On most distributions this should work out of the box.
+
+For building, D-Bus library headers must be installed. 
+On Debian-based distributions install the package `libdbus-1-dev`.
 
 Examples
 --------
