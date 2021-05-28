@@ -12,7 +12,7 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
     let uuids = device.uuids().await?.unwrap_or_default();
     println!("Discovered device {} with service UUIDs {:?}", addr, &uuids);
     let md = device.manufacturer_data().await?;
-    println!("Manufacturer data: {:?}", &md);
+    println!("Manufacturer data: {:x?}", &md);
 
     if uuids.contains(&SERVICE_UUID) {
         println!("    Device provides our service!");
@@ -85,7 +85,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
             }
         }
     }
-    println!("Stopping notification session");
+    println!("    Stopping notification session");
     drop(notify);
 
     Ok(())
@@ -107,18 +107,24 @@ async fn main() -> blez::Result<()> {
             AdapterEvent::DeviceAdded(addr) => {
                 let device = adapter.device(addr)?;
                 match find_our_characteristic(&device).await {
-                    Ok(Some(char)) => {
-                        if let Err(err) = exercise_characteristic(&char).await {
+                    Ok(Some(char)) => match exercise_characteristic(&char).await {
+                        Ok(()) => {
+                            println!("    Characteristic exercise completed");
+                        }
+                        Err(err) => {
                             println!("    Characteristic exercise failed: {}", &err);
                         }
-                    }
+                    },
                     Ok(None) => (),
                     Err(err) => {
                         println!("    Device failed: {}", &err);
                         let _ = adapter.remove_device(device.address()).await;
                     }
                 }
-                let _ = device.disconnect().await;
+                match device.disconnect().await {
+                    Ok(()) => println!("    Device disconnected"),
+                    Err(err) => println!("    Device disconnection failed: {}", &err),
+                }
             }
             AdapterEvent::DeviceRemoved(addr) => {
                 println!("Device removed {}", addr);

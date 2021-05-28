@@ -49,6 +49,15 @@ On most distributions this should work out of the box.
 For building, D-Bus library headers must be installed. 
 On Debian-based distributions install the package `libdbus-1-dev`.
 
+Troubleshooting
+---------------
+
+The library returns detailed errors received from BlueZ.
+
+However, in some cases checking the Bluetooth system log might provide more insights.
+On Debian-based systems it can be displayed by executing `journalctl -u bluetooth`.
+Check the `bluetoothd` man page for increasing the log level.
+
 Examples
 --------
 Refer to the API documentation and `examples` folder for examples.
