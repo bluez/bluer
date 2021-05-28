@@ -44,13 +44,21 @@ fn method_call<
     let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
     let data: Arc<T> = data_ref.clone();
     async move {
-        log::trace!(
-            "{}: {}.{} {:?}",
-            ctx.path(),
-            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
-            ctx.method(),
-            ctx.message()
-        );
+        if log::log_enabled!(log::Level::Trace) {
+            let mut args = Vec::new();
+            let mut arg_iter = ctx.message().iter_init();
+            while let Some(value) = arg_iter.get_refarg() {
+                args.push(format!("{:?}", value));
+                arg_iter.next();
+            }
+            log::trace!(
+                "{}: {}.{} ({})",
+                ctx.path(),
+                ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+                ctx.method(),
+                args.join(", ")
+            );
+        }
         let result = f(data).await;
         log::trace!(
             "{}: {}.{} (...) = {:?}",
