@@ -144,7 +144,11 @@ async fn main() -> blez::Result<()> {
     let adapter = session.adapter(&adapter_name)?;
 
     {
-        println!("Discovering on Bluetooth adapter {} with address {}\n", &adapter_name, adapter.address().await?);
+        println!(
+            "Discovering on Bluetooth adapter {} with address {}\n",
+            &adapter_name,
+            adapter.address().await?
+        );
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
         let mut done = false;
@@ -179,7 +183,9 @@ async fn main() -> blez::Result<()> {
                 }
                 _ => (),
             }
-            if done { break; }
+            if done {
+                break;
+            }
         }
         println!("Stopping discovery");
     }

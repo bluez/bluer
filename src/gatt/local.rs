@@ -34,13 +34,31 @@ use crate::{
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 
 /// Call method on Arc D-Bus object we are serving.
-fn method_call<T: Send + Sync + 'static, R: AppendAll, F: Future<Output = DbusResult<R>> + Send + 'static>(
+fn method_call<
+    T: Send + Sync + 'static,
+    R: AppendAll + fmt::Debug,
+    F: Future<Output = DbusResult<R>> + Send + 'static,
+>(
     mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
 ) -> impl Future<Output = PhantomData<R>> {
     let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
     let data: Arc<T> = data_ref.clone();
     async move {
+        log::trace!(
+            "{}: {}.{} {:?}",
+            ctx.path(),
+            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+            ctx.method(),
+            ctx.message()
+        );
         let result = f(data).await;
+        log::trace!(
+            "{}: {}.{} (...) = {:?}",
+            ctx.path(),
+            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+            ctx.method(),
+            &result
+        );
         ctx.reply(result)
     }
 }
@@ -189,9 +207,9 @@ impl RegisteredService {
                 Some(reg.s.primary)
             });
             ib.property("Handle").get(|_ctx, reg| Ok(reg.s.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |_ctx, reg, v| {
-                    let handle = NonZeroU16::new(v);
-                    dbg!(&handle);
+                |ctx, reg, handle| {
+                    log::trace!("{}: {}.Handle <- {}", ctx.path(), SERVICE_INTERFACE, handle);
+                    let handle = NonZeroU16::new(handle);
                     let _ = reg.s.control_handle.handle_tx.send(handle);
                     Ok(None)
                 },
@@ -719,9 +737,9 @@ impl RegisteredCharacteristic {
             });
             ib.property("Service").get(|ctx, _| Ok(parent_path(ctx.path())));
             ib.property("Handle").get(|_ctx, reg| Ok(reg.c.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |_ctx, reg, v| {
-                    let handle = NonZeroU16::new(v);
-                    dbg!(&handle);
+                |ctx, reg, handle| {
+                    log::trace!("{}: {}.Handle <- {}", ctx.path(), CHARACTERISTIC_INTERFACE, handle);
+                    let handle = NonZeroU16::new(handle);
                     let _ = reg.c.control_handle.handle_tx.send(handle);
                     Ok(None)
                 },
@@ -1109,9 +1127,9 @@ impl RegisteredDescriptor {
             });
             ib.property("Characteristic").get(|ctx, _| Ok(parent_path(ctx.path())));
             ib.property("Handle").get(|_ctx, reg| Ok(reg.d.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |_ctx, reg, v| {
-                    let handle = NonZeroU16::new(v);
-                    dbg!(&handle);
+                |ctx, reg, handle| {
+                    log::trace!("{}: {}.Handle <- {}", ctx.path(), DESCRIPTOR_INTERFACE, handle);
+                    let handle = NonZeroU16::new(handle);
                     let _ = reg.d.control_handle.handle_tx.send(handle);
                     Ok(None)
                 },
@@ -1169,6 +1187,7 @@ impl Application {
         let mut reg_paths = Vec::new();
         let app_path = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().to_simple());
         let app_path = dbus::Path::new(app_path).unwrap();
+        log::trace!("Publishing application at {}", &app_path);
 
         {
             let mut cr = inner.crossroads.lock().await;
@@ -1184,6 +1203,7 @@ impl Application {
                 let reg_service = RegisteredService::new(service);
                 let service_path = format!("{}/service{}", &app_path, service_idx);
                 let service_path = dbus::Path::new(service_path).unwrap();
+                log::trace!("Publishing service at {}", &service_path);
                 reg_paths.push(service_path.clone());
                 cr.insert(service_path.clone(), &[inner.gatt_reg_service_token], Arc::new(reg_service));
 
@@ -1193,6 +1213,7 @@ impl Application {
                     let reg_char = RegisteredCharacteristic::new(char, &inner.connection);
                     let char_path = format!("{}/char{}", &service_path, char_idx);
                     let char_path = dbus::Path::new(char_path).unwrap();
+                    log::trace!("Publishing characteristic at {}", &char_path);
                     reg_paths.push(char_path.clone());
                     cr.insert(char_path.clone(), &[inner.gatt_reg_characteristic_token], Arc::new(reg_char));
 
@@ -1200,6 +1221,7 @@ impl Application {
                         let reg_desc = RegisteredDescriptor::new(desc);
                         let desc_path = format!("{}/desc{}", &char_path, desc_idx);
                         let desc_path = dbus::Path::new(desc_path).unwrap();
+                        log::trace!("Publishing descriptor at {}", &desc_path);
                         reg_paths.push(desc_path.clone());
                         cr.insert(
                             desc_path,
@@ -1211,21 +1233,23 @@ impl Application {
             }
         }
 
+        log::trace!("Registering application at {}", &app_path);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
-        dbg!(&app_path);
-        //future::pending::<()>().await;
         proxy.method_call(MANAGER_INTERFACE, "RegisterApplication", (app_path.clone(), PropMap::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let app_path_unreg = app_path.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
+
+            log::trace!("Unregistering application at {}", &app_path_unreg);
             let _: std::result::Result<(), dbus::Error> =
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterApplication", (app_path_unreg,)).await;
 
             let mut cr = inner.crossroads.lock().await;
             for reg_path in reg_paths {
+                log::trace!("Unpublishing {}", &reg_path);
                 let _: Option<Self> = cr.remove(&reg_path);
             }
         });
@@ -1286,6 +1310,7 @@ impl Profile {
     ) -> crate::Result<ProfileHandle> {
         let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().to_simple());
         let profile_path = dbus::Path::new(profile_path).unwrap();
+        log::debug!("Publishing profile at {}", &profile_path);
 
         {
             let mut cr = inner.crossroads.lock().await;
@@ -1293,10 +1318,9 @@ impl Profile {
             cr.insert(profile_path.clone(), &[inner.gatt_profile_token, om], self);
         }
 
+        log::debug!("Registering profile at {}", &profile_path);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
-        dbg!(&profile_path);
-        //future::pending::<()>().await;
         proxy
             .method_call(MANAGER_INTERFACE, "RegisterApplication", (profile_path.clone(), PropMap::new()))
             .await?;
@@ -1306,10 +1330,12 @@ impl Profile {
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
+            log::debug!("Unregistering profile at {}", &profile_path_unreg);
             let _: std::result::Result<(), dbus::Error> = proxy
                 .method_call(MANAGER_INTERFACE, "UnregisterApplication", (profile_path_unreg.clone(),))
                 .await;
 
+            log::debug!("Unpublishing profile at {}", &profile_path_unreg);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&profile_path_unreg);
         });

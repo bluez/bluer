@@ -276,12 +276,14 @@ impl Advertisement {
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> Result<AdvertisementHandle> {
         let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
+        log::debug!("Publishing advertisement at {}", &name);
 
         {
             let mut cr = inner.crossroads.lock().await;
             cr.insert(name.clone(), &[inner.le_advertisment_token], self);
         }
 
+        log::debug!("Registering advertisement at {}", &name);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
@@ -290,9 +292,12 @@ impl Advertisement {
         let unreg_name = name.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
+
+            log::debug!("Unregistering advertisement at {}", &unreg_name);
             let _: std::result::Result<(), dbus::Error> =
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterAdvertisement", (unreg_name.clone(),)).await;
 
+            log::debug!("Unpublishing advertisement at {}", &unreg_name);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
         });
@@ -317,6 +322,6 @@ impl Drop for AdvertisementHandle {
 
 impl fmt::Debug for AdvertisementHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "LeAdvertisementHandle {{ {} }}", &self.name)
+        write!(f, "AdvertisementHandle {{ {} }}", &self.name)
     }
 }

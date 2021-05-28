@@ -248,9 +248,10 @@ macro_rules! define_properties {
 
 macro_rules! cr_property {
     ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
-        $ib.property($dbus_name).get(|_, $obj| {
-            eprintln!("Property {} queried", $dbus_name);
-            match $get {
+        $ib.property($dbus_name).get(|ctx, $obj| {
+            let value = $get;
+            log::trace!("{}: {}.{} = {:?}", ctx.path(), ctx.interface(), &$dbus_name, &value);
+            match value {
                 Some(v) => Ok(v),
                 None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
             }
