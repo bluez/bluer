@@ -12,7 +12,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::sleep;
-
 use blez::{Adapter, AdapterEvent, Address};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;

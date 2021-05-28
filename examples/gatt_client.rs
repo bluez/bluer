@@ -3,7 +3,10 @@
 use blez::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
-use tokio::time::sleep;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 
 include!("gatt.inc");
 
@@ -61,16 +64,31 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
 
 async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Characteristic flags: {:?}", char.flags().await?);
+    sleep(Duration::from_secs(1)).await;
 
     println!("    Reading characteristic value");
     let value = char.read().await?;
     println!("    Read value: {:x?}", &value);
+    sleep(Duration::from_secs(1)).await;
 
     let data = vec![0xee, 0x11, 0x11, 0x0];
-    println!("    Writing characteristic value {:x?}", &data);
+    println!("    Writing characteristic value {:x?} using function call", &data);
     char.write(&data).await?;
     let value = char.read().await?;
     println!("    Read value back: {:x?}", &value);
+    sleep(Duration::from_secs(1)).await;
+
+    println!("    Obtaining write IO");
+    let mut write_io = char.write_io().await?;
+    println!("    Write IO obtained");
+    println!("    Writing characteristic value {:x?} five times using IO", &data);
+    for _ in 0..5u8 {
+        let written = write_io.write(&data).await?;
+        println!("    {} bytes written", written);
+    }
+    println!("    Closing write IO");
+    drop(write_io);
+    sleep(Duration::from_secs(1)).await;
 
     println!("    Starting notification session");
     let notify = char.notify().await?;
@@ -87,6 +105,29 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     }
     println!("    Stopping notification session");
     drop(notify);
+    sleep(Duration::from_secs(1)).await;
+
+    println!("    Obtaining notification IO");
+    let mut notify_io = char.notify_io().await?;
+    let mut buf = vec![0; notify_io.mtu()];
+    for _ in 0..5u8 {
+        match notify_io.read_buf(&mut buf).await {
+            Ok(0) => {
+                println!("    Notification IO end of stream");
+                break;
+            }
+            Ok(read) => {
+                println!("    Read {} bytes: {:x?}", read, &value[0..read]);
+            }
+            Err(err) => {
+                println!("    Notification IO failed: {}", &err);
+                break;
+            }
+        }
+    }
+    println!("    Stopping notification IO");
+    drop(notify_io);
+    sleep(Duration::from_secs(1)).await;
 
     Ok(())
 }

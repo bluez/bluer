@@ -1,7 +1,6 @@
 //! Discover Bluetooth devices and list them.
 
 use futures::{pin_mut, stream::SelectAll, StreamExt};
-
 use blez::{Adapter, AdapterEvent, Address, DeviceEvent};
 
 async fn query_device(adapter: &Adapter, addr: Address) -> blez::Result<()> {

@@ -61,3 +61,20 @@ Check the `bluetoothd` man page for increasing the log level.
 Examples
 --------
 Refer to the API documentation and `examples` folder for examples.
+
+The follwing example applications are provided.
+
+  - **device_monitor**: Scans for and monitors Bluetooth devices similar to `top`.
+
+  - **discover_devices**: Discover Bluetooth devices and print their properties.
+
+  - **gatt_client**: Simple GATT client that calls read, write and notify on a characteristic.
+
+  - **gatt_server_cb**: Corresponding GATT server implemented using callback programming model.
+
+  - **le_advertise**: Register Bluetooth LE advertisement.
+
+  - **list_adapters**: List installed Bluetooth adapters and their properties.
+
+Use `cargo run --example <name>` to run a particular example application.
+
