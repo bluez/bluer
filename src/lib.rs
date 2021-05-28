@@ -81,7 +81,7 @@ macro_rules! dbus_interface {
             A: dbus::arg::AppendAll + std::fmt::Debug,
             R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
         {
-            log::trace!("{}: {}.{} ({:?})", &self.proxy().path, &interface, &name, &args);
+            log::trace!("{}: {}.{} {:?}", &self.proxy().path, &interface, &name, &args);
             let result = self.proxy().method_call(interface, name, args).await;
             log::trace!("{}: {}.{} (...) -> {:?}", &self.proxy().path, &interface, &name, &result);
             Ok(result?)

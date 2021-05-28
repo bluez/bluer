@@ -88,7 +88,24 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     }
     println!("    Closing write IO");
     drop(write_io);
-    sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(5)).await;
+
+    println!("    Starting notification session");
+    let notify = char.notify().await?;
+    pin_mut!(notify);
+    for _ in 0..5u8 {
+        match notify.next().await {
+            Some(value) => {
+                println!("    Notification value: {:x?}", &value);
+            }
+            None => {
+                println!("    Notification session was terminated");
+            }
+        }
+    }
+    println!("    Stopping notification session");
+    drop(notify);
+    sleep(Duration::from_secs(15)).await;
 
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
@@ -111,23 +128,6 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Stopping notification IO");
     drop(notify_io);
     sleep(Duration::from_secs(1)).await;
-
-    println!("    Starting notification session");
-    let notify = char.notify().await?;
-    pin_mut!(notify);
-    for _ in 0..5u8 {
-        match notify.next().await {
-            Some(value) => {
-                println!("    Notification value: {:x?}", &value);
-            }
-            None => {
-                println!("    Notification session was terminated");
-            }
-        }
-    }
-    println!("    Stopping notification session");
-    drop(notify);
-    sleep(Duration::from_secs(15)).await;
 
     Ok(())
 }
