@@ -1,21 +1,18 @@
 [package]
-name = "blurz"
-version = "0.5.0"
-description = "Bluetooth lib for Rust using blueZ/dbus"
+name = "blez"
+version = "0.6.0"
+description = "Asynchronous Bluetooth Low Energy using BlueZ"
 readme = "README.md"
 authors = [
     "Sebastian Urban <surban@surban.net>",
     "Attila Dusnoki <adusnoki@inf.u-szeged.hu>",
     "Ben Stern <bstern@fortian.com>",
 ]
-repository = "https://github.com/fortian/blurz"
-keywords = ["bluetooth", "bluez", "ble"]
+repository = "https://github.com/surban/blez"
+keywords = ["async", "bluetooth", "bluez", "ble", "gatt"]
+categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2018"
-
-[lib]
-name = "blurz"
-path = "src/lib.rs"
 
 [dependencies]
 dbus = { version = "0.9", features = ["futures"] }
