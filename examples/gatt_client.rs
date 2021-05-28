@@ -88,7 +88,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     }
     println!("    Closing write IO");
     drop(write_io);
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(1)).await;
 
     println!("    Starting notification session");
     {
@@ -106,7 +106,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
         }
         println!("    Stopping notification session");
     }
-    sleep(Duration::from_secs(15)).await;
+    sleep(Duration::from_secs(1)).await;
 
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
@@ -141,10 +141,11 @@ async fn main() -> blez::Result<()> {
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
 
-    println!("Scanning on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
+    println!("Discovering on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
 
     let discover = adapter.discover_devices().await?;
     pin_mut!(discover);
+    let mut done = false;
     while let Some(evt) = discover.next().await {
         match evt {
             AdapterEvent::DeviceAdded(addr) => {
@@ -153,6 +154,7 @@ async fn main() -> blez::Result<()> {
                     Ok(Some(char)) => match exercise_characteristic(&char).await {
                         Ok(()) => {
                             println!("    Characteristic exercise completed");
+                            done = true;
                         }
                         Err(err) => {
                             println!("    Characteristic exercise failed: {}", &err);
@@ -175,7 +177,12 @@ async fn main() -> blez::Result<()> {
             }
             _ => (),
         }
+        if done { break; }
     }
+
+    println!("Stopping discovery");
+    drop(discover);
+    sleep(Duration::from_secs(1)).await;
 
     Ok(())
 }
