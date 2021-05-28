@@ -1,6 +1,7 @@
 //! Connects to our Bluetooth GATT service and exercises the characteristic.
 
 use blez::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
+use bytes::BytesMut;
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
 use tokio::{
@@ -90,36 +91,36 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     drop(write_io);
     sleep(Duration::from_secs(1)).await;
 
-    // println!("    Starting notification session");
-    // {
-    //     let notify = char.notify().await?;
-    //     pin_mut!(notify);
-    //     for _ in 0..5u8 {
-    //         match notify.next().await {
-    //             Some(value) => {
-    //                 println!("    Notification value: {:x?}", &value);
-    //             }
-    //             None => {
-    //                 println!("    Notification session was terminated");
-    //             }
-    //         }
-    //     }
-    //     println!("    Stopping notification session");
-    // }
-    // sleep(Duration::from_secs(1)).await;
+    println!("    Starting notification session");
+    {
+        let notify = char.notify().await?;
+        pin_mut!(notify);
+        for _ in 0..5u8 {
+            match notify.next().await {
+                Some(value) => {
+                    println!("    Notification value: {:x?}", &value);
+                }
+                None => {
+                    println!("    Notification session was terminated");
+                }
+            }
+        }
+        println!("    Stopping notification session");
+    }
+    sleep(Duration::from_secs(1)).await;
 
     println!("    Obtaining notification IO");
     let mut notify_io = char.notify_io().await?;
     println!("    Obtained notification IO with MTU={}", notify_io.mtu());
-    let mut buf = vec![0; notify_io.mtu()];
     for _ in 0..5u8 {
+        let mut buf = BytesMut::with_capacity(notify_io.mtu());
         match notify_io.read_buf(&mut buf).await {
             Ok(0) => {
                 println!("    Notification IO end of stream");
                 break;
             }
             Ok(read) => {
-                println!("    Notified with {} bytes: {:x?}", read, &buf[0..read]);
+                println!("    Notified with {} bytes: {:x?}", read, &buf[..]);
             }
             Err(err) => {
                 println!("    Notification IO failed: {}", &err);
@@ -143,7 +144,7 @@ async fn main() -> blez::Result<()> {
     let adapter = session.adapter(&adapter_name)?;
 
     {
-        println!("Discovering on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
+        println!("Discovering on Bluetooth adapter {} with address {}\n", &adapter_name, adapter.address().await?);
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
         let mut done = false;
