@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::time::sleep;
 
-use blurz::{Adapter, AdapterEvent, Address};
+use blez::{Adapter, AdapterEvent, Address};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -165,7 +165,7 @@ impl DeviceMonitor {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let session = blurz::Session::new().await?;
+    let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
 

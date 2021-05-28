@@ -4,6 +4,7 @@ BLEZ - Asynchronous Bluetooth Low Energy for Rust using BlueZ
 This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/) for [Rust](https://www.rust-lang.org/).
 Both publishing local and consuming remote GATT services using *idiotmatic* Rust code is supported.
+Asynchronous support is depended by [Tokio](https://tokio.rs/).
 
 This project started as a fork of [blurz](https://github.com/szeged/blurz) but has 
 since then become a full rewrite.
@@ -31,7 +32,7 @@ The following features are provided:
         * low-overhead `AsyncRead` and `AsyncWrite` streams
 * sending Bluetooth Low Energy advertisements
 
-Classic Bluetooth is unsupported.
+Classic Bluetooth is unsupported except for device discovery.
 
 Supported BlueZ versions
 ------------------------

@@ -1,7 +1,7 @@
 //! Serves a Bluetooth GATT application.
 use std::{collections::BTreeMap, time::Duration};
 
-use blurz::{gatt, LeAdvertisement};
+use blez::{gatt, LeAdvertisement};
 use futures::FutureExt;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -9,11 +9,11 @@ use tokio::{
 };
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blurz::Result<()> {
+async fn main() -> blez::Result<()> {
     let service_uuid = "9643735b-c62e-4717-0000-61abaf5abc8e".parse().unwrap();
     let characteristic_uuid = "9643735b-c62e-4717-0001-61abaf5abc8e".parse().unwrap();
 
-    let session = blurz::Session::new().await?;
+    let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;

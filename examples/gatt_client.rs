@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use blurz::{
+use blez::{
     gatt::remote::{Characteristic, CharacteristicWriteRequest},
     AdapterEvent, Device, Result,
 };
@@ -80,7 +80,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Writing characteristic value with response {:?}", &data2);
     char.write_ext(
         &data2,
-        &CharacteristicWriteRequest { op_type: blurz::gatt::WriteValueType::Request, ..Default::default() },
+        &CharacteristicWriteRequest { op_type: blez::gatt::WriteValueType::Request, ..Default::default() },
     )
     .await?;
 
@@ -88,8 +88,8 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blurz::Result<()> {
-    let session = blurz::Session::new().await?;
+async fn main() -> blez::Result<()> {
+    let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
