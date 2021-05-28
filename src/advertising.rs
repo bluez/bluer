@@ -21,7 +21,7 @@ pub(crate) const ADVERTISEMENT_PREFIX: &str = "/io/crates/tokio_bluez/advertisin
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum LeAdvertisementType {
+pub enum AdvertisementType {
     /// Broadcast
     #[strum(serialize = "broadcast")]
     Broadcast,
@@ -30,7 +30,7 @@ pub enum LeAdvertisementType {
     Peripheral,
 }
 
-impl Default for LeAdvertisementType {
+impl Default for AdvertisementType {
     fn default() -> Self {
         Self::Peripheral
     }
@@ -38,7 +38,7 @@ impl Default for LeAdvertisementType {
 
 /// Secondary channel to be used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum LeAdvertisementSecondaryChannel {
+pub enum AdvertisementSecondaryChannel {
     /// 1M
     #[strum(serialize = "1M")]
     OneM,
@@ -50,7 +50,7 @@ pub enum LeAdvertisementSecondaryChannel {
     Coded,
 }
 
-impl Default for LeAdvertisementSecondaryChannel {
+impl Default for AdvertisementSecondaryChannel {
     fn default() -> Self {
         Self::OneM
     }
@@ -58,7 +58,7 @@ impl Default for LeAdvertisementSecondaryChannel {
 
 /// Advertisement feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum LeAdvertisementFeature {
+pub enum AdvertisementFeature {
     /// TX power.
     #[strum(serialize = "tx-power")]
     TxPower,
@@ -72,7 +72,7 @@ pub enum LeAdvertisementFeature {
 
 /// LE advertising platform feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum LeAdvertisingFeature {
+pub enum AdvertisingFeature {
     /// Indicates whether platform can
     /// specify tx power on each
     /// advertising instance.
@@ -87,7 +87,7 @@ pub enum LeAdvertisingFeature {
 
 /// Advertising-related controller capabilities.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct LeAdvertisingCapabilities {
+pub struct AdvertisingCapabilities {
     /// Maximum advertising data length.
     pub max_advertisement_length: u8,
     /// Maximum advertising scan response length.
@@ -98,7 +98,7 @@ pub struct LeAdvertisingCapabilities {
     pub max_tx_power: i16,
 }
 
-impl LeAdvertisingCapabilities {
+impl AdvertisingCapabilities {
     pub(crate) fn from_dict(dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>) -> Result<Self> {
         Ok(Self {
             max_advertisement_length: *read_dict(&dict, "MaxAdvLen")?,
@@ -117,9 +117,9 @@ impl LeAdvertisingCapabilities {
 /// All UUIDs are 128-bit versions in the API, and 16 or 32-bit
 /// versions of the same UUID will be used in the advertising data as appropriate.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct LeAdvertisement {
+pub struct Advertisement {
     /// Determines the type of advertising packet requested.
-    pub advertisement_type: LeAdvertisementType,
+    pub advertisement_type: AdvertisementType,
     /// List of UUIDs to include in the "Service UUID" field of
     /// the Advertising Data.
     pub service_uuids: BTreeSet<Uuid>,
@@ -165,7 +165,7 @@ pub struct LeAdvertisement {
     pub discoverable_timeout: Option<Duration>,
     /// List of system features to be included in the advertising
     /// packet.
-    pub system_includes: BTreeSet<LeAdvertisementFeature>,
+    pub system_includes: BTreeSet<AdvertisementFeature>,
     /// Local name to be used in the advertising report.
     ///
     /// If the
@@ -189,7 +189,7 @@ pub struct LeAdvertisement {
     ///
     /// Primary channel is
     /// always set to "1M" except when "Coded" is set.
-    pub secondary_channel: Option<LeAdvertisementSecondaryChannel>,
+    pub secondary_channel: Option<AdvertisementSecondaryChannel>,
     /// Minimum advertising interval to be used by the
     /// advertising set, in milliseconds.
     ///
@@ -215,7 +215,7 @@ pub struct LeAdvertisement {
     pub tx_power: Option<i16>,
 }
 
-impl LeAdvertisement {
+impl Advertisement {
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
         cr.register(ADVERTISEMENT_INTERFACE, |ib: &mut IfaceBuilder<Self>| {
             cr_property!(ib, "Type", la => {
@@ -274,7 +274,7 @@ impl LeAdvertisement {
 
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
-    ) -> Result<LeAdvertisementHandle> {
+    ) -> Result<AdvertisementHandle> {
         let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
 
         {
@@ -297,25 +297,25 @@ impl LeAdvertisement {
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
-        Ok(LeAdvertisementHandle { name, _drop_tx: drop_tx })
+        Ok(AdvertisementHandle { name, _drop_tx: drop_tx })
     }
 }
 
 /// Active Bluetooth LE advertisement.
 ///
 /// Drop to unregister advertisement.
-pub struct LeAdvertisementHandle {
+pub struct AdvertisementHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
 }
 
-impl Drop for LeAdvertisementHandle {
+impl Drop for AdvertisementHandle {
     fn drop(&mut self) {
         // required for drop order
     }
 }
 
-impl fmt::Debug for LeAdvertisementHandle {
+impl fmt::Debug for AdvertisementHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "LeAdvertisementHandle {{ {} }}", &self.name)
     }

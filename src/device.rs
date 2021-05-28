@@ -100,7 +100,7 @@ impl Device {
     }
 
     /// Wait until remote GATT services are resolved.
-    pub async fn wait_for_services_resolved(&self) -> Result<()> {
+    async fn wait_for_services_resolved(&self) -> Result<()> {
         let mut changes = self.events().await?.fuse();
         if self.is_services_resolved().await? {
             return Ok(());
@@ -134,12 +134,8 @@ impl Device {
     /// Remote GATT services.
     ///
     /// The device must be connected for GATT services to be resolved.
-    /// Use `wait_for_services_resolved` after connecting to device to wait
-    /// until services have been resolved.
     pub async fn services(&self) -> Result<Vec<gatt::remote::Service>> {
-        if !self.is_services_resolved().await? {
-            return Err(Error::ServicesUnresolved);
-        }
+        self.wait_for_services_resolved().await?;
 
         let mut services = Vec::new();
         for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {

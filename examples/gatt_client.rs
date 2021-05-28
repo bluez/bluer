@@ -1,24 +1,20 @@
-//! Connects to a Bluetooth GATT application.
+//! Connects to our Bluetooth GATT service and exercises the characteristic.
 
-use std::time::Duration;
-
-use blez::{
-    gatt::remote::{Characteristic, CharacteristicWriteRequest},
-    AdapterEvent, Device, Result,
-};
+use blez::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
 use futures::{pin_mut, StreamExt};
+use std::time::Duration;
 use tokio::time::sleep;
-use uuid::Uuid;
+
+include!("gatt.inc");
 
 async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristic>> {
-    let service_uuid: Uuid = "9643735b-c62e-4717-0000-61abaf5abc8e".parse().unwrap();
-    let characteristic_uuid: Uuid = "9643735b-c62e-4717-0001-61abaf5abc8e".parse().unwrap();
-
     let addr = device.address();
     let uuids = device.uuids().await?.unwrap_or_default();
     println!("Discovered device {} with service UUIDs {:?}", addr, &uuids);
+    let md = device.manufacturer_data().await?;
+    println!("Manufacturer data: {:?}", &md);
 
-    if uuids.contains(&service_uuid) {
+    if uuids.contains(&SERVICE_UUID) {
         println!("    Device provides our service!");
 
         sleep(Duration::from_secs(2)).await;
@@ -40,19 +36,16 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
             println!("    Already connected");
         }
 
-        println!("    Waiting for service resolution...");
-        device.wait_for_services_resolved().await?;
-        println!("    Services resolved");
-
+        println!("    Enumerating services...");
         for service in device.services().await? {
             let uuid = service.uuid().await?;
             println!("    Service UUID: {}", &uuid);
-            if uuid == service_uuid {
+            if uuid == SERVICE_UUID {
                 println!("    Found our service!");
                 for char in service.characteristics().await? {
                     let uuid = char.uuid().await?;
                     println!("    Characteristic UUID: {}", &uuid);
-                    if uuid == characteristic_uuid {
+                    if uuid == CHARACTERISTIC_UUID {
                         println!("    Found our characteristic!");
                         return Ok(Some(char));
                     }
@@ -68,21 +61,32 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
 
 async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Characteristic flags: {:?}", char.flags().await?);
+
     println!("    Reading characteristic value");
     let value = char.read().await?;
-    println!("    Read value: {:?}", &value);
+    println!("    Read value: {:x?}", &value);
 
-    let data = vec![10, 11, 12, 13];
-    println!("    Writing characteristic value with command {:?}", &data);
+    let data = vec![0xee, 0x11, 0x11, 0x0];
+    println!("    Writing characteristic value {:?}", &data);
     char.write(&data).await?;
+    let value = char.read().await?;
+    println!("    Read value back: {:x?}", &value);
 
-    let data2 = vec![20, 21, 22, 23];
-    println!("    Writing characteristic value with response {:?}", &data2);
-    char.write_ext(
-        &data2,
-        &CharacteristicWriteRequest { op_type: blez::gatt::WriteValueType::Request, ..Default::default() },
-    )
-    .await?;
+    println!("    Starting notification session");
+    let notify = char.notify().await?;
+    pin_mut!(notify);
+    for _ in 0..5u8 {
+        match notify.next().await {
+            Some(value) => {
+                println!("    Notification value: {:x?}", &value);
+            }
+            None => {
+                println!("    Notification session was terminated");
+            }
+        }
+    }
+    println!("Stopping notification session");
+    drop(notify);
 
     Ok(())
 }
@@ -94,12 +98,11 @@ async fn main() -> blez::Result<()> {
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
 
-    println!("Scanning on Bluetooth adapter {}: {}", &adapter_name, adapter.address().await?);
+    println!("Scanning on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
 
-    let device_events = adapter.discover_devices().await?;
-    pin_mut!(device_events);
-
-    while let Some(evt) = device_events.next().await {
+    let discover = adapter.discover_devices().await?;
+    pin_mut!(discover);
+    while let Some(evt) = discover.next().await {
         match evt {
             AdapterEvent::DeviceAdded(addr) => {
                 let device = adapter.device(addr)?;

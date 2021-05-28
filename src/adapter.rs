@@ -16,10 +16,9 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Error, Event,
-    LeAdvertisement, LeAdvertisementFeature, LeAdvertisementHandle, LeAdvertisementSecondaryChannel,
-    LeAdvertisingCapabilities, LeAdvertisingFeature, Modalias, Result, SessionInner, SingleSessionToken,
-    SERVICE_NAME, TIMEOUT,
+    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Advertisement,
+    AdvertisementFeature, AdvertisementHandle, AdvertisementSecondaryChannel, AdvertisingCapabilities,
+    AdvertisingFeature, Error, Event, Modalias, Result, SessionInner, SingleSessionToken, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -195,7 +194,7 @@ impl Adapter {
     /// reached it will result in NotPermitted error.    
     ///
     /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
-    pub async fn le_advertise(&self, le_advertisement: LeAdvertisement) -> Result<LeAdvertisementHandle> {
+    pub async fn le_advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
         le_advertisement.register(self.inner.clone(), self.name.clone()).await
     }
 
@@ -488,7 +487,7 @@ define_properties!(
 
         /// List of supported system includes.
         property(
-            SupportedAdvertisingSystemIncludes, BTreeSet<LeAdvertisementFeature>,
+            SupportedAdvertisingSystemIncludes, BTreeSet<AdvertisementFeature>,
             dbus: (advertising::MANAGER_INTERFACE, "SupportedIncludes", Vec<String>, MANDATORY),
             get: (supported_advertising_system_includes, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
@@ -501,7 +500,7 @@ define_properties!(
         /// channels can be used to advertise with the
         /// corresponding PHY.
         property(
-            SupportedAdvertisingSecondaryChannels, BTreeSet<LeAdvertisementSecondaryChannel>,
+            SupportedAdvertisingSecondaryChannels, BTreeSet<AdvertisementSecondaryChannel>,
             dbus: (advertising::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, MANDATORY),
             get: (supported_advertising_secondary_channels, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
@@ -511,10 +510,10 @@ define_properties!(
         /// Enumerates Advertising-related controller capabilities
         /// useful to the client.
         property(
-            SupportedAdvertisingCapabilities, LeAdvertisingCapabilities,
+            SupportedAdvertisingCapabilities, AdvertisingCapabilities,
             dbus: (advertising::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (supported_advertising_capabilities, v => {
-                LeAdvertisingCapabilities::from_dict(v)?
+                AdvertisingCapabilities::from_dict(v)?
             }),
         );
 
@@ -524,7 +523,7 @@ define_properties!(
         /// are available on the platform, the SupportedFeatures
         /// array will be empty.
         property(
-            SupportedAdvertisingFeatures, BTreeSet<LeAdvertisingFeature>,
+            SupportedAdvertisingFeatures, BTreeSet<AdvertisingFeature>,
             dbus: (advertising::MANAGER_INTERFACE, "SupportedFeatures", Vec<String>, OPTIONAL),
             get: (supported_advertising_features, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()

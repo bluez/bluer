@@ -26,13 +26,13 @@ use std::{
 };
 use tokio::{select, task::spawn_blocking};
 
-use crate::{adapter, all_dbus_objects, gatt, Adapter, Error, LeAdvertisement, Result, SERVICE_NAME};
+use crate::{adapter, all_dbus_objects, gatt, Adapter, Advertisement, Error, Result, SERVICE_NAME};
 
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
     pub connection: Arc<SyncConnection>,
     pub crossroads: Mutex<Crossroads>,
-    pub le_advertisment_token: IfaceToken<LeAdvertisement>,
+    pub le_advertisment_token: IfaceToken<Advertisement>,
     pub gatt_reg_service_token: IfaceToken<Arc<gatt::local::RegisteredService>>,
     pub gatt_reg_characteristic_token: IfaceToken<Arc<gatt::local::RegisteredCharacteristic>>,
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
@@ -121,7 +121,7 @@ impl Session {
             }),
         )));
 
-        let le_advertisment_token = LeAdvertisement::register_interface(&mut crossroads);
+        let le_advertisment_token = Advertisement::register_interface(&mut crossroads);
         let gatt_service_token = gatt::local::RegisteredService::register_interface(&mut crossroads);
         let gatt_reg_characteristic_token =
             gatt::local::RegisteredCharacteristic::register_interface(&mut crossroads);

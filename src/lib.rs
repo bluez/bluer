@@ -1,4 +1,5 @@
-//! Bluetooth library using Bluez.
+//! BLEZ - Asynchronous Bluetooth Low Energy using BlueZ
+//! ====================================================
 
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
