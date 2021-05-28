@@ -1256,7 +1256,7 @@ impl Application {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterApplication", (app_path_unreg,)).await;
 
             let mut cr = inner.crossroads.lock().await;
-            for reg_path in reg_paths {
+            for reg_path in reg_paths.into_iter().rev() {
                 log::trace!("Unpublishing {}", &reg_path);
                 let _: Option<Self> = cr.remove(&reg_path);
             }
