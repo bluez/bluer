@@ -253,7 +253,7 @@ impl Event {
         let msg_match_prop = connection.add_match(rule_prop).await?.msg_cb(handle_msg.clone());
 
         tokio::spawn(async move {
-            log::trace!("Starting event loop for {:?}", &connection.unique_name());
+            log::trace!("Starting event loop for {}", &connection.unique_name());
             let mut subs: Vec<Subscription> = Vec::new();
 
             loop {
@@ -329,7 +329,7 @@ impl Event {
             let _ = connection.remove_match(msg_match_add.token()).await;
             let _ = connection.remove_match(msg_match_removed.token()).await;
             let _ = connection.remove_match(msg_match_prop.token()).await;
-            log::trace!("Terminated event loop for {:?}", &connection.unique_name());
+            log::trace!("Terminated event loop for {}", &connection.unique_name());
         });
 
         Ok(())
