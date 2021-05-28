@@ -77,6 +77,7 @@ fn method_call<
 
 /// Error response from us to a Bluetooth request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[non_exhaustive]
 pub enum Reject {
     /// Bluetooth request failed
     Failed,
