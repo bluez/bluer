@@ -1,3 +1,5 @@
+//! Bluetooth LE advertising.
+
 use dbus::{
     arg::{PropMap, RefArg, Variant},
     nonblock::Proxy,
