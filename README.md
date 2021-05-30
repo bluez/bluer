@@ -64,7 +64,8 @@ Check the `bluetoothd` man page for increasing the log level.
 
 Examples
 --------
-Refer to the API documentation and `examples` folder for examples.
+Refer to the [API documentation](https://docs.rs/blez) and
+[examples folder](https://github.com/surban/blez/tree/master/examples) for examples.
 
 The follwing example applications are provided.
 
