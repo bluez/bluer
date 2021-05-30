@@ -41,6 +41,8 @@
 //! [AsyncRead]: tokio::io::AsyncRead
 //! [AsyncWrite]: tokio::io::AsyncWrite
 
+#![warn(missing_docs)]
+
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
     nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
