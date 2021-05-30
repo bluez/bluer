@@ -160,11 +160,16 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
         );
 
-        /// Service handle.
+        /// Service ids of included services of this service.
         property(
-            Handle, u16,
-            dbus: (SERVICE_INTERFACE, "Handle", u16, MANDATORY),
-            get: (handle, v => { v.to_owned() }),
+            Includes, Vec<u16>,
+            dbus: (SERVICE_INTERFACE, "Includes", Vec<Path>, MANDATORY),
+            get: (includes, v => {
+                v.into_iter().filter_map(|path| match Service::parse_dbus_path(path) {
+                    Some((_, _, service_id)) => Some(service_id),
+                    None => None
+                }).collect()
+            }),
         );
     }
 );
@@ -471,13 +476,6 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
         );
 
-        /// Characteristic handle.
-        property(
-            Handle, u16,
-            dbus: (CHARACTERISTIC_INTERFACE, "Handle", u16, MANDATORY),
-            get: (handle, v => { v.to_owned() }),
-        );
-
         ///	True, if notifications or indications on this
         ///	characteristic are currently enabled.
         property(
@@ -687,13 +685,6 @@ define_properties!(
             Uuid, Uuid,
             dbus: (DESCRIPTOR_INTERFACE, "UUID", String, MANDATORY),
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
-        );
-
-        /// Characteristic descriptor handle.
-        property(
-            Handle, u16,
-            dbus: (DESCRIPTOR_INTERFACE, "Handle", u16, MANDATORY),
-            get: (handle, v => { v.to_owned() }),
         );
 
         /// Defines how the descriptor value can be used.

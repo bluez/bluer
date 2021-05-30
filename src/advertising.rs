@@ -76,7 +76,7 @@ pub enum AdvertisementFeature {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
 pub enum AdvertisingFeature {
     /// Indicates whether platform can
-    /// specify tx power on each
+    /// specify TX power on each
     /// advertising instance.
     #[strum(serialize = "CanSetTxPower")]
     CanSetTxPower,
