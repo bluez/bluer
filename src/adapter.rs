@@ -293,14 +293,14 @@ define_properties!(
         // Adapter properties
         // ===========================================================================================
 
-        /// The Bluetooth device address.
+        /// The Bluetooth adapter address.
         property(
             Address, Address,
             dbus: (INTERFACE, "Address", String, MANDATORY),
             get: (address, v => { v.parse()? }),
         );
 
-        /// The Bluetooth Address Type.
+        /// The Bluetooth adapter address type.
         ///
         /// For dual-mode and BR/EDR
         /// only adapter this defaults to "public". Single mode LE
