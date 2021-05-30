@@ -201,7 +201,7 @@ impl Adapter {
     /// If the maximum number of advertisement instances is
     /// reached it will result in NotPermitted error.    
     ///
-    /// Drop the returned `LeAdvertisementHandle` to unregister the advertisement.
+    /// Drop the returned [AdvertisementHandle] to unregister the advertisement.
     pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
         le_advertisement.register(self.inner.clone(), self.name.clone()).await
     }
@@ -211,7 +211,7 @@ impl Adapter {
     /// Registering a service allows applications to publish a *local* GATT service,
     /// which then becomes available to remote devices.
     ///
-    /// Drop the returned `ApplicationHandle` to unregister the application.
+    /// Drop the returned [ApplicationHandle](gatt::local::ApplicationHandle) to unregister the application.
     pub async fn serve_gatt_application(
         &self, gatt_application: gatt::local::Application,
     ) -> Result<gatt::local::ApplicationHandle> {
@@ -225,7 +225,7 @@ impl Adapter {
     /// and requests automatic connections to be established to devices
     /// supporting it.
     ///
-    /// Drop the returned `ProfileHandle` to unregister the application.
+    /// Drop the returned [ProfileHandle](gatt::local::ProfileHandle) to unregister the application.
     pub async fn register_gatt_profile(
         &self, gatt_profile: gatt::local::Profile,
     ) -> Result<gatt::local::ProfileHandle> {
@@ -262,11 +262,10 @@ impl Adapter {
     /// Parameters that may be set in the filter dictionary
     /// include the following:    
     ///
-    ///  `address` -
+    /// * `address` -
     ///     The Bluetooth device address of the remote
     ///     device. This parameter is mandatory.
-    ///
-    /// `address_type` -
+    /// * `address_type` -
     ///     The Bluetooth device Address Type. This is
     ///     address type that should be used for initial
     ///     connection. If this parameter is not present

@@ -337,9 +337,9 @@ impl Characteristic {
     /// Acquire file descriptor and MTU for writing.
     ///
     /// It only works with characteristic that has
-    /// the `write_without_response` flag set.
+    /// the [write_without_response](CharacteristicFlags::write_without_response) flag set.
     ///
-    /// Usage of `write` will be
+    /// Usage of [write](Self::write) will be
     /// locked causing it to return NotPermitted error.
     /// To release the lock the client shall drop the writer.
     ///
@@ -402,16 +402,16 @@ impl Characteristic {
     /// Acquire file descriptor and MTU for notify.
     ///
     /// It only works with characteristic that has
-    /// the `notify` flag set and no other client has called
-    /// `StartNotify`.
+    /// the [notify](CharacteristicFlags::notify) flag set and no other client has called
+    /// [notify](Self::notify) or [notify_io](Self::notify_io).
     ///
     /// Notification are enabled during this procedure so
-    /// `notify` shall not be called, any notification
+    /// [notify](Self::notify) shall not be called, any notification
     /// will be dispatched via file descriptor therefore the
     /// Value property is not affected during the time where
     ///	notify has been acquired.
     ///
-    /// Usage of `noify` will be
+    /// Usage of [noify](Self::notify) will be
     /// locked causing it to return NotPermitted error.
     /// To release the lock the client shall drop the writer.
     ///

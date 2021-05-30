@@ -1,7 +1,7 @@
 [package]
 name = "blez"
-version = "0.6.1"
-description = "Asynchronous Bluetooth Low Energy using BlueZ"
+version = "0.7.0"
+description = "Asynchronous interface to official Bluetooth Low Energy APIs on Linux (BlueZ)"
 readme = "README.md"
 authors = [
     "Sebastian Urban <surban@surban.net>",
@@ -9,7 +9,7 @@ authors = [
     "Ben Stern <bstern@fortian.com>",
 ]
 repository = "https://github.com/surban/blez"
-keywords = ["async", "bluetooth", "bluez", "ble", "gatt"]
+keywords = ["async", "bluetooth", "le", "bluez", "ble", "gatt"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2018"

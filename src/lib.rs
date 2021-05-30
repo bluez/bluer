@@ -2,9 +2,11 @@
 //!
 //! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 //! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
-//! Both publishing local and consuming remote GATT services using *idiotmatic* Rust code is supported.
+//! Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiotmatic* Rust code is supported.
 //!
-//! The following features are provided:
+//! This library depends on the [tokio] asynchronous runtime.
+//!
+//! The following features are provided.
 //!
 //! * Bluetooth adapters
 //!     * enumeration
@@ -20,13 +22,13 @@
 //!     * GATT service discovery
 //!     * read, write and notify operations on characteristics
 //!     * read and write operations on characteristic descriptors
-//!     * optional use of low-overhead `AsyncRead` and `AsyncWrite` streams for notify and write operations
+//!     * optional use of low-overhead [AsyncRead] and [AsyncWrite] streams for notify and write operations
 //! * publishing local GATT services
 //!     * read, write and notify operations on characteristics
 //!     * read and write operations on characteristic descriptors
 //!     * two programming models supported
 //!         * callback-based interface
-//!         * low-overhead `AsyncRead` and `AsyncWrite` streams
+//!         * low-overhead [AsyncRead] and [AsyncWrite] streams
 //! * sending Bluetooth Low Energy advertisements
 //!
 //! Classic Bluetooth is unsupported except for device discovery.
@@ -35,6 +37,9 @@
 //! Create a [Session] using [Session::new].
 //! Then obtain a Bluetooth adapter using [Session::adapter].
 //! From there on you can access most of the functionality using the methods provided by [Adapter].
+//!
+//! [AsyncRead]: tokio::io::AsyncRead
+//! [AsyncWrite]: tokio::io::AsyncWrite
 
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},

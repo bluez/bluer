@@ -1,13 +1,15 @@
-BLEZ - Asynchronous Bluetooth Low Energy for Rust using BlueZ
-=============================================================
+BLEZ - Asynchronous Bluetooth Low Energy on Linux for Rust
+==========================================================
 
 This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/) for [Rust](https://www.rust-lang.org/).
-Both publishing local and consuming remote GATT services using *idiotmatic* Rust code is supported.
+Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiotmatic* Rust code is supported.
 Asynchronous support is depended by [Tokio](https://tokio.rs/).
 
-This project started as a fork of [blurz](https://github.com/szeged/blurz) but has 
-since then become a full rewrite.
+This project started as a fork of [blurz](https://github.com/szeged/blurz) but has
+since then become a full rewrite. Documentation has been mostly copied from the
+[BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
+also extended.
 
 The following features are provided:
 
@@ -46,7 +48,7 @@ Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/Cha
 `bluetoothd` must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
-For building, D-Bus library headers must be installed. 
+For building, D-Bus library headers must be installed.
 On Debian-based distributions install the package `libdbus-1-dev`.
 
 Troubleshooting

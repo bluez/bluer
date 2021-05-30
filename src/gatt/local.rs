@@ -142,7 +142,7 @@ pub struct Service {
     pub uuid: Uuid,
     /// Service handle.
     ///
-    /// Set to `None` to auto allocate an available handle.
+    /// Set to [None] to auto allocate an available handle.
     pub handle: Option<NonZeroU16>,
     /// Indicates whether or not this GATT service is a
     /// primary service.
@@ -308,9 +308,9 @@ pub type CharacteristicWriteFun = Box<
 pub enum CharacteristicWriteMethod {
     /// Call specified function for each write request.
     Fun(CharacteristicWriteFun),
-    /// Provide written data over `AsyncRead` IO.
+    /// Provide written data over asynchronous IO functions.
     ///
-    /// Use `CharacteristicControlHandle` to obtain reader.
+    /// Use [CharacteristicControl] to obtain reader.
     Io,
 }
 
@@ -373,9 +373,9 @@ pub type CharacteristicNotifyFun =
 pub enum CharacteristicNotifyMethod {
     /// Call specified function when client starts a notification session.
     Fun(CharacteristicNotifyFun),
-    /// Write notify data over `AsyncWrite` IO.
+    /// Write notify data over asynchronous IO.
     ///
-    /// Use `CharacteristicControlHandle` to obtain writer.
+    /// Use [CharacteristicControl] to obtain writer.
     Io,
 }
 
@@ -401,7 +401,7 @@ pub struct CharacteristicNotify {
     pub notify: bool,
     /// If set allows the client to use the Handle Value Indication/Confirmation operation.
     ///
-    /// Confirmations will only be provided when this is `true` and `notify` is `false`.
+    /// Confirmations will only be provided when this is [true] and [notify](Self::notify) is [false].
     pub indicate: bool,
     /// Notification and indication method.
     pub method: CharacteristicNotifyMethod,
@@ -421,7 +421,7 @@ pub struct Characteristic {
     pub uuid: Uuid,
     /// Characteristic handle.
     ///
-    /// Set to `None` to auto allocate an available handle.
+    /// Set to [None] to auto allocate an available handle.
     pub handle: Option<NonZeroU16>,
     /// If set, permits broadcasts of the Characteristic Value using
     /// Server Characteristic Configuration Descriptor.
@@ -536,7 +536,7 @@ impl CharacteristicNotifier {
 
     /// Sends a notification or indication with the specified data to the receiving device.
     ///
-    /// If `confirming` is true, the function waits until a confirmation is received from
+    /// If [confirming](Self::confirming) is true, the function waits until a confirmation is received from
     /// the device before it returns.
     ///
     /// This fails when the notification session has been stopped by the receiving device.
@@ -1019,7 +1019,7 @@ pub struct Descriptor {
     pub uuid: Uuid,
     /// Characteristic descriptor handle.
     ///
-    /// Set to `None` to auto allocate an available handle.
+    /// Set to [None] to auto allocate an available handle.
     pub handle: Option<NonZeroU16>,
     /// Authorize flag.
     pub authorize: bool,
