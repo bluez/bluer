@@ -9,7 +9,7 @@ authors = [
     "Ben Stern <bstern@fortian.com>",
 ]
 repository = "https://github.com/surban/blez"
-keywords = ["async", "bluetooth", "le", "bluez", "ble", "gatt"]
+keywords = ["async", "bluetooth", "bluez", "ble", "gatt"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2018"
