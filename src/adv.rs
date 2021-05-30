@@ -23,7 +23,7 @@ pub(crate) const ADVERTISEMENT_PREFIX: &str = publish_path!("advertising/");
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum AdvertisementType {
+pub enum Type {
     /// Broadcast
     #[strum(serialize = "broadcast")]
     Broadcast,
@@ -32,7 +32,7 @@ pub enum AdvertisementType {
     Peripheral,
 }
 
-impl Default for AdvertisementType {
+impl Default for Type {
     fn default() -> Self {
         Self::Peripheral
     }
@@ -40,7 +40,7 @@ impl Default for AdvertisementType {
 
 /// Secondary channel to be used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum AdvertisementSecondaryChannel {
+pub enum SecondaryChannel {
     /// 1M
     #[strum(serialize = "1M")]
     OneM,
@@ -52,7 +52,7 @@ pub enum AdvertisementSecondaryChannel {
     Coded,
 }
 
-impl Default for AdvertisementSecondaryChannel {
+impl Default for SecondaryChannel {
     fn default() -> Self {
         Self::OneM
     }
@@ -60,7 +60,7 @@ impl Default for AdvertisementSecondaryChannel {
 
 /// Advertisement feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum AdvertisementFeature {
+pub enum Feature {
     /// TX power.
     #[strum(serialize = "tx-power")]
     TxPower,
@@ -74,7 +74,7 @@ pub enum AdvertisementFeature {
 
 /// LE advertising platform feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-pub enum AdvertisingFeature {
+pub enum PlatformFeature {
     /// Indicates whether platform can
     /// specify TX power on each
     /// advertising instance.
@@ -89,7 +89,7 @@ pub enum AdvertisingFeature {
 
 /// Advertising-related controller capabilities.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct AdvertisingCapabilities {
+pub struct Capabilities {
     /// Maximum advertising data length.
     pub max_advertisement_length: u8,
     /// Maximum advertising scan response length.
@@ -100,7 +100,7 @@ pub struct AdvertisingCapabilities {
     pub max_tx_power: i16,
 }
 
-impl AdvertisingCapabilities {
+impl Capabilities {
     pub(crate) fn from_dict(dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>) -> Result<Self> {
         Ok(Self {
             max_advertisement_length: *read_dict(&dict, "MaxAdvLen")?,
@@ -111,7 +111,7 @@ impl AdvertisingCapabilities {
     }
 }
 
-/// Bluetooth LE advertisement data.
+/// Bluetooth LE advertisement data definition.
 ///
 /// Specifies the Advertisement Data to be broadcast and some advertising
 /// parameters.  Properties which are not present will not be included in the
@@ -121,7 +121,7 @@ impl AdvertisingCapabilities {
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Advertisement {
     /// Determines the type of advertising packet requested.
-    pub advertisement_type: AdvertisementType,
+    pub advertisement_type: Type,
     /// List of UUIDs to include in the "Service UUID" field of
     /// the Advertising Data.
     pub service_uuids: BTreeSet<Uuid>,
@@ -167,7 +167,7 @@ pub struct Advertisement {
     pub discoverable_timeout: Option<Duration>,
     /// List of system features to be included in the advertising
     /// packet.
-    pub system_includes: BTreeSet<AdvertisementFeature>,
+    pub system_includes: BTreeSet<Feature>,
     /// Local name to be used in the advertising report.
     ///
     /// If the
@@ -191,7 +191,7 @@ pub struct Advertisement {
     ///
     /// Primary channel is
     /// always set to "1M" except when "Coded" is set.
-    pub secondary_channel: Option<AdvertisementSecondaryChannel>,
+    pub secondary_channel: Option<SecondaryChannel>,
     /// Minimum advertising interval to be used by the
     /// advertising set, in milliseconds.
     ///
@@ -278,14 +278,14 @@ impl Advertisement {
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> Result<AdvertisementHandle> {
         let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
-        log::debug!("Publishing advertisement at {}", &name);
+        log::trace!("Publishing advertisement at {}", &name);
 
         {
             let mut cr = inner.crossroads.lock().await;
             cr.insert(name.clone(), &[inner.le_advertisment_token], self);
         }
 
-        log::debug!("Registering advertisement at {}", &name);
+        log::trace!("Registering advertisement at {}", &name);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
@@ -295,11 +295,11 @@ impl Advertisement {
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
-            log::debug!("Unregistering advertisement at {}", &unreg_name);
+            log::trace!("Unregistering advertisement at {}", &unreg_name);
             let _: std::result::Result<(), dbus::Error> =
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterAdvertisement", (unreg_name.clone(),)).await;
 
-            log::debug!("Unpublishing advertisement at {}", &unreg_name);
+            log::trace!("Unpublishing advertisement at {}", &unreg_name);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
         });
@@ -308,7 +308,7 @@ impl Advertisement {
     }
 }
 
-/// Active Bluetooth LE advertisement.
+/// Handle to active Bluetooth LE advertisement.
 ///
 /// Drop to unregister advertisement.
 pub struct AdvertisementHandle {

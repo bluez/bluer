@@ -1,4 +1,4 @@
-//! # BLEZ - Asynchronous Bluetooth Low Energy using BlueZ
+//! # BLEZ - Asynchronous Bluetooth Low Energy on Linux
 //!
 //! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 //! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
@@ -32,12 +32,9 @@
 //! Classic Bluetooth is unsupported except for device discovery.
 //!
 //! ## Basic usage
-//! Create a [Session] using [Session::new]. This will establish a conection to BlueZ.
+//! Create a [Session] using [Session::new].
 //! Then obtain a Bluetooth adapter using [Session::adapter].
 //! From there on you can access most of the functionality using the methods provided by [Adapter].
-//!
-//! ## Examples
-//! See the `examples` folder of the repository for usage examples.
 
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
@@ -64,15 +61,6 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 macro_rules! publish_path {
     ($path:expr) => {
         concat!("/io/crates/", env!("CARGO_PKG_NAME"), "/", $path)
-    };
-}
-
-macro_rules! other_err {
-    ($($e:tt)*) => {
-        crate::Error {
-            kind: crate::ErrorKind::Other,
-            message: format!($($e)*),
-        }
     };
 }
 
@@ -223,7 +211,7 @@ macro_rules! define_properties {
     ) => {};
 
     (
-        $struct_name:ident, $enum_vis:vis $enum_name:ident =>
+        $struct_name:ident, $(#[$enum_outer:meta])* $enum_vis:vis $enum_name:ident =>
         {$(
             $(#[$outer:meta])*
             property(
@@ -250,7 +238,7 @@ macro_rules! define_properties {
             )*
         }
 
-        /// Property with value.
+        $(#[$enum_outer])*
         #[derive(Debug, Clone)]
         $enum_vis enum $enum_name {
             $(
@@ -361,12 +349,12 @@ macro_rules! read_opt_prop {
 }
 
 mod adapter;
-mod advertising;
+pub mod adv;
 mod device;
 pub mod gatt;
 mod session;
 
-pub use crate::{adapter::*, advertising::*, device::*, session::*};
+pub use crate::{adapter::*, device::*, session::*};
 pub use uuid::Uuid;
 
 /// Bluetooth error.
@@ -382,93 +370,93 @@ pub struct Error {
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
 #[non_exhaustive]
 pub enum ErrorKind {
-    /// Bluetooth device already connected
+    /// Bluetooth device already connected.
     AlreadyConnected,
-    /// Bluetooth device already exists
+    /// Bluetooth device already exists.
     AlreadyExists,
-    /// Bluetooth authentication canceled
+    /// Bluetooth authentication canceled.
     AuthenticationCanceled,
-    /// Bluetooth authentication failed
+    /// Bluetooth authentication failed.
     AuthenticationFailed,
-    /// Bluetooth authentication rejected
+    /// Bluetooth authentication rejected.
     AuthenticationRejected,
-    /// Bluetooth authentication timeout
+    /// Bluetooth authentication timeout.
     AuthenticationTimeout,
-    /// Bluetooth connection attempt failed
+    /// Bluetooth connection attempt failed.
     ConnectionAttemptFailed,
-    /// Bluetooth device does not exist
+    /// Bluetooth device does not exist.
     DoesNotExist,
-    /// Bluetooth operation failed
+    /// Bluetooth operation failed.
     Failed,
-    /// Bluetooth operation in progress
+    /// Bluetooth operation in progress.
     InProgress,
-    /// invalid arguments for Bluetooth operation
+    /// Invalid arguments for Bluetooth operation.
     InvalidArguments,
-    /// the data provided generates a Bluetooth data packet which is too long
+    /// The data provided is of invalid length.
     InvalidLength,
-    /// Bluetooth operation not available
+    /// Bluetooth operation not available.
     NotAvailable,
-    /// Bluetooth operation not authorized
+    /// Bluetooth operation not authorized.
     NotAuthorized,
-    /// Bluetooth device not ready
+    /// Bluetooth device not ready.
     NotReady,
-    /// Bluetooth operation not supported
+    /// Bluetooth operation not supported.
     NotSupported,
-    /// Bluetooth operation not permitted
+    /// Bluetooth operation not permitted.
     NotPermitted,
-    /// Invalid offset for Bluetooth GATT property
+    /// Invalid offset for Bluetooth GATT property.
     InvalidOffset,
-    /// D-Bus error {0}
+    /// D-Bus error {0}.
     #[strum(disabled)]
     DBus(String),
-    /// Lost connection to D-Bus
+    /// Lost connection to D-Bus.
     #[strum(disabled)]
     DBusConnectionLost,
-    /// No Bluetooth adapter available
-    #[strum(disabled)]
-    NoAdapterAvailable,
-    /// Bluetooth adapter {0} is not available
-    #[strum(disabled)]
-    AdapterNotAvailable(String),
-    /// Join error
-    #[strum(disabled)]
-    JoinError,
-    /// Invalid Bluetooth address: {0}
+    /// Invalid Bluetooth address: {0}.
     #[strum(disabled)]
     InvalidAddress(String),
-    /// Invalid Bluetooth adapter name: {0}
+    /// Invalid Bluetooth adapter name: {0}.
     #[strum(disabled)]
     InvalidName(String),
-    /// Invalid UUID: {0}
-    #[strum(disabled)]
-    InvalidUuid(String),
-    /// Invalid value
-    #[strum(disabled)]
-    InvalidValue,
-    /// Key {0} is missing
-    #[strum(disabled)]
-    MissingKey(String),
-    /// GATT services have not been resolved for that Bluetooth device
+    /// GATT services have not been resolved for that Bluetooth device.
     #[strum(disabled)]
     ServicesUnresolved,
-    /// Bluetooth application is not registered
+    /// Bluetooth application is not registered.
     #[strum(disabled)]
     NotRegistered,
-    /// The receiving Bluetooth device has stopped the notification session
+    /// The receiving Bluetooth device has stopped the notification session.
     #[strum(disabled)]
     NotificationSessionStopped,
-    /// The indication was not confirmed by the receiving device
+    /// The indication was not confirmed by the receiving device.
     #[strum(disabled)]
     IndicationUnconfirmed,
     /// The target object was either not present or removed.
     #[strum(disabled)]
     NotFound,
-    /// IO error {0:?}
+    /// Internal error: {0}
     #[strum(disabled)]
+    Internal(InternalErrorKind),
+}
+
+/// Internal Bluetooth error kind.
+///
+/// This is most likely caused by incompatibilies between this library
+/// and the version of the Bluetooth daemon.
+#[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[non_exhaustive]
+pub enum InternalErrorKind {
+    /// Invalid UUID: {0}.
+    InvalidUuid(String),
+    /// Invalid value.
+    InvalidValue,
+    /// Invalid modalias: {0}.
+    InvalidModalias(String),
+    /// Key {0} is missing.
+    MissingKey(String),
+    /// Join error.
+    JoinError,
+    /// IO error {0:?}.
     Io(std::io::ErrorKind),
-    /// Other error
-    #[strum(disabled)]
-    Other,
 }
 
 impl Error {
@@ -509,19 +497,19 @@ impl From<dbus::Error> for Error {
 
 impl From<JoinError> for Error {
     fn from(err: JoinError) -> Self {
-        Self { kind: ErrorKind::JoinError, message: err.to_string() }
+        Self { kind: ErrorKind::Internal(InternalErrorKind::JoinError), message: err.to_string() }
     }
 }
 
 impl From<strum::ParseError> for Error {
     fn from(_: strum::ParseError) -> Self {
-        Self { kind: ErrorKind::InvalidValue, message: String::new() }
+        Self { kind: ErrorKind::Internal(InternalErrorKind::InvalidValue), message: String::new() }
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self { kind: ErrorKind::Io(err.kind()), message: err.to_string() }
+        Self { kind: ErrorKind::Internal(InternalErrorKind::Io(err.kind())), message: err.to_string() }
     }
 }
 
@@ -615,19 +603,9 @@ impl FromStr for Modalias {
                 device: (device[0] as u32) << 8 | (device[1] as u32),
             })
         }
-        do_parse(m).ok_or_else(|| other_err!("invalid modalias: {}", m))
+        do_parse(m)
+            .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidModalias(m.to_string()))))
     }
-}
-
-/// Link type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
-pub enum LinkType {
-    /// BR/EDR
-    #[strum(serialize = "BR/EDR")]
-    BrEdr,
-    /// LE
-    #[strum(serialize = "LE")]
-    Le,
 }
 
 /// Gets all D-Bus objects from the bluez service.
@@ -642,7 +620,7 @@ async fn all_dbus_objects(
 pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
-    prop_cast(dict, key).ok_or(Error::new(ErrorKind::MissingKey(key.to_string())))
+    prop_cast(dict, key).ok_or(Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))
 }
 
 /// Creates a UNIX socket pair.

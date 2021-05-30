@@ -11,12 +11,12 @@ use tokio::net::UnixStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteValueType,
+    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    all_dbus_objects, Address, Device, Error, ErrorKind, Event, Result, SessionInner, SingleSessionToken,
-    SERVICE_NAME, TIMEOUT,
+    all_dbus_objects, Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SessionInner,
+    SingleSessionToken, SERVICE_NAME, TIMEOUT,
 };
 
 // ===========================================================================================
@@ -157,7 +157,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (SERVICE_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
         /// Service ids of included services of this service.
@@ -452,7 +452,7 @@ pub struct CharacteristicWriteRequest {
     /// Start offset.
     pub offset: u16,
     /// Write operation type.
-    pub op_type: WriteValueType,
+    pub op_type: WriteOp,
     /// True if prepare authorization request.
     pub prepare_authorize: bool,
 }
@@ -473,7 +473,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (CHARACTERISTIC_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
         ///	True, if notifications or indications on this
@@ -684,7 +684,7 @@ define_properties!(
         property(
             Uuid, Uuid,
             dbus: (DESCRIPTOR_INTERFACE, "UUID", String, MANDATORY),
-            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::InvalidUuid(v.to_string())))?}),
+            get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
         /// Defines how the descriptor value can be used.

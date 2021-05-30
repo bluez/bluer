@@ -18,17 +18,17 @@ use std::{
     pin::Pin,
     sync::{Arc, Weak},
 };
-use strum::IntoStaticStr;
+use strum::{Display, EnumString, IntoStaticStr};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 use super::{
-    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteValueType,
+    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    make_socket_pair, parent_path, Adapter, Error, ErrorKind, LinkType, Result, SessionInner, ERR_PREFIX,
-    SERVICE_NAME, TIMEOUT,
+    make_socket_pair, parent_path, Adapter, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
+    TIMEOUT,
 };
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
@@ -71,6 +71,17 @@ fn method_call<
     }
 }
 
+/// Link type.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
+pub enum LinkType {
+    /// BR/EDR
+    #[strum(serialize = "BR/EDR")]
+    BrEdr,
+    /// LE
+    #[strum(serialize = "LE")]
+    Le,
+}
+
 // ===========================================================================================
 // Request error
 // ===========================================================================================
@@ -78,7 +89,7 @@ fn method_call<
 /// Error response from us to a Bluetooth request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
 #[non_exhaustive]
-pub enum Reject {
+pub enum ReqError {
     /// Bluetooth request failed
     Failed,
     /// Bluetooth request already in progress
@@ -95,23 +106,23 @@ pub enum Reject {
     NotSupported,
 }
 
-impl std::error::Error for Reject {}
+impl std::error::Error for ReqError {}
 
-impl Default for Reject {
+impl Default for ReqError {
     fn default() -> Self {
         Self::Failed
     }
 }
 
-impl From<Reject> for dbus::MethodErr {
-    fn from(err: Reject) -> Self {
+impl From<ReqError> for dbus::MethodErr {
+    fn from(err: ReqError) -> Self {
         let name: &'static str = err.clone().into();
         Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
     }
 }
 
 /// Result of a Bluetooth request to us.
-pub type ReqResult<T> = std::result::Result<T, Reject>;
+pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
 /// Result of calling one of our D-Bus methods.
 type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
@@ -124,7 +135,7 @@ type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
 // Definition
 // ----------
 
-/// Local GATT service exposed over Bluetooth.
+/// Definition of local GATT service exposed over Bluetooth.
 #[derive(Debug, Default)]
 pub struct Service {
     /// 128-bit service UUID.
@@ -149,6 +160,8 @@ pub struct Service {
 // ----------
 
 /// An object to control a service once it has been registered.
+///
+/// Use [service_control] to obtain controller and associated handle.
 pub struct ServiceControl {
     handle_rx: watch::Receiver<Option<NonZeroU16>>,
 }
@@ -169,7 +182,10 @@ impl ServiceControl {
     }
 }
 
-/// A handle to control a service once it has been registered.
+/// A handle to store inside a service definition to make it controllable
+/// once it has been registered.
+///
+/// Use [service_control] to obtain controller and associated handle.
 pub struct ServiceControlHandle {
     handle_tx: watch::Sender<Option<NonZeroU16>>,
 }
@@ -186,7 +202,9 @@ impl fmt::Debug for ServiceControlHandle {
     }
 }
 
-/// Creates a `ServiceControl` and its associated handle.
+/// Creates a [ServiceControl] and its associated [ServiceControlHandle].
+///
+/// Keep the [ServiceControl] and store the [ServiceControlHandle] in [Service::control_handle].
 pub fn service_control() -> (ServiceControl, ServiceControlHandle) {
     let (handle_tx, handle_rx) = watch::channel(None);
     (ServiceControl { handle_rx }, ServiceControlHandle { handle_tx })
@@ -242,7 +260,7 @@ pub type CharacteristicReadFun = Box<
     dyn (Fn(CharacteristicReadRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>>) + Send + Sync,
 >;
 
-/// Characteristic read.
+/// Characteristic read definition.
 #[derive(custom_debug::Debug)]
 pub struct CharacteristicRead {
     /// If set allows clients to read this characteristic.
@@ -265,7 +283,7 @@ impl Default for CharacteristicRead {
             encrypt_read: false,
             encrypt_authenticated_read: false,
             secure_read: false,
-            fun: Box::new(|_| async move { Err(Reject::NotSupported) }.boxed()),
+            fun: Box::new(|_| async move { Err(ReqError::NotSupported) }.boxed()),
         }
     }
 }
@@ -307,11 +325,11 @@ impl fmt::Debug for CharacteristicWriteMethod {
 
 impl Default for CharacteristicWriteMethod {
     fn default() -> Self {
-        Self::Fun(Box::new(|_, _| async move { Err(Reject::NotSupported) }.boxed()))
+        Self::Fun(Box::new(|_, _| async move { Err(ReqError::NotSupported) }.boxed()))
     }
 }
 
-/// Characteristic write.
+/// Characteristic write definition.
 #[derive(Debug, Default)]
 pub struct CharacteristicWrite {
     /// If set allows clients to use the Write Command ATT operation.
@@ -376,7 +394,7 @@ impl fmt::Debug for CharacteristicNotifyMethod {
     }
 }
 
-/// Characteristic notify.
+/// Characteristic notify definition.
 #[derive(Debug, Default)]
 pub struct CharacteristicNotify {
     /// If set allows the client to use the Handle Value Notification operation.
@@ -396,7 +414,7 @@ impl CharacteristicNotify {
     }
 }
 
-/// Local GATT characteristic exposed over Bluetooth.
+/// Definition of local GATT characteristic exposed over Bluetooth.
 #[derive(Default, Debug)]
 pub struct Characteristic {
     /// 128-bit characteristic UUID.
@@ -463,7 +481,7 @@ pub struct CharacteristicWriteRequest {
     /// Start offset.
     pub offset: u16,
     /// Write operation type.
-    pub op_type: WriteValueType,
+    pub op_type: WriteOp,
     /// Exchanged MTU.
     pub mtu: u16,
     /// Link type.
@@ -591,7 +609,7 @@ impl CharacteristicWriteIoRequest {
     }
 
     /// Reject the write request.
-    pub fn reject(self, reason: Reject) {
+    pub fn reject(self, reason: ReqError) {
         let _ = self.tx.send(Err(reason));
     }
 }
@@ -601,6 +619,8 @@ impl CharacteristicWriteIoRequest {
 // ----------
 
 /// An object to control a characteristic once it has been registered.
+///
+/// Use [characteristic_control] to obtain controller and associated handle.
 pub struct CharacteristicControl {
     handle_rx: watch::Receiver<Option<NonZeroU16>>,
     write_request_rx: mpsc::Receiver<CharacteristicWriteIoRequest>,
@@ -642,7 +662,10 @@ impl CharacteristicControl {
     }
 }
 
-/// A handle to control a characteristic once it has been registered.
+/// A handle to store inside a characteristic definition to make it controllable
+/// once it has been registered.
+///
+/// Use [characteristic_control] to obtain controller and associated handle.
 pub struct CharacteristicControlHandle {
     handle_tx: watch::Sender<Option<NonZeroU16>>,
     write_request_tx: Option<mpsc::Sender<CharacteristicWriteIoRequest>>,
@@ -661,7 +684,9 @@ impl fmt::Debug for CharacteristicControlHandle {
     }
 }
 
-/// Creates a `CharacteristicControl` and its associated handle.
+/// Creates a [CharacteristicControl] and its associated [CharacteristicControlHandle].
+///
+/// Keep the [CharacteristicControl] and store the [CharacteristicControlHandle] in [Characteristic::control_handle].
 pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControlHandle) {
     let (handle_tx, handle_rx) = watch::channel(None);
     let (write_request_tx, write_request_rx) = mpsc::channel(1);
@@ -777,7 +802,7 @@ impl RegisteredCharacteristic {
                             let value = (read.fun)(options).await?;
                             Ok((value,))
                         }
-                        None => Err(Reject::NotSupported.into()),
+                        None => Err(ReqError::NotSupported.into()),
                     }
                 })
             });
@@ -793,7 +818,7 @@ impl RegisteredCharacteristic {
                                 fun(value, options).await?;
                                 Ok(())
                             }
-                            _ => Err(Reject::NotSupported.into()),
+                            _ => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
@@ -830,7 +855,7 @@ impl RegisteredCharacteristic {
                             notify_fn(notifier).await;
                             Ok(())
                         }
-                        _ => Err(Reject::NotSupported.into()),
+                        _ => Err(ReqError::NotSupported.into()),
                     }
                 })
             });
@@ -862,11 +887,11 @@ impl RegisteredCharacteristic {
                                 let (tx, rx) = oneshot::channel();
                                 let req =
                                     CharacteristicWriteIoRequest { mtu: options.mtu, link: options.link, tx };
-                                write_request_tx.send(req).await.map_err(|_| Reject::Failed)?;
-                                let fd = rx.await.map_err(|_| Reject::Failed)??;
+                                write_request_tx.send(req).await.map_err(|_| ReqError::Failed)?;
+                                let fd = rx.await.map_err(|_| ReqError::Failed)??;
                                 Ok((fd, options.mtu))
                             }
-                            None => Err(Reject::NotSupported.into()),
+                            None => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
@@ -882,12 +907,12 @@ impl RegisteredCharacteristic {
                             Some(notify_writer_tx) => {
                                 // bluez has already confirmed the start of the notification session.
                                 // So there is no point in making this failable by our users.
-                                let (fd, stream) = make_socket_pair().map_err(|_| Reject::Failed)?;
+                                let (fd, stream) = make_socket_pair().map_err(|_| ReqError::Failed)?;
                                 let writer = CharacteristicWriter { mtu: options.mtu.into(), stream };
                                 let _ = notify_writer_tx.send(writer).await;
                                 Ok((fd, options.mtu))
                             }
-                            None => Err(Reject::NotSupported.into()),
+                            None => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
@@ -906,9 +931,9 @@ impl RegisteredCharacteristic {
 
 /// Characteristic descriptor read value function.
 pub type DescriptorReadFun =
-    Box<dyn Fn(ReadDescriptorRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>> + Send + Sync>;
+    Box<dyn Fn(DescriptorReadRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>> + Send + Sync>;
 
-/// Characteristic descriptor read.
+/// Characteristic descriptor read definition.
 #[derive(custom_debug::Debug)]
 pub struct DescriptorRead {
     /// If set allows clients to read this characteristic descriptor.
@@ -931,7 +956,7 @@ impl Default for DescriptorRead {
             encrypt_read: false,
             encrypt_authenticated_read: false,
             secure_read: false,
-            fun: Box::new(|_| async move { Err(Reject::NotSupported) }.boxed()),
+            fun: Box::new(|_| async move { Err(ReqError::NotSupported) }.boxed()),
         }
     }
 }
@@ -947,10 +972,10 @@ impl DescriptorRead {
 
 /// Characteristic descriptor write value function.
 pub type DescriptorWriteFun = Box<
-    dyn Fn(Vec<u8>, WriteDescriptorRequest) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>> + Send + Sync,
+    dyn Fn(Vec<u8>, DescriptorWriteRequest) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>> + Send + Sync,
 >;
 
-/// Characteristic write.
+/// Characteristic descriptor write definition.
 #[derive(custom_debug::Debug)]
 pub struct DescriptorWrite {
     /// If set allows clients to use the Write Command ATT operation.
@@ -973,7 +998,7 @@ impl Default for DescriptorWrite {
             encrypt_write: false,
             encrypt_authenticated_write: false,
             secure_write: false,
-            fun: Box::new(|_, _| async move { Err(Reject::NotSupported) }.boxed()),
+            fun: Box::new(|_, _| async move { Err(ReqError::NotSupported) }.boxed()),
         }
     }
 }
@@ -987,7 +1012,7 @@ impl DescriptorWrite {
     }
 }
 
-/// Local GATT characteristic descriptor exposed over Bluetooth.
+/// Definition of local GATT characteristic descriptor exposed over Bluetooth.
 #[derive(Default, Debug)]
 pub struct Descriptor {
     /// 128-bit descriptor UUID.
@@ -1018,14 +1043,14 @@ impl Descriptor {
 
 /// Read characteristic descriptor value request.
 #[derive(Debug, Clone)]
-pub struct ReadDescriptorRequest {
+pub struct DescriptorReadRequest {
     /// Offset.
     pub offset: u16,
     /// Link type.
     pub link: Option<LinkType>,
 }
 
-impl ReadDescriptorRequest {
+impl DescriptorReadRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_prop!(dict, "offset", u16),
@@ -1036,7 +1061,7 @@ impl ReadDescriptorRequest {
 
 /// Write characteristic descriptor value request.
 #[derive(Debug, Clone)]
-pub struct WriteDescriptorRequest {
+pub struct DescriptorWriteRequest {
     /// Offset.
     pub offset: u16,
     /// Link type.
@@ -1045,7 +1070,7 @@ pub struct WriteDescriptorRequest {
     pub prepare_authorize: bool,
 }
 
-impl WriteDescriptorRequest {
+impl DescriptorWriteRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
             offset: read_prop!(dict, "offset", u16),
@@ -1060,6 +1085,8 @@ impl WriteDescriptorRequest {
 // ----------
 
 /// An object to control a characteristic descriptor once it has been registered.
+///
+/// Use [descriptor_control] to obtain controller and associated handle.
 pub struct DescriptorControl {
     handle_rx: watch::Receiver<Option<NonZeroU16>>,
 }
@@ -1080,7 +1107,10 @@ impl DescriptorControl {
     }
 }
 
-/// A handle to control a characteristic descriptor once it has been registered.
+/// A handle to store inside a characteristic descriptors definition to make
+/// it controllable once it has been registered.
+///
+/// Use [descriptor_control] to obtain controller and associated handle.
 pub struct DescriptorControlHandle {
     handle_tx: watch::Sender<Option<NonZeroU16>>,
 }
@@ -1097,7 +1127,9 @@ impl fmt::Debug for DescriptorControlHandle {
     }
 }
 
-/// Creates a `DescriptorControl` and its associated handle.
+/// Creates a [DescriptorControl] and its associated [DescriptorControlHandle].
+///
+/// Keep the [DescriptorControl] and store the [DescriptorControlHandle] in [Descriptor::control_handle].
 pub fn descriptor_control() -> (DescriptorControl, DescriptorControlHandle) {
     let (handle_tx, handle_rx) = watch::channel(None);
     (DescriptorControl { handle_rx }, DescriptorControlHandle { handle_tx })
@@ -1147,13 +1179,13 @@ impl RegisteredDescriptor {
             );
             ib.method_with_cr_async("ReadValue", ("flags",), ("value",), |ctx, cr, (flags,): (PropMap,)| {
                 method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    let options = ReadDescriptorRequest::from_dict(&flags)?;
+                    let options = DescriptorReadRequest::from_dict(&flags)?;
                     match &reg.d.read {
                         Some(read) => {
                             let value = (read.fun)(options).await?;
                             Ok((value,))
                         }
-                        None => Err(Reject::NotSupported.into()),
+                        None => Err(ReqError::NotSupported.into()),
                     }
                 })
             });
@@ -1163,13 +1195,13 @@ impl RegisteredDescriptor {
                 (),
                 |ctx, cr, (value, flags): (Vec<u8>, PropMap)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let options = WriteDescriptorRequest::from_dict(&flags)?;
+                        let options = DescriptorWriteRequest::from_dict(&flags)?;
                         match &reg.d.write {
                             Some(write) => {
                                 (write.fun)(value, options).await?;
                                 Ok(())
                             }
-                            None => Err(Reject::NotSupported.into()),
+                            None => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
@@ -1184,7 +1216,7 @@ impl RegisteredDescriptor {
 
 pub(crate) const GATT_APP_PREFIX: &str = publish_path!("gatt/app/");
 
-/// Local GATT application to publish over Bluetooth.
+/// Definition of local GATT application to publish over Bluetooth.
 #[derive(Debug)]
 pub struct Application {
     /// Services to publish.
@@ -1269,7 +1301,7 @@ impl Application {
     }
 }
 
-/// Local GATT application published over Bluetooth.
+/// Handle to local GATT application published over Bluetooth.
 ///
 /// Drop this handle to unpublish.
 pub struct ApplicationHandle {
@@ -1295,7 +1327,7 @@ impl fmt::Debug for ApplicationHandle {
 
 pub(crate) const GATT_PROFILE_PREFIX: &str = publish_path!("gatt/profile/");
 
-/// Local profile (GATT client) instance.
+/// Definition of local profile (GATT client) instance.
 ///
 /// By registering this type of object
 /// an application effectively indicates support for a specific GATT profile
@@ -1321,7 +1353,7 @@ impl Profile {
     ) -> crate::Result<ProfileHandle> {
         let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().to_simple());
         let profile_path = dbus::Path::new(profile_path).unwrap();
-        log::debug!("Publishing profile at {}", &profile_path);
+        log::trace!("Publishing profile at {}", &profile_path);
 
         {
             let mut cr = inner.crossroads.lock().await;
@@ -1329,7 +1361,7 @@ impl Profile {
             cr.insert(profile_path.clone(), &[inner.gatt_profile_token, om], self);
         }
 
-        log::debug!("Registering profile at {}", &profile_path);
+        log::trace!("Registering profile at {}", &profile_path);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy
@@ -1341,12 +1373,12 @@ impl Profile {
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
-            log::debug!("Unregistering profile at {}", &profile_path_unreg);
+            log::trace!("Unregistering profile at {}", &profile_path_unreg);
             let _: std::result::Result<(), dbus::Error> = proxy
                 .method_call(MANAGER_INTERFACE, "UnregisterApplication", (profile_path_unreg.clone(),))
                 .await;
 
-            log::debug!("Unpublishing profile at {}", &profile_path_unreg);
+            log::trace!("Unpublishing profile at {}", &profile_path_unreg);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&profile_path_unreg);
         });
@@ -1355,7 +1387,7 @@ impl Profile {
     }
 }
 
-/// Published local profile (GATT client) instance.
+/// Handle to published local profile (GATT client) instance.
 ///
 /// Drop this handle to unpublish.
 pub struct ProfileHandle {

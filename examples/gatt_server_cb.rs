@@ -1,11 +1,11 @@
 //! Serves a Bluetooth GATT application using the callback programming model.
 
 use blez::{
+    adv::Advertisement,
     gatt::local::{
         Application, Characteristic, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead,
         CharacteristicWrite, CharacteristicWriteMethod, Service,
     },
-    Advertisement,
 };
 use futures::FutureExt;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};

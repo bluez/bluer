@@ -16,10 +16,12 @@ use strum::{Display, EnumString};
 use uuid::Uuid;
 
 use crate::{
-    advertising, all_dbus_objects, device, device::Device, gatt, Address, AddressType, Advertisement,
-    AdvertisementFeature, AdvertisementHandle, AdvertisementSecondaryChannel, AdvertisingCapabilities,
-    AdvertisingFeature, Error, ErrorKind, Event, Modalias, Result, SessionInner, SingleSessionToken,
-    SERVICE_NAME, TIMEOUT,
+    adv,
+    adv::{Advertisement, AdvertisementHandle, Capabilities, Feature, PlatformFeature, SecondaryChannel},
+    all_dbus_objects, device,
+    device::Device,
+    gatt, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
+    SingleSessionToken, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -155,6 +157,8 @@ impl Adapter {
     dbus_default_interface!(INTERFACE);
 
     /// Streams adapter property and device changes.
+    ///
+    /// The stream ends when the adapter is removed.
     pub async fn events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let name = self.name.clone();
         let events = self.inner.events(self.dbus_path.clone()).await?;
@@ -282,7 +286,9 @@ impl Adapter {
 }
 
 define_properties!(
-    Adapter, pub AdapterProperty => {
+    Adapter,
+    /// Bluetooth adapter property.
+    pub AdapterProperty => {
 
         // ===========================================================================================
         // Adapter properties
@@ -457,7 +463,7 @@ define_properties!(
                 .into_iter()
                 .map(|uuid| {
                     uuid.parse()
-                        .map_err(|_| Error::new(ErrorKind::InvalidUuid(uuid.to_string())))
+                        .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(uuid.to_string()))))
                 })
                 .collect::<Result<HashSet<Uuid>>>()?
             }),
@@ -478,21 +484,21 @@ define_properties!(
         ///	Number of active advertising instances.
         property(
             ActiveAdvertisingInstances, u8,
-            dbus: (advertising::MANAGER_INTERFACE, "ActiveInstances", u8, MANDATORY),
+            dbus: (adv::MANAGER_INTERFACE, "ActiveInstances", u8, MANDATORY),
             get: (active_advertising_instances, v => {v.to_owned()}),
         );
 
         ///	Number of available advertising instances.
         property(
             SupportedAdvertisingInstances, u8,
-            dbus: (advertising::MANAGER_INTERFACE, "SupportedInstances", u8, MANDATORY),
+            dbus: (adv::MANAGER_INTERFACE, "SupportedInstances", u8, MANDATORY),
             get: (supported_advertising_instances, v => {v.to_owned()}),
         );
 
         /// List of supported system includes.
         property(
-            SupportedAdvertisingSystemIncludes, BTreeSet<AdvertisementFeature>,
-            dbus: (advertising::MANAGER_INTERFACE, "SupportedIncludes", Vec<String>, MANDATORY),
+            SupportedAdvertisingSystemIncludes, BTreeSet<Feature>,
+            dbus: (adv::MANAGER_INTERFACE, "SupportedIncludes", Vec<String>, MANDATORY),
             get: (supported_advertising_system_includes, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
             }),
@@ -504,8 +510,8 @@ define_properties!(
         /// channels can be used to advertise with the
         /// corresponding PHY.
         property(
-            SupportedAdvertisingSecondaryChannels, BTreeSet<AdvertisementSecondaryChannel>,
-            dbus: (advertising::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, MANDATORY),
+            SupportedAdvertisingSecondaryChannels, BTreeSet<SecondaryChannel>,
+            dbus: (adv::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, MANDATORY),
             get: (supported_advertising_secondary_channels, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
             }),
@@ -514,10 +520,10 @@ define_properties!(
         /// Enumerates Advertising-related controller capabilities
         /// useful to the client.
         property(
-            SupportedAdvertisingCapabilities, AdvertisingCapabilities,
-            dbus: (advertising::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            SupportedAdvertisingCapabilities, Capabilities,
+            dbus: (adv::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (supported_advertising_capabilities, v => {
-                AdvertisingCapabilities::from_dict(v)?
+                Capabilities::from_dict(v)?
             }),
         );
 
@@ -527,8 +533,8 @@ define_properties!(
         /// are available on the platform, the SupportedFeatures
         /// array will be empty.
         property(
-            SupportedAdvertisingFeatures, BTreeSet<AdvertisingFeature>,
-            dbus: (advertising::MANAGER_INTERFACE, "SupportedFeatures", Vec<String>, OPTIONAL),
+            SupportedAdvertisingFeatures, BTreeSet<PlatformFeature>,
+            dbus: (adv::MANAGER_INTERFACE, "SupportedFeatures", Vec<String>, OPTIONAL),
             get: (supported_advertising_features, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
             }),
@@ -536,7 +542,7 @@ define_properties!(
     }
 );
 
-/// Bluetooth device event.
+/// Bluetooth adapter event.
 #[derive(Clone, Debug)]
 pub enum AdapterEvent {
     /// Bluetooth device with specified address was added.

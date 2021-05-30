@@ -26,7 +26,9 @@ use std::{
 };
 use tokio::{select, task::spawn_blocking};
 
-use crate::{adapter, all_dbus_objects, gatt, Adapter, Advertisement, Error, ErrorKind, Result, SERVICE_NAME};
+use crate::{
+    adapter, adv::Advertisement, all_dbus_objects, gatt, Adapter, Error, ErrorKind, Result, SERVICE_NAME,
+};
 
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
@@ -91,6 +93,8 @@ impl Drop for SingleSessionToken {
 }
 
 /// Bluetooth session.
+///
+/// Encapsulates a connection to the system Bluetooth daemon.
 pub struct Session {
     inner: Arc<SessionInner>,
 }
@@ -101,7 +105,7 @@ impl Debug for Session {
     }
 }
 
-/// Bluetooth adapter event.
+/// Bluetooth session event.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionEvent {
     /// Adapter added.
@@ -113,7 +117,7 @@ pub enum SessionEvent {
 impl Session {
     /// Create a new Bluetooth session.
     ///
-    /// This establishes a connection to BlueZ.
+    /// This establishes a connection to the system Bluetooth daemon over D-Bus.
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
         tokio::spawn(resource);

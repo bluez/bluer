@@ -80,7 +80,7 @@ define_flags!(DescriptorFlags, "Bluetooth GATT characteristic descriptor flags."
 
 /// Write operation type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]
-pub enum WriteValueType {
+pub enum WriteOp {
     /// Write without response.
     #[strum(serialize = "command")]
     Command,
@@ -92,7 +92,7 @@ pub enum WriteValueType {
     Reliable,
 }
 
-impl Default for WriteValueType {
+impl Default for WriteOp {
     fn default() -> Self {
         Self::Command
     }
@@ -164,7 +164,7 @@ impl CharacteristicWriter {
         &mut self.stream
     }
 
-    /// Transforms the reader into the underlying UNIX socket.
+    /// Transforms the writer into the underlying UNIX socket.
     pub fn into_inner(self) -> UnixStream {
         self.stream
     }

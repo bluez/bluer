@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::{
     all_dbus_objects,
     gatt::{self, remote::Service, SERVICE_INTERFACE},
-    Adapter, Address, AddressType, Error, ErrorKind, Event, Modalias, Result, SessionInner, SERVICE_NAME,
-    TIMEOUT,
+    Adapter, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -87,6 +87,8 @@ impl Device {
     }
 
     /// Streams device property changes.
+    ///
+    /// The stream ends when the device is removed.
     pub async fn events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let events = self.inner.events(self.dbus_path.clone()).await?;
         let stream = events.flat_map(move |event| match event {
@@ -260,7 +262,9 @@ impl Device {
 }
 
 define_properties!(
-    Device, pub DeviceProperty => {
+    Device,
+    /// Bluetooth device property.
+    pub DeviceProperty => {
         /// The Bluetooth remote name.
         ///
         /// This value can not be
@@ -324,7 +328,7 @@ define_properties!(
                 .into_iter()
                 .map(|uuid| {
                     uuid.parse()
-                        .map_err(|_| Error::new(ErrorKind::InvalidUuid(uuid.to_string())))
+                        .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(uuid.to_string()))))
                 })
                 .collect::<Result<HashSet<Uuid>>>()?
             }),

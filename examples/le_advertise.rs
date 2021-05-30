@@ -1,6 +1,6 @@
 //! Perform a Bluetooth LE advertisement.
 
-use blez::Advertisement;
+use blez::adv::Advertisement;
 use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -17,7 +17,7 @@ async fn main() -> blez::Result<()> {
 
     println!("Advertising on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
     let le_advertisement = Advertisement {
-        advertisement_type: blez::AdvertisementType::Peripheral,
+        advertisement_type: blez::adv::Type::Peripheral,
         service_uuids: vec!["123e4567-e89b-12d3-a456-426614174000".parse().unwrap()].into_iter().collect(),
         discoverable: Some(true),
         local_name: Some("le_advertise".to_string()),
