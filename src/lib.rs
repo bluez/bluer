@@ -367,9 +367,9 @@ pub use uuid::Uuid;
 /// Bluetooth error.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Error {
-    /// Error kind
+    /// Error kind.
     pub kind: ErrorKind,
-    /// Message
+    /// Detailed error message provided by BlueZ.
     pub message: String,
 }
 
@@ -377,64 +377,64 @@ pub struct Error {
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
 #[non_exhaustive]
 pub enum ErrorKind {
-    /// Bluetooth device already connected.
+    /// Bluetooth device already connected
     AlreadyConnected,
-    /// Bluetooth device already exists.
+    /// Bluetooth device already exists
     AlreadyExists,
-    /// Bluetooth authentication canceled.
+    /// Bluetooth authentication canceled
     AuthenticationCanceled,
-    /// Bluetooth authentication failed.
+    /// Bluetooth authentication failed
     AuthenticationFailed,
-    /// Bluetooth authentication rejected.
+    /// Bluetooth authentication rejected
     AuthenticationRejected,
-    /// Bluetooth authentication timeout.
+    /// Bluetooth authentication timeout
     AuthenticationTimeout,
-    /// Bluetooth connection attempt failed.
+    /// Bluetooth connection attempt failed
     ConnectionAttemptFailed,
-    /// Bluetooth device does not exist.
+    /// Bluetooth device does not exist
     DoesNotExist,
-    /// Bluetooth operation failed.
+    /// Bluetooth operation failed
     Failed,
-    /// Bluetooth operation in progress.
+    /// Bluetooth operation in progress
     InProgress,
-    /// Invalid arguments for Bluetooth operation.
+    /// Invalid arguments for Bluetooth operation
     InvalidArguments,
-    /// The data provided is of invalid length.
+    /// the data provided is of invalid length
     InvalidLength,
-    /// Bluetooth operation not available.
+    /// Bluetooth operation not available
     NotAvailable,
-    /// Bluetooth operation not authorized.
+    /// Bluetooth operation not authorized
     NotAuthorized,
-    /// Bluetooth device not ready.
+    /// Bluetooth device not ready
     NotReady,
-    /// Bluetooth operation not supported.
+    /// Bluetooth operation not supported
     NotSupported,
-    /// Bluetooth operation not permitted.
+    /// Bluetooth operation not permitted
     NotPermitted,
-    /// Invalid offset for Bluetooth GATT property.
+    /// invalid offset for Bluetooth GATT property
     InvalidOffset,
-    /// Invalid Bluetooth address: {0}.
+    /// invalid Bluetooth address: {0}
     #[strum(disabled)]
     InvalidAddress(String),
-    /// Invalid Bluetooth adapter name: {0}.
+    /// invalid Bluetooth adapter name: {0}
     #[strum(disabled)]
     InvalidName(String),
-    /// GATT services have not been resolved for that Bluetooth device.
+    /// GATT services have not been resolved for that Bluetooth device
     #[strum(disabled)]
     ServicesUnresolved,
-    /// Bluetooth application is not registered.
+    /// Bluetooth application is not registered
     #[strum(disabled)]
     NotRegistered,
-    /// The receiving Bluetooth device has stopped the notification session.
+    /// the receiving Bluetooth device has stopped the notification session
     #[strum(disabled)]
     NotificationSessionStopped,
-    /// The indication was not confirmed by the receiving device.
+    /// the indication was not confirmed by the receiving device
     #[strum(disabled)]
     IndicationUnconfirmed,
-    /// The target object was either not present or removed.
+    /// the target object was either not present or removed
     #[strum(disabled)]
     NotFound,
-    /// Internal error: {0}
+    /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
 }
@@ -446,21 +446,21 @@ pub enum ErrorKind {
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[non_exhaustive]
 pub enum InternalErrorKind {
-    /// Invalid UUID: {0}.
+    /// invalid UUID: {0}
     InvalidUuid(String),
-    /// Invalid value.
+    /// invalid value
     InvalidValue,
-    /// Invalid modalias: {0}.
+    /// invalid modalias: {0}
     InvalidModalias(String),
-    /// Key {0} is missing.
+    /// key {0} is missing
     MissingKey(String),
-    /// Join error.
+    /// join error
     JoinError,
-    /// IO error {0:?}.
+    /// IO error {0:?}
     Io(std::io::ErrorKind),
-    /// D-Bus error {0}.
+    /// D-Bus error {0}
     DBus(String),
-    /// Lost connection to D-Bus.
+    /// lost connection to D-Bus
     DBusConnectionLost,
 }
 
