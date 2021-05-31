@@ -8,7 +8,8 @@ use dbus::{
     MethodErr, Path,
 };
 use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
-use futures::{channel::oneshot, lock::Mutex, Future, FutureExt};
+use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
+use pin_project::pin_project;
 use std::{
     collections::HashSet,
     fmt,
@@ -17,9 +18,11 @@ use std::{
     num::NonZeroU16,
     pin::Pin,
     sync::{Arc, Weak},
+    task::Poll,
 };
 use strum::{Display, EnumString, IntoStaticStr};
 use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use super::{
@@ -528,7 +531,7 @@ impl CharacteristicNotifier {
         self.stop_notify_tx.is_closed()
     }
 
-    /// Resolves once the notification sesstion has been stopped by the receiving device.
+    /// Resolves once the notification session has been stopped by the receiving device.
     pub fn stopped(&self) -> impl Future<Output = ()> {
         let stop_notify_tx = self.stop_notify_tx.clone();
         async move { stop_notify_tx.closed().await }
@@ -591,8 +594,8 @@ pub struct CharacteristicWriteIoRequest {
 
 impl CharacteristicWriteIoRequest {
     /// Maximum transmission unit.
-    pub fn mtu(&self) -> u16 {
-        self.mtu
+    pub fn mtu(&self) -> usize {
+        self.mtu.into()
     }
 
     /// Link type.
@@ -618,13 +621,38 @@ impl CharacteristicWriteIoRequest {
 // Controller
 // ----------
 
-/// An object to control a characteristic once it has been registered.
+/// An event on a published characteristic.
+pub enum CharacteristicControlEvent {
+    /// A remote request to start writing via IO.
+    ///
+    /// This event occurs only when using [CharacteristicWriteMethod::Io].
+    Write(CharacteristicWriteIoRequest),
+    /// A remote request to start notifying via IO.
+    ///
+    /// Note that BlueZ acknowledges the client's request before notifying us
+    /// of the start of the notification session.
+    ///
+    /// This event occurs only when using [CharacteristicNotifyMethod::Io].
+    Notify(CharacteristicWriter),
+}
+
+impl fmt::Debug for CharacteristicControlEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Write(_) => write!(f, "Write"),
+            Self::Notify(_) => write!(f, "Notify"),
+        }
+    }
+}
+
+/// An object to control a characteristic and receive events once it has been registered.
 ///
 /// Use [characteristic_control] to obtain controller and associated handle.
+#[pin_project]
 pub struct CharacteristicControl {
     handle_rx: watch::Receiver<Option<NonZeroU16>>,
-    write_request_rx: mpsc::Receiver<CharacteristicWriteIoRequest>,
-    notify_writer_rx: mpsc::Receiver<CharacteristicWriter>,
+    #[pin]
+    events_rx: ReceiverStream<CharacteristicControlEvent>,
 }
 
 impl fmt::Debug for CharacteristicControl {
@@ -641,24 +669,13 @@ impl CharacteristicControl {
             None => Err(Error::new(ErrorKind::NotRegistered)),
         }
     }
+}
 
-    /// When using the write IO method, gets the next request to start writing to the characteristic.
-    pub async fn write_request(&mut self) -> Result<CharacteristicWriteIoRequest> {
-        match self.write_request_rx.recv().await {
-            Some(req) => Ok(req),
-            None => Err(Error::new(ErrorKind::NotRegistered)),
-        }
-    }
+impl Stream for CharacteristicControl {
+    type Item = CharacteristicControlEvent;
 
-    /// When using the notify IO method, gets the next notification session.
-    ///
-    /// Note that bluez acknowledges the client's request before notifying us
-    /// of the start of the notification session.
-    pub async fn notifier(&mut self) -> Result<CharacteristicWriter> {
-        match self.notify_writer_rx.recv().await {
-            Some(writer) => Ok(writer),
-            None => Err(Error::new(ErrorKind::NotRegistered)),
-        }
+    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<Option<Self::Item>> {
+        self.project().events_rx.poll_next(cx)
     }
 }
 
@@ -668,13 +685,12 @@ impl CharacteristicControl {
 /// Use [characteristic_control] to obtain controller and associated handle.
 pub struct CharacteristicControlHandle {
     handle_tx: watch::Sender<Option<NonZeroU16>>,
-    write_request_tx: Option<mpsc::Sender<CharacteristicWriteIoRequest>>,
-    notify_writer_tx: Option<mpsc::Sender<CharacteristicWriter>>,
+    events_tx: mpsc::Sender<CharacteristicControlEvent>,
 }
 
 impl Default for CharacteristicControlHandle {
     fn default() -> Self {
-        Self { handle_tx: watch::channel(None).0, write_request_tx: None, notify_writer_tx: None }
+        Self { handle_tx: watch::channel(None).0, events_tx: mpsc::channel(0).0 }
     }
 }
 
@@ -689,15 +705,10 @@ impl fmt::Debug for CharacteristicControlHandle {
 /// Keep the [CharacteristicControl] and store the [CharacteristicControlHandle] in [Characteristic::control_handle].
 pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControlHandle) {
     let (handle_tx, handle_rx) = watch::channel(None);
-    let (write_request_tx, write_request_rx) = mpsc::channel(1);
-    let (notify_writer_tx, notify_writer_rx) = mpsc::channel(1);
+    let (events_tx, events_rx) = mpsc::channel(1);
     (
-        CharacteristicControl { handle_rx, write_request_rx, notify_writer_rx },
-        CharacteristicControlHandle {
-            handle_tx,
-            write_request_tx: Some(write_request_tx),
-            notify_writer_tx: Some(notify_writer_tx),
-        },
+        CharacteristicControl { handle_rx, events_rx: ReceiverStream::new(events_rx) },
+        CharacteristicControlHandle { handle_tx, events_tx },
     )
 }
 
@@ -737,17 +748,9 @@ pub(crate) struct RegisteredCharacteristic {
 }
 
 impl RegisteredCharacteristic {
-    fn new(mut c: Characteristic, connection: &Arc<SyncConnection>) -> Self {
+    fn new(c: Characteristic, connection: &Arc<SyncConnection>) -> Self {
         if let Some(handle) = c.handle {
             let _ = c.control_handle.handle_tx.send(Some(handle));
-        }
-        match &c.notify {
-            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => (),
-            _ => c.control_handle.notify_writer_tx = None,
-        }
-        match &c.write {
-            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => (),
-            _ => c.control_handle.write_request_tx = None,
         }
         Self { c, notify: Mutex::new(None), connection: Arc::downgrade(&connection) }
     }
@@ -781,17 +784,17 @@ impl RegisteredCharacteristic {
                 },
             );
             cr_property!(ib, "WriteAcquired", reg => {
-                if reg.c.control_handle.write_request_tx.is_some() {
-                    Some(false)
-                } else {
-                    None
+                match &reg.c.write {
+                    Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) =>
+                        Some(false),
+                    _ => None,
                 }
             });
             cr_property!(ib, "NotifyAcquired", reg => {
-                if reg.c.control_handle.notify_writer_tx.is_some() {
-                    Some(false)
-                } else {
-                    None
+                match &reg.c.notify {
+                    Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) =>
+                        Some(false),
+                    _ => None,
                 }
             });
             ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
@@ -882,16 +885,21 @@ impl RegisteredCharacteristic {
                 |ctx, cr, (options,): (PropMap,)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let options = CharacteristicAcquireRequest::from_dict(&options)?;
-                        match &reg.c.control_handle.write_request_tx {
-                            Some(write_request_tx) => {
+                        match &reg.c.write {
+                            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
                                 let (tx, rx) = oneshot::channel();
                                 let req =
                                     CharacteristicWriteIoRequest { mtu: options.mtu, link: options.link, tx };
-                                write_request_tx.send(req).await.map_err(|_| ReqError::Failed)?;
+                                reg.c
+                                    .control_handle
+                                    .events_tx
+                                    .send(CharacteristicControlEvent::Write(req))
+                                    .await
+                                    .map_err(|_| ReqError::Failed)?;
                                 let fd = rx.await.map_err(|_| ReqError::Failed)??;
                                 Ok((fd, options.mtu))
                             }
-                            None => Err(ReqError::NotSupported.into()),
+                            _ => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
@@ -903,16 +911,21 @@ impl RegisteredCharacteristic {
                 |ctx, cr, (options,): (PropMap,)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let options = CharacteristicAcquireRequest::from_dict(&options)?;
-                        match &reg.c.control_handle.notify_writer_tx {
-                            Some(notify_writer_tx) => {
-                                // bluez has already confirmed the start of the notification session.
-                                // So there is no point in making this failable by our users.
+                        match &reg.c.notify {
+                            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
+                                // BlueZ has already confirmed the start of the notification session.
+                                // So there is no point in making this fail-able by our users.
                                 let (fd, stream) = make_socket_pair().map_err(|_| ReqError::Failed)?;
                                 let writer = CharacteristicWriter { mtu: options.mtu.into(), stream };
-                                let _ = notify_writer_tx.send(writer).await;
+                                let _ = reg
+                                    .c
+                                    .control_handle
+                                    .events_tx
+                                    .send(CharacteristicControlEvent::Notify(writer))
+                                    .await;
                                 Ok((fd, options.mtu))
                             }
-                            None => Err(ReqError::NotSupported.into()),
+                            _ => Err(ReqError::NotSupported.into()),
                         }
                     })
                 },
