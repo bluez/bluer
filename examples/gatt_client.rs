@@ -121,7 +121,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
                 break;
             }
             Ok(read) => {
-                println!("    Notified with {} bytes: {:x?}", read, &buf[..]);
+                println!("    Notified with {} bytes: {:x?}", read, &buf[0..read]);
             }
             Err(err) => {
                 println!("    Notification IO failed: {}", &err);
