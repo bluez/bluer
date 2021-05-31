@@ -125,7 +125,7 @@ pub struct Advertisement {
     /// List of UUIDs to include in the "Service UUID" field of
     /// the Advertising Data.
     pub service_uuids: BTreeSet<Uuid>,
-    /// Manufactuer Data fields to include in
+    /// Manufacturer Data fields to include in
     ///	the Advertising Data.
     ///
     /// Keys are the Manufacturer ID

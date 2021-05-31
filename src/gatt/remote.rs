@@ -411,7 +411,7 @@ impl Characteristic {
     /// Value property is not affected during the time where
     ///	notify has been acquired.
     ///
-    /// Usage of [noify](Self::notify) will be
+    /// Usage of [notify](Self::notify) will be
     /// locked causing it to return NotPermitted error.
     /// To release the lock the client shall drop the writer.
     ///

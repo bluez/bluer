@@ -580,10 +580,10 @@ pub(crate) struct DiscoveryFilter {
     ///
     ///  When a remote device is found that advertises
     ///  any UUID from UUIDs, it will be reported if:
-    ///  - Pathloss and RSSI are both empty.
-    ///  - only Pathloss param is set, device advertise
-    ///    TX pwer, and computed pathloss is less than
-    ///    Pathloss param.
+    ///  - pathloss and RSSI are both empty.
+    ///  - only pathloss param is set, device advertise
+    ///    TX power, and computed pathloss is less than
+    ///    pathloss param.
     ///  - only RSSI param is set, and received RSSI is
     ///    higher than RSSI param.    
     pub uuids: HashSet<Uuid>,
@@ -622,7 +622,7 @@ pub(crate) struct DiscoveryFilter {
     ///
     /// When enabled PropertiesChanged signals will be
     /// generated for either ManufacturerData and
-    /// ServiceData everytime they are discovered.
+    /// ServiceData every time they are discovered.
     pub duplicate_data: bool,
     /// Make adapter discoverable while discovering.
     ///

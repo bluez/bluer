@@ -39,7 +39,7 @@ impl fmt::Debug for Device {
 }
 
 impl Device {
-    /// Create Bluetooth device interface for device of specified address connected to specified adapater.
+    /// Create Bluetooth device interface for device of specified address connected to specified adapter.
     pub(crate) fn new(inner: Arc<SessionInner>, adapter_name: Arc<String>, address: Address) -> Result<Self> {
         Ok(Self { inner, dbus_path: Self::dbus_path(&*adapter_name, address)?, adapter_name, address })
     }
