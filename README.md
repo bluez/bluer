@@ -3,20 +3,21 @@ BLEZ - Asynchronous Bluetooth Low Energy on Linux for Rust
 
 This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/) for [Rust](https://www.rust-lang.org/).
-Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiotmatic* Rust code is supported.
-Asynchronous support is depended by [Tokio](https://tokio.rs/).
+Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
+Asynchronous support is dependent by [Tokio](https://tokio.rs/).
 
 This project started as a fork of [blurz](https://github.com/szeged/blurz) but has
-since then become a full rewrite. Documentation has been mostly copied from the
+since then become a full rewrite.
+Documentation has been mostly copied from the
 [BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
-also extended.
+also adapted where it makes sense.
 
 The following features are provided:
 
 * Bluetooth adapters
     * enumeration
     * configuration of power, discoverability, name, etc.
-    * hotplug support through change events stream
+    * hot-plug support through change events stream
 * Bluetooth devices
     * discovery
     * querying of address, name, class, signal strength (RSSI), etc.
@@ -41,7 +42,7 @@ Classic Bluetooth is unsupported except for device discovery.
 Requirements
 ------------
 
-This libray has been tested with BlueZ version 5.56.
+This library has been tested with BlueZ version 5.56.
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
 
@@ -67,7 +68,7 @@ Examples
 Refer to the [API documentation](https://docs.rs/blez) and
 [examples folder](https://github.com/surban/blez/tree/master/examples) for examples.
 
-The follwing example applications are provided.
+The following example applications are provided.
 
   - **device_monitor**: Scans for and monitors Bluetooth devices similar to `top`.
 
@@ -76,6 +77,8 @@ The follwing example applications are provided.
   - **gatt_client**: Simple GATT client that calls read, write and notify on a characteristic.
 
   - **gatt_server_cb**: Corresponding GATT server implemented using callback programming model.
+
+  - **gatt_server_io**: Corresponding GATT server implemented using IO programming model.
 
   - **le_advertise**: Register Bluetooth LE advertisement.
 
