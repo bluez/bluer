@@ -11,7 +11,7 @@ use blez::{
         CharacteristicReader, CharacteristicWriter,
     },
 };
-use futures::{pin_mut, StreamExt};
+use futures::{future, pin_mut, StreamExt};
 use std::{collections::BTreeMap, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -113,7 +113,12 @@ async fn main() -> blez::Result<()> {
                     }
                 }
             }
-            read_res = reader_opt.as_mut().unwrap().read(&mut read_buf), if reader_opt.is_some() => {
+            read_res = async {
+                match &mut reader_opt {
+                    Some(reader) => reader.read(&mut read_buf).await,
+                    None => future::pending().await,
+                }
+            } => {
                 match read_res {
                     Ok(0) => {
                         println!("Write stream ended");
