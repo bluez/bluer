@@ -1,0 +1,30 @@
+{
+    "cSpell.languageSettings": [
+        {
+            "languageId": "rust",
+            "includeRegExpList": [
+                "CStyleComment"
+            ],
+        }
+    ],
+    "cSpell.words": [
+        "ACPI",
+        "BLEZ",
+        "BREDR",
+        "RSSI",
+        "bluetoothd",
+        "bluez",
+        "blurz",
+        "discoverability",
+        "freedesktop",
+        "journalctl",
+        "libdbus",
+        "modalias",
+        "pairable",
+        "pathloss",
+        "reconnections",
+        "udev",
+        "unpublish",
+        "unregister"
+    ]
+}
