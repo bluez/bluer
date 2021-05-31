@@ -690,7 +690,7 @@ pub struct CharacteristicControlHandle {
 
 impl Default for CharacteristicControlHandle {
     fn default() -> Self {
-        Self { handle_tx: watch::channel(None).0, events_tx: mpsc::channel(0).0 }
+        Self { handle_tx: watch::channel(None).0, events_tx: mpsc::channel(1).0 }
     }
 }
 
