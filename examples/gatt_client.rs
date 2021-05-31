@@ -1,7 +1,6 @@
 //! Connects to our Bluetooth GATT service and exercises the characteristic.
 
 use blez::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
-use bytes::BytesMut;
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
 use tokio::{
@@ -67,10 +66,12 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Characteristic flags: {:?}", char.flags().await?);
     sleep(Duration::from_secs(1)).await;
 
-    println!("    Reading characteristic value");
-    let value = char.read().await?;
-    println!("    Read value: {:x?}", &value);
-    sleep(Duration::from_secs(1)).await;
+    if char.flags().await?.read {
+        println!("    Reading characteristic value");
+        let value = char.read().await?;
+        println!("    Read value: {:x?}", &value);
+        sleep(Duration::from_secs(1)).await;
+    }
 
     let data = vec![0xee, 0x11, 0x11, 0x0];
     println!("    Writing characteristic value {:x?} using function call", &data);
@@ -113,8 +114,8 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     let mut notify_io = char.notify_io().await?;
     println!("    Obtained notification IO with MTU={}", notify_io.mtu());
     for _ in 0..5u8 {
-        let mut buf = BytesMut::with_capacity(notify_io.mtu());
-        match notify_io.read_buf(&mut buf).await {
+        let mut buf = vec![0; notify_io.mtu()];
+        match notify_io.read(&mut buf).await {
             Ok(0) => {
                 println!("    Notification IO end of stream");
                 break;
