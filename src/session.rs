@@ -27,7 +27,8 @@ use std::{
 use tokio::{select, task::spawn_blocking};
 
 use crate::{
-    adapter, adv::Advertisement, all_dbus_objects, gatt, Adapter, Error, ErrorKind, Result, SERVICE_NAME,
+    adapter, adv::Advertisement, all_dbus_objects, gatt, Adapter, Error, ErrorKind, InternalErrorKind, Result,
+    SERVICE_NAME,
 };
 
 /// Shared state of all objects in a Bluetooth session.
@@ -350,8 +351,8 @@ impl Event {
         sub_tx
             .send(Subscription { path, tx, ready_tx: Some(ready_tx) })
             .await
-            .map_err(|_| Error::new(ErrorKind::DBusConnectionLost))?;
-        ready_rx.await.map_err(|_| Error::new(ErrorKind::DBusConnectionLost))?;
+            .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
+        ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
         Ok(rx)
     }
 }

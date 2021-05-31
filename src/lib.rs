@@ -2,7 +2,7 @@
 //!
 //! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 //! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
-//! Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiotmatic* Rust code is supported.
+//! Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
 //!
 //! This library depends on the [tokio] asynchronous runtime.
 //!
@@ -11,7 +11,7 @@
 //! * Bluetooth adapters
 //!     * enumeration
 //!     * configuration of power, discoverability, name, etc.
-//!     * hotplug support through change events stream
+//!     * hot-plug support through change events stream
 //! * Bluetooth devices
 //!     * discovery
 //!     * querying of address, name, class, signal strength (RSSI), etc.
@@ -413,12 +413,6 @@ pub enum ErrorKind {
     NotPermitted,
     /// Invalid offset for Bluetooth GATT property.
     InvalidOffset,
-    /// D-Bus error {0}.
-    #[strum(disabled)]
-    DBus(String),
-    /// Lost connection to D-Bus.
-    #[strum(disabled)]
-    DBusConnectionLost,
     /// Invalid Bluetooth address: {0}.
     #[strum(disabled)]
     InvalidAddress(String),
@@ -447,7 +441,7 @@ pub enum ErrorKind {
 
 /// Internal Bluetooth error kind.
 ///
-/// This is most likely caused by incompatibilies between this library
+/// This is most likely caused by incompatibilities between this library
 /// and the version of the Bluetooth daemon.
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[non_exhaustive]
@@ -464,6 +458,10 @@ pub enum InternalErrorKind {
     JoinError,
     /// IO error {0:?}.
     Io(std::io::ErrorKind),
+    /// D-Bus error {0}.
+    DBus(String),
+    /// Lost connection to D-Bus.
+    DBusConnectionLost,
 }
 
 impl Error {
@@ -496,7 +494,7 @@ impl From<dbus::Error> for Error {
             .and_then(|s| ErrorKind::from_str(s).ok())
         {
             Some(kind) => kind,
-            _ => ErrorKind::DBus(err.name().unwrap_or_default().to_string()),
+            _ => ErrorKind::Internal(InternalErrorKind::DBus(err.name().unwrap_or_default().to_string())),
         };
         Self { kind, message: err.message().unwrap_or_default().to_string() }
     }
@@ -615,7 +613,7 @@ impl FromStr for Modalias {
     }
 }
 
-/// Gets all D-Bus objects from the bluez service.
+/// Gets all D-Bus objects from the BlueZ service.
 async fn all_dbus_objects(
     connection: &SyncConnection,
 ) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
