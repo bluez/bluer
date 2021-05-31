@@ -105,6 +105,7 @@ async fn main() -> blez::Result<()> {
                 for v in &mut *value {
                     *v = v.saturating_sub(1);
                 }
+                println!("Value is {:x?}", &value);
                 if let Some(writer) = writer_opt.as_mut() {
                     println!("Notifying with value {:x?}", &value);
                     if let Err(err) = writer.write(&value).await {

@@ -76,9 +76,13 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     let data = vec![0xee, 0x11, 0x11, 0x0];
     println!("    Writing characteristic value {:x?} using function call", &data);
     char.write(&data).await?;
-    let value = char.read().await?;
-    println!("    Read value back: {:x?}", &value);
     sleep(Duration::from_secs(1)).await;
+
+    if char.flags().await?.read {
+        let value = char.read().await?;
+        println!("    Read value back: {:x?}", &value);
+        sleep(Duration::from_secs(1)).await;
+    }
 
     println!("    Obtaining write IO");
     let mut write_io = char.write_io().await?;
