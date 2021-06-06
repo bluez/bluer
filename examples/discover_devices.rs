@@ -2,6 +2,7 @@
 
 use blez::{Adapter, AdapterEvent, Address, DeviceEvent};
 use futures::{pin_mut, stream::SelectAll, StreamExt};
+use std::env;
 
 async fn query_device(adapter: &Adapter, addr: Address) -> blez::Result<()> {
     let device = adapter.device(addr)?;
@@ -23,6 +24,8 @@ async fn query_device(adapter: &Adapter, addr: Address) -> blez::Result<()> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blez::Result<()> {
+    let with_changes = env::args().any(|arg| arg == "--changes");
+
     env_logger::init();
     let session = blez::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
@@ -45,9 +48,11 @@ async fn main() -> blez::Result<()> {
                             println!("    Error: {}", &err);
                         }
 
-                        let device = adapter.device(addr)?;
-                        let change_events = device.events().await?.map(move |evt| (addr, evt));
-                        all_change_events.push(change_events);
+                        if with_changes {
+                            let device = adapter.device(addr)?;
+                            let change_events = device.events().await?.map(move |evt| (addr, evt));
+                            all_change_events.push(change_events);
+                        }
                     }
                     AdapterEvent::DeviceRemoved(addr) => {
                         println!("Device removed: {}", addr);
