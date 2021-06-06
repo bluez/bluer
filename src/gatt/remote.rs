@@ -306,14 +306,14 @@ impl Characteristic {
 
     /// Issues a request to read the value of the
     /// characteristic and returns the value if the
-    /// operation was successful.    
+    /// operation was successful.
     pub async fn read(&self) -> Result<Vec<u8>> {
         self.read_ext(&CharacteristicReadRequest::default()).await
     }
 
     /// Issues a request to read the value of the
     /// characteristic and returns the value if the
-    /// operation was successful.    
+    /// operation was successful.
     ///
     /// Takes extended options for the read operation.
     pub async fn read_ext(&self, req: &CharacteristicReadRequest) -> Result<Vec<u8>> {
@@ -356,12 +356,12 @@ impl Characteristic {
     }
 
     /// Starts a notification or indication session from this characteristic
-    /// if it supports value notifications or indications.    
+    /// if it supports value notifications or indications.
     ///
     /// This will also notify after a read operation.
     pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>>> {
         let token = self.notify_session().await?;
-        let events = self.inner.events(self.dbus_path.clone()).await?;
+        let events = self.inner.events(self.dbus_path.clone(), false).await?;
         let values = events.filter_map(move |evt| {
             let _token = &token;
             async move {
@@ -527,7 +527,7 @@ pub struct Descriptor {
 
 impl fmt::Debug for Descriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Descriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}", 
+        write!(f, "Descriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}",
             self.adapter_name(), self.device_address(), self.service_id(), self.characteristic_id(), self.id())
     }
 }
@@ -616,14 +616,14 @@ impl Descriptor {
 
     /// Issues a request to read the value of the
     /// descriptor and returns the value if the
-    /// operation was successful.    
+    /// operation was successful.
     pub async fn read(&self) -> Result<Vec<u8>> {
         self.read_ext(&DescriptorReadRequest::default()).await
     }
 
     /// Issues a request to read the value of the
     /// descriptor and returns the value if the
-    /// operation was successful.    
+    /// operation was successful.
     ///
     /// Takes extended options for the read operation.
     pub async fn read_ext(&self, req: &DescriptorReadRequest) -> Result<Vec<u8>> {

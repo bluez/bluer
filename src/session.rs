@@ -1,6 +1,7 @@
 //! Bluetooth session.
 
 use dbus::{
+    arg::Variant,
     message::MatchRule,
     nonblock::{
         stdintf::org_freedesktop_dbus::{
@@ -27,8 +28,8 @@ use std::{
 use tokio::{select, task::spawn_blocking};
 
 use crate::{
-    adapter, adv::Advertisement, all_dbus_objects, gatt, Adapter, Error, ErrorKind, InternalErrorKind, Result,
-    SERVICE_NAME,
+    adapter, adv::Advertisement, all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind,
+    InternalErrorKind, Result, SERVICE_NAME,
 };
 
 /// Shared state of all objects in a Bluetooth session.
@@ -41,7 +42,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
-    pub event_sub_tx: mpsc::Sender<Subscription>,
+    pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
 }
 
 impl SessionInner {
@@ -79,8 +80,10 @@ impl SessionInner {
         Ok(SingleSessionToken(term_tx))
     }
 
-    pub async fn events(&self, path: dbus::Path<'static>) -> Result<mpsc::UnboundedReceiver<Event>> {
-        Event::subscribe(&mut self.event_sub_tx.clone(), path).await
+    pub async fn events(
+        &self, path: dbus::Path<'static>, child_objects: bool,
+    ) -> Result<mpsc::UnboundedReceiver<Event>> {
+        Event::subscribe(&mut self.event_sub_tx.clone(), path, child_objects).await
     }
 }
 
@@ -189,7 +192,7 @@ impl Session {
 
     /// Stream adapter added and removed events.
     pub async fn events(&self) -> Result<impl Stream<Item = SessionEvent>> {
-        let obj_events = self.inner.events("/".into()).await?;
+        let obj_events = self.inner.events(adapter::PREFIX.into(), true).await?;
         let events = obj_events.filter_map(|evt| async move {
             match evt {
                 Event::ObjectAdded { object, interfaces }
@@ -226,17 +229,36 @@ pub(crate) enum Event {
     PropertiesChanged { object: dbus::Path<'static>, interface: String, changed: dbus::arg::PropMap },
 }
 
-/// D-Bus events subscription.
-pub(crate) struct Subscription {
+impl Clone for Event {
+    fn clone(&self) -> Self {
+        match self {
+            Self::ObjectAdded { object, interfaces } => {
+                Self::ObjectAdded { object: object.clone(), interfaces: interfaces.clone() }
+            }
+            Self::ObjectRemoved { object, interfaces } => {
+                Self::ObjectRemoved { object: object.clone(), interfaces: interfaces.clone() }
+            }
+            Self::PropertiesChanged { object, interface, changed } => Self::PropertiesChanged {
+                object: object.clone(),
+                interface: interface.clone(),
+                changed: changed.iter().map(|(k, v)| (k.clone(), Variant(v.0.box_clone()))).collect(),
+            },
+        }
+    }
+}
+
+/// D-Bus events subscription request.
+pub(crate) struct SubscriptionReq {
     path: dbus::Path<'static>,
+    child_objects: bool,
     tx: mpsc::UnboundedSender<Event>,
-    ready_tx: Option<oneshot::Sender<()>>,
+    ready_tx: oneshot::Sender<()>,
 }
 
 impl Event {
     /// Spawns a task that handles events for the specified connection.
     pub(crate) async fn handle_connection(
-        connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<Subscription>,
+        connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
     ) -> Result<()> {
         use dbus::message::SignalArgs;
         lazy_static! {
@@ -261,71 +283,102 @@ impl Event {
 
         tokio::spawn(async move {
             log::trace!("Starting event loop for {}", &connection.unique_name());
-            let mut subs: Vec<Subscription> = Vec::new();
+
+            struct Subscription {
+                child_objects: bool,
+                tx: mpsc::UnboundedSender<Event>,
+            }
+            let mut subs: HashMap<String, Vec<Subscription>> = HashMap::new();
 
             loop {
                 select! {
                     msg_opt = msg_rx.next() => {
                         match msg_opt {
                             Some(msg) => {
-                                let mut keep = Vec::new();
-                                for sub in subs {
-                                    let mut force_remove = false;
-                                    let evt = {
-                                        if let Some(ObjectManagerInterfacesAdded { object, interfaces }) = ObjectManagerInterfacesAdded::from_message(&msg) {
-                                            if object.starts_with(&sub.path.to_string()) {
-                                                Some(Self::ObjectAdded {
-                                                    object,
-                                                    interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
-                                                })
-                                            } else {
-                                                None
-                                            }
-                                        } else if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) = ObjectManagerInterfacesRemoved::from_message(&msg) {
-                                            if object.starts_with(&sub.path.to_string()) {
-                                                force_remove = object == sub.path;
-                                                Some(Self::ObjectRemoved { object, interfaces: interfaces.into_iter().collect() })
-                                            } else {
-                                                None
-                                            }
-                                        } else if let Some(PropertiesPropertiesChanged { interface_name, changed_properties, .. }) = PropertiesPropertiesChanged::from_message(&msg) {
-                                            match msg.path() {
-                                                Some(object) if object == sub.path =>
-                                                    Some(Self::PropertiesChanged { object: sub.path.clone(), interface: interface_name, changed: changed_properties }),
-                                                _ => None,
-                                            }
-                                        } else {
-                                            None
+                                // Properties changed.
+                                if let (Some(object), Some(PropertiesPropertiesChanged { interface_name, changed_properties, .. })) =
+                                    (msg.path(), PropertiesPropertiesChanged::from_message(&msg))
+                                {
+                                    // Check for direct path match for PropertiesChanged event.
+                                    if let Some(path_subs) = subs.get_mut(&*object) {
+                                        let evt = Self::PropertiesChanged {
+                                            object: object.clone().into_static(),
+                                            interface: interface_name,
+                                            changed: changed_properties,
+                                        };
+                                        log::trace!("Event: {:?}", &evt);
+                                        path_subs.retain(|sub| sub.tx.unbounded_send(evt.clone()).is_ok());
+                                        if path_subs.is_empty() {
+                                            subs.remove(&*object);
                                         }
-                                    };
-
-                                    let sent_ok = match evt {
-                                        Some(evt) => {
-                                            log::trace!("Event: {:?}", &evt);
-                                            sub.tx.unbounded_send(evt).is_ok()
-                                        }
-                                        None => true,
-                                    };
-
-                                    if sent_ok && !force_remove {
-                                        keep.push(sub);
-                                    } else {
-                                        log::trace!("Removing event subscription for {}", &sub.path);
                                     }
                                 }
-                                subs = keep;
+
+                                // Objects added.
+                                if let Some(ObjectManagerInterfacesAdded { object, interfaces }) =
+                                    ObjectManagerInterfacesAdded::from_message(&msg)
+                                {
+                                    // Check for parent path match for ObjectAdded event.
+                                    let parent = parent_path(&object);
+                                    if let Some(parent_subs) = subs.get_mut(&*parent) {
+                                        let evt = Self::ObjectAdded {
+                                            object,
+                                            interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                                        };
+                                        log::trace!("Event: {:?}", &evt);
+                                        parent_subs.retain(|sub| {
+                                            if sub.child_objects {
+                                                sub.tx.unbounded_send(evt.clone()).is_ok()
+                                            } else {
+                                                true
+                                            }
+                                        });
+                                        if parent_subs.is_empty() {
+                                            subs.remove(&*parent);
+                                        }
+                                    }
+                                }
+
+                                // Object removed.
+                                if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) =
+                                    ObjectManagerInterfacesRemoved::from_message(&msg)
+                                {
+                                    // Remove subscriptions for removed object.
+                                    // This ends the event streams of the subscriptions.
+                                    if subs.remove(&*object).is_some() {
+                                        log::trace!("Event subscription for {} ended because object was removed", &object);
+                                    }
+
+                                    // Check for parent path match for ObjectRemoved event.
+                                    let parent = parent_path(&object);
+                                    if let Some(parent_subs) = subs.get_mut(&*parent) {
+                                        let evt = Self::ObjectRemoved { object, interfaces: interfaces.into_iter().collect() };
+                                        log::trace!("Event: {:?}", &evt);
+                                        parent_subs.retain(|sub| {
+                                            if sub.child_objects {
+                                                sub.tx.unbounded_send(evt.clone()).is_ok()
+                                            } else {
+                                                true
+                                            }
+                                        });
+                                        if parent_subs.is_empty() {
+                                            subs.remove(&*parent);
+                                        }
+                                    }
+                                }
                             },
                             None => break,
                         }
                     },
                     sub_opt = sub_rx.next() => {
                         match sub_opt {
-                            Some(mut sub) => {
-                                log::trace!("Adding event subscription for {}", &sub.path);
-                                if let Some(ready_tx) = sub.ready_tx.take() {
-                                    let _ = ready_tx.send(());
-                                }
-                                subs.push(sub);
+                            Some(SubscriptionReq { path, child_objects, tx, ready_tx }) => {
+                                log::trace!("Adding event subscription for {} with child_objects={:?}", &path, &child_objects);
+                                let _ = ready_tx.send(());
+                                let path_subs = subs.entry(path.to_string()).or_default();
+                                path_subs.push(Subscription {
+                                    child_objects, tx
+                                });
                             }
                             None => break,
                         }
@@ -343,13 +396,16 @@ impl Event {
     }
 
     /// Subscribe to D-Bus events for specified path.
+    ///
+    /// If `child_objects` is [true] events about *direct* child objects being added and removed
+    /// will also be delivered.
     pub(crate) async fn subscribe(
-        sub_tx: &mut mpsc::Sender<Subscription>, path: dbus::Path<'static>,
+        sub_tx: &mut mpsc::Sender<SubscriptionReq>, path: dbus::Path<'static>, child_objects: bool,
     ) -> Result<mpsc::UnboundedReceiver<Event>> {
         let (tx, rx) = mpsc::unbounded();
         let (ready_tx, ready_rx) = oneshot::channel();
         sub_tx
-            .send(Subscription { path, tx, ready_tx: Some(ready_tx) })
+            .send(SubscriptionReq { path, tx, ready_tx, child_objects })
             .await
             .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
         ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;

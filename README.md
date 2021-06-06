@@ -36,6 +36,9 @@ The following features are provided:
         * callback-based interface
         * low-overhead `AsyncRead` and `AsyncWrite` streams
 * sending Bluetooth Low Energy advertisements
+* efficient event dispatching
+    * not affected by D-Bus match rule count
+    * O(1) in number of subscriptions
 
 Classic Bluetooth is unsupported except for device discovery.
 

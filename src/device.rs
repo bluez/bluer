@@ -90,7 +90,7 @@ impl Device {
     ///
     /// The stream ends when the device is removed.
     pub async fn events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
-        let events = self.inner.events(self.dbus_path.clone()).await?;
+        let events = self.inner.events(self.dbus_path.clone(), false).await?;
         let stream = events.flat_map(move |event| match event {
             Event::PropertiesChanged { changed, .. } => {
                 stream::iter(DeviceProperty::from_prop_map(changed).into_iter().map(DeviceEvent::PropertyChanged))

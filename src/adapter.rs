@@ -161,7 +161,7 @@ impl Adapter {
     /// The stream ends when the adapter is removed.
     pub async fn events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let name = self.name.clone();
-        let events = self.inner.events(self.dbus_path.clone()).await?;
+        let events = self.inner.events(self.dbus_path.clone(), true).await?;
         let stream = events.flat_map(move |event| match event {
             Event::ObjectAdded { object, .. } => match Device::parse_dbus_path(&object) {
                 Some((adapter, address)) if adapter == *name => {
