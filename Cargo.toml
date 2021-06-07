@@ -1,6 +1,6 @@
 [package]
 name = "blez"
-version = "0.8.1"
+version = "0.8.2-pre1"
 description = "Asynchronous interface to official Bluetooth Low Energy APIs on Linux (BlueZ)"
 readme = "README.md"
 authors = [
@@ -15,6 +15,7 @@ license = "BSD-2-Clause"
 edition = "2018"
 
 [dependencies]
+libbluetooth = "0.1"
 dbus = { version = "0.9", features = ["futures"] }
 dbus-tokio = "0.7"
 dbus-crossroads = "0.3"
@@ -25,7 +26,7 @@ tokio-stream = "0.1"
 hex = "0.4"
 lazy_static = "1"
 uuid = { version = "0.8", features = ["v4"] }
-strum = { version = "0.20", features = ["derive"] }
+strum = { version = "0.21", features = ["derive"] }
 libc = "0.2"
 custom_debug = "0.5"
 displaydoc = "0.2"

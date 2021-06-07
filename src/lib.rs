@@ -52,15 +52,9 @@ use dbus::{
     Path,
 };
 use hex::FromHex;
+use libbluetooth::bluetooth::{BDADDR_LE_PUBLIC, BDADDR_LE_RANDOM, bdaddr_t};
 use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    fmt::{self, Debug, Display, Formatter},
-    os::unix::prelude::{FromRawFd, RawFd},
-    str::FromStr,
-    time::Duration,
-};
+use std::{collections::HashMap, convert::{TryFrom, TryInto}, fmt::{self, Debug, Display, Formatter}, ops::{Deref, DerefMut}, os::unix::prelude::{FromRawFd, RawFd}, str::FromStr, time::Duration};
 use strum::{Display, EnumString};
 use tokio::{net::UnixStream, task::JoinError};
 
@@ -362,6 +356,7 @@ mod adapter;
 pub mod adv;
 mod device;
 pub mod gatt;
+pub mod l2cap;
 mod session;
 
 pub use crate::{adapter::*, device::*, session::*};
@@ -525,8 +520,48 @@ impl From<std::io::Error> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Bluetooth address.
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Address(pub [u8; 6]);
+
+impl Address {
+    /// Creates a new Bluetooth address with the specified value.
+    pub const fn new(addr: [u8; 6]) -> Self {
+        Self(addr)
+    }
+
+    /// Any Bluetooth address.
+    ///
+    /// Corresponds to `00:00:00:00:00:00`.
+    pub const fn any() -> Self {
+        Self ([0; 6])
+    }
+
+    /// Address as socket address type [bdaddr_t].
+    pub fn to_bdaddr(mut self) -> bdaddr_t {
+        self.0.reverse();
+        bdaddr_t { b: self.0 }
+    }
+
+    /// Address from socket address type [bdaddr_t].
+    pub fn from_bdaddr(mut addr: bdaddr_t) -> Self {
+        addr.b.reverse();
+        Self (addr.b)
+    }
+}
+
+impl Deref for Address {
+    type Target = [u8; 6];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Address {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -577,6 +612,27 @@ pub enum AddressType {
     /// Random address
     #[strum(serialize = "random")]
     Random,
+}
+
+impl From<AddressType> for u8 {
+    fn from(addr_type: AddressType) -> Self {
+        match addr_type {
+            AddressType::Public => BDADDR_LE_PUBLIC.try_into().unwrap(),
+            AddressType::Random => BDADDR_LE_RANDOM.try_into().unwrap(),
+        }
+    }
+}
+
+impl TryFrom<u8> for AddressType {
+    type Error = u8;
+
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value.into() {
+            BDADDR_LE_PUBLIC => Ok(Self::Public),
+            BDADDR_LE_RANDOM => Ok(Self::Random),
+            _ => Err(value),
+        }
+    }
 }
 
 /// Linux kernel modalias information.
