@@ -52,9 +52,17 @@ use dbus::{
     Path,
 };
 use hex::FromHex;
-use libbluetooth::bluetooth::{BDADDR_LE_PUBLIC, BDADDR_LE_RANDOM, bdaddr_t};
+use libbluetooth::bluetooth::{bdaddr_t, BDADDR_LE_PUBLIC, BDADDR_LE_RANDOM};
 use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
-use std::{collections::HashMap, convert::{TryFrom, TryInto}, fmt::{self, Debug, Display, Formatter}, ops::{Deref, DerefMut}, os::unix::prelude::{FromRawFd, RawFd}, str::FromStr, time::Duration};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fmt::{self, Debug, Display, Formatter},
+    ops::{Deref, DerefMut},
+    os::unix::prelude::{FromRawFd, RawFd},
+    str::FromStr,
+    time::Duration,
+};
 use strum::{Display, EnumString};
 use tokio::{net::UnixStream, task::JoinError};
 
@@ -533,7 +541,7 @@ impl Address {
     ///
     /// Corresponds to `00:00:00:00:00:00`.
     pub const fn any() -> Self {
-        Self ([0; 6])
+        Self([0; 6])
     }
 
     /// Address as socket address type [bdaddr_t].
@@ -545,7 +553,7 @@ impl Address {
     /// Address from socket address type [bdaddr_t].
     pub fn from_bdaddr(mut addr: bdaddr_t) -> Self {
         addr.b.reverse();
-        Self (addr.b)
+        Self(addr.b)
     }
 }
 
