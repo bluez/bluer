@@ -1,6 +1,6 @@
 [package]
 name = "blez"
-version = "0.8.2-pre2"
+version = "0.8.2-pre3"
 description = "Asynchronous interface to official Bluetooth Low Energy APIs on Linux (BlueZ). Supports device discovery, events, local and remote GATT services, advertisements and L2CAP sockets."
 readme = "README.md"
 authors = [
@@ -45,3 +45,7 @@ log = "0.4"
 crossterm = "0.19"
 tokio = { version = "1", features = ["io-std", "io-util"] }
 env_logger = "0.8"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
