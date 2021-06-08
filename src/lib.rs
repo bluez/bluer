@@ -47,17 +47,17 @@
 //! ## Crate features
 //! All crate features are enabled by default.
 //!
-//! * `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
+//! * `bluetoothd`: Enables all functions requiring a running `bluetoothd` daemon.
 //! * `l2cap`: Enables L2CAP sockets.
 //!
 //! ## Basic usage
-//! Create a [Session] using [Session::new]; this establishes a connection to `bluetoothd`.
+//! Create a [Session] using [Session::new]; this establishes a connection to the Bluetooth daemon.
 //! Then obtain a Bluetooth adapter using [Session::adapter].
 //! From there on you can access most of the functionality using the methods provided by [Adapter].
 //!
 //! ## L2CAP sockets
 //! Refer to the [l2cap] module.
-//! No [Session] and therefore no running `bluetoothd` is required.
+//! No [Session] and therefore no running Bluetooth daemon is required.
 //!
 //! [AsyncRead]: tokio::io::AsyncRead
 //! [AsyncWrite]: tokio::io::AsyncWrite

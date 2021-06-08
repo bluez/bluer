@@ -1046,21 +1046,21 @@ impl SeqPacket {
 
     /// Sends a packet.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub async fn send(&self, buf: &[u8]) -> Result<usize> {
         self.socket.send_priv(buf).await
     }
 
     /// Attempts to send a packet.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.socket.poll_send_priv(cx, buf)
     }
 
     /// Receives a packet.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
         self.socket.recv_priv(buf).await
@@ -1068,7 +1068,7 @@ impl SeqPacket {
 
     /// Attempts to receive a packet.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         self.socket.poll_recv_priv(cx, buf)
@@ -1131,35 +1131,35 @@ impl Datagram {
 
     /// Sends a packet to the connected peer.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub async fn send(&self, buf: &[u8]) -> Result<usize> {
         self.socket.send_priv(buf).await
     }
 
     /// Attempts to send a packet to the connected peer.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.socket.poll_send_priv(cx, buf)
     }
 
     /// Sends a packet to the specified target address.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
         self.socket.send_to_priv(buf, target).await
     }
 
     /// Attempts to send a packet to the specified target address.
     ///
-    /// The packet length must not exceed the [send_mtu].
+    /// The packet length must not exceed the [Self::send_mtu].
     pub fn poll_send_to(&self, cx: &mut Context, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>> {
         self.socket.poll_send_to_priv(cx, buf, target)
     }
 
     /// Receives a packet from the connected peer.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
         self.socket.recv_priv(buf).await
@@ -1167,7 +1167,7 @@ impl Datagram {
 
     /// Attempts to receive a packet from the connected peer.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         self.socket.poll_recv_priv(cx, buf)
@@ -1175,7 +1175,7 @@ impl Datagram {
 
     /// Receives a packet from anywhere.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
         self.socket.recv_from_priv(buf).await
@@ -1183,7 +1183,7 @@ impl Datagram {
 
     /// Attempts to receive a packet from anywhere.
     ///
-    /// The provided buffer must be of length [recv_mtu], otherwise
+    /// The provided buffer must be of length [Self::recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv_from(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<SocketAddr>> {
         self.socket.poll_recv_from_priv(cx, buf)

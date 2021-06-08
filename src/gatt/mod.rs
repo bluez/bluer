@@ -101,10 +101,10 @@ impl Default for WriteOp {
 
 /// Streams data from a characteristic with low overhead.
 ///
-/// When using the [AsyncRead] trait and a buffer of size less than [mtu] bytes
+/// When using the [AsyncRead] trait and a buffer of size less than [CharacteristicReader::mtu] bytes
 /// is provided, the received characteristic value will be split over multiple
 /// read operations.
-/// For best efficiency provide a buffer of at least [mtu] bytes.
+/// For best efficiency provide a buffer of at least [CharacteristicReader::mtu] bytes.
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicReader {
@@ -191,7 +191,7 @@ impl AsyncRead for CharacteristicReader {
 /// Streams data to a characteristic with low overhead.
 ///
 /// When using the [AsyncWrite] trait, a single write operation will send no more than
-/// [mtu] bytes.
+/// [CharacteristicWriter::mtu] bytes.
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicWriter {
@@ -223,7 +223,7 @@ impl CharacteristicWriter {
 
     /// Send the characteristic value using a single write or notify operation.
     ///
-    /// The length of `buf` must not exceed [mtu].
+    /// The length of `buf` must not exceed [CharacteristicWriter::mtu].
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<()> {
         if buf.len() > self.mtu {
             return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "data length exceeds MTU"));
