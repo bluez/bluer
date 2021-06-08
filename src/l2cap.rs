@@ -5,32 +5,39 @@ use dbus::arg::OwnedFd;
 use futures::ready;
 use libbluetooth::{
     bluetooth::{
-        bt_security, BTPROTO_L2CAP, BT_DEFER_SETUP, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF,
-        BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU, BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW,
-        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU,
+        bt_security, BTPROTO_L2CAP, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF, BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU,
+        BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW, BT_SECURITY_MEDIUM, BT_SECURITY_SDP,
+        BT_SNDMTU,
     },
     l2cap::sockaddr_l2,
 };
-use libc::{sockaddr, socklen_t, AF_BLUETOOTH, SOCK_STREAM, SOL_BLUETOOTH};
+use libc::{
+    sockaddr, socklen_t, AF_BLUETOOTH, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_WR, SOCK_STREAM, SOL_BLUETOOTH,
+    SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
+};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use std::{
     convert::{TryFrom, TryInto},
+    fmt,
     io::{Error, ErrorKind, Result},
-    mem::{size_of, MaybeUninit},
+    marker::PhantomData,
+    mem::{self, size_of, take, ManuallyDrop, MaybeUninit},
     os::{
-        raw::c_int,
-        unix::prelude::{AsRawFd, IntoRawFd, RawFd},
+        raw::{c_int, c_ulong},
+        unix::prelude::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     },
+    pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::unix::AsyncFd;
+use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 /// First unprivileged protocol service multiplexor (PSM).
 pub const PSM_DYN_START: u8 = 0x80;
 
 /// An L2CAP socket address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SocketAddr {
     /// Device address.
     ///
@@ -47,8 +54,13 @@ pub struct SocketAddr {
 
 impl SocketAddr {
     /// Creates a new L2CAP socket address.
-    pub fn new(addr: Address, addr_type: AddressType, psm: u8) -> Self {
+    pub const fn new(addr: Address, addr_type: AddressType, psm: u8) -> Self {
         Self { addr, addr_type, psm }
+    }
+
+    /// When specified to [Socket::bind] binds to any local adapter address.
+    pub const fn any() -> Self {
+        Self { addr: Address::any(), addr_type: AddressType::Public, psm: 0 }
     }
 }
 
@@ -105,7 +117,7 @@ fn bind(socket: &OwnedFd, sa: SocketAddr) -> Result<()> {
         libc::bind(
             socket.as_raw_fd(),
             &addr as *const sockaddr_l2 as *const sockaddr,
-            size_of::<sockaddr_l2>() as u32,
+            size_of::<sockaddr_l2>() as socklen_t,
         )
     } == 0
     {
@@ -149,13 +161,62 @@ fn accept(socket: &OwnedFd) -> Result<(OwnedFd, SocketAddr)> {
     Ok((fd, sa))
 }
 
+/// Initiate a connection on a socket to the specified address.
+fn connect(socket: &OwnedFd, sa: SocketAddr) -> Result<()> {
+    let addr: sockaddr_l2 = sa.into();
+    if unsafe {
+        libc::connect(
+            socket.as_raw_fd(),
+            &addr as *const sockaddr_l2 as *const sockaddr,
+            size_of::<sockaddr_l2>() as socklen_t,
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// Receive from socket into buffer.
+fn recv(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<usize> {
+    let unfilled = unsafe { buf.unfilled_mut() };
+    match unsafe { libc::recv(socket.as_raw_fd(), unfilled.as_mut_ptr() as *mut _, unfilled.len(), flags) } {
+        -1 => Err(Error::last_os_error()),
+        n => {
+            let n = n as usize;
+            unsafe {
+                buf.assume_init(n);
+            }
+            buf.advance(n);
+            Ok(n)
+        }
+    }
+}
+
+/// Write from buffer into socket.
+fn write(socket: &OwnedFd, buf: &[u8]) -> Result<usize> {
+    match unsafe { libc::write(socket.as_raw_fd(), buf.as_ptr() as *const _, buf.len()) } {
+        -1 => Err(Error::last_os_error()),
+        n => Ok(n as _),
+    }
+}
+
+/// Shut down part of a socket.
+fn shutdown(socket: &OwnedFd, how: c_int) -> Result<()> {
+    if unsafe { libc::shutdown(socket.as_raw_fd(), how) } == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
 /// Get socket option.
-fn getsockopt<T>(socket: &OwnedFd, optname: i32) -> Result<T> {
+fn getsockopt_level<T>(socket: &OwnedFd, level: c_int, optname: c_int) -> Result<T> {
     let mut optval: MaybeUninit<T> = MaybeUninit::uninit();
     let mut optlen: socklen_t = size_of::<T>() as _;
-    if unsafe {
-        libc::getsockopt(socket.as_raw_fd(), SOL_BLUETOOTH, optname, optval.as_mut_ptr() as *mut _, &mut optlen)
-    } == -1
+    if unsafe { libc::getsockopt(socket.as_raw_fd(), level, optname, optval.as_mut_ptr() as *mut _, &mut optlen) }
+        == -1
     {
         return Err(Error::last_os_error());
     }
@@ -166,7 +227,12 @@ fn getsockopt<T>(socket: &OwnedFd, optname: i32) -> Result<T> {
     Ok(optval)
 }
 
-/// Set socket option.
+/// Get Bluetooth level socket option.
+fn getsockopt<T>(socket: &OwnedFd, optname: c_int) -> Result<T> {
+    getsockopt_level(socket, SOL_BLUETOOTH, optname)
+}
+
+/// Set Bluetooth level socket option.
 fn setsockopt<T>(socket: &OwnedFd, optname: i32, optval: &T) -> Result<()> {
     let optlen: socklen_t = size_of::<T>() as _;
     if unsafe {
@@ -176,6 +242,16 @@ fn setsockopt<T>(socket: &OwnedFd, optname: i32, optval: &T) -> Result<()> {
         return Err(Error::last_os_error());
     }
     Ok(())
+}
+
+/// Perform an IOCTL that reads a single value.
+fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
+    let mut value: MaybeUninit<T> = MaybeUninit::uninit();
+    if unsafe { libc::ioctl(socket.as_raw_fd(), request, value.as_mut_ptr()) } == -1 {
+        return Err(Error::last_os_error());
+    }
+    let value = unsafe { value.assume_init() };
+    Ok(value)
 }
 
 /// L2CAP socket security level.
@@ -237,81 +313,251 @@ const BT_MODE: i32 = 15;
 
 /// An L2CAP socket that has not yet been converted to a [StreamListener], [Stream], [SeqPacketListener],
 /// [SeqPacket] or [Datagram].
-pub struct Socket {
-    inner: AsyncFd<OwnedFd>,
+pub struct Socket<Type> {
+    fd: AsyncFd<OwnedFd>,
+    _type: PhantomData<Type>,
 }
 
-impl Socket {
+impl<Type> fmt::Debug for Socket<Type> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Socket").field("fd", &self.fd.as_raw_fd()).finish()
+    }
+}
+
+impl<Type> Socket<Type> {
+    /// Bind the socket to the given address.
+    pub fn bind(&self, sa: SocketAddr) -> Result<()> {
+        bind(self.fd.get_ref(), sa)
+    }
+
     /// Get socket security.
+    ///
+    /// This corresponds to the `BT_SECURITY` socket option.
     pub fn security(&self) -> Result<Security> {
-        let bts: bt_security = getsockopt(self.inner.get_ref(), BT_SECURITY)?;
+        let bts: bt_security = getsockopt(self.fd.get_ref(), BT_SECURITY)?;
         Security::try_from(bts)
     }
 
     /// Set socket security.
+    ///
+    /// This corresponds to the `BT_SECURITY` socket option.
     pub fn set_security(&self, security: Security) -> Result<()> {
         let bts: bt_security = security.into();
-        setsockopt(self.inner.get_ref(), BT_SECURITY, &bts)
-    }
-
-    /// Get defer setup state.
-    pub fn is_defer_setup(&self) -> Result<bool> {
-        let value: u32 = getsockopt(self.inner.get_ref(), BT_DEFER_SETUP)?;
-        Ok(value != 0)
-    }
-
-    /// Set defer setup state.
-    pub fn set_defer_setup(&self, defer_setup: bool) -> Result<()> {
-        let value: u32 = defer_setup.into();
-        setsockopt(self.inner.get_ref(), BT_DEFER_SETUP, &value)
+        setsockopt(self.fd.get_ref(), BT_SECURITY, &bts)
     }
 
     /// Get forced power state.
+    ///
+    /// This corresponds to the `BT_POWER` socket option.
     pub fn is_power_forced_active(&self) -> Result<bool> {
-        let value: bt_power = getsockopt(self.inner.get_ref(), BT_POWER)?;
+        let value: bt_power = getsockopt(self.fd.get_ref(), BT_POWER)?;
         Ok(value.force_active == BT_POWER_FORCE_ACTIVE_ON as _)
     }
 
     /// Set forced power state.
+    ///
+    /// This corresponds to the `BT_POWER` socket option.
     pub fn set_power_forced_active(&self, power_forced_active: bool) -> Result<()> {
         let value = bt_power {
             force_active: if power_forced_active { BT_POWER_FORCE_ACTIVE_ON } else { BT_POWER_FORCE_ACTIVE_OFF }
                 as _,
         };
-        setsockopt(self.inner.get_ref(), BT_POWER, &value)
+        setsockopt(self.fd.get_ref(), BT_POWER, &value)
     }
 
     /// Send MTU.
+    ///
+    /// This corresponds to the `BT_SNDMTU` socket option.
     pub fn send_mtu(&self) -> Result<u16> {
-        getsockopt(self.inner.get_ref(), BT_SNDMTU)
+        getsockopt(self.fd.get_ref(), BT_SNDMTU)
     }
 
     /// Receive MTU.
+    ///
+    /// This corresponds to the `BT_RCVMTU` socket option.
     pub fn recv_mtu(&self) -> Result<u16> {
-        getsockopt(self.inner.get_ref(), BT_RCVMTU)
+        getsockopt(self.fd.get_ref(), BT_RCVMTU)
     }
 
     /// Set receive MTU.
+    ///
+    /// This corresponds to the `BT_RCVMTU` socket option.
     pub fn set_recv_mtu(&self, recv_mtu: u16) -> Result<()> {
-        setsockopt(self.inner.get_ref(), BT_RCVMTU, &recv_mtu)
+        setsockopt(self.fd.get_ref(), BT_RCVMTU, &recv_mtu)
     }
 
     /// Get flow control mode.
+    ///
+    /// This corresponds to the `BT_MODE` socket option.
     pub fn flow_control(&self) -> Result<FlowControl> {
-        let value: u8 = getsockopt(self.inner.get_ref(), BT_MODE)?;
+        let value: u8 = getsockopt(self.fd.get_ref(), BT_MODE)?;
         FlowControl::from_u8(value).ok_or(Error::new(ErrorKind::InvalidInput, "invalid flow control mode"))
     }
 
     /// Set flow control mode.
+    ///
+    /// This corresponds to the `BT_MODE` socket option.
     pub fn set_flow_control(&self, flow_control: FlowControl) -> Result<()> {
         let value = flow_control as u8;
-        setsockopt(self.inner.get_ref(), BT_MODE, &value)
+        setsockopt(self.fd.get_ref(), BT_MODE, &value)
+    }
+
+    /// Get the number of bytes in the input buffer.
+    ///
+    /// This corresponds to the `TIOCINQ` IOCTL.
+    pub fn input_buffer(&self) -> Result<u32> {
+        let value: c_int = ioctl_read(self.fd.get_ref(), TIOCINQ)?;
+        Ok(value as _)
+    }
+
+    /// Get the number of bytes in the output buffer.
+    ///
+    /// This corresponds to the `TIOCOUTQ` IOCTL.
+    pub fn output_buffer(&self) -> Result<u32> {
+        let value: c_int = ioctl_read(self.fd.get_ref(), TIOCOUTQ)?;
+        Ok(value as _)
+    }
+
+    /// Constructs a new [Socket] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self { fd: AsyncFd::new(OwnedFd::new(fd))?, _type: PhantomData })
+    }
+
+    fn from_owned_fd(fd: OwnedFd) -> Result<Self> {
+        Ok(Self { fd: AsyncFd::new(fd)?, _type: PhantomData })
+    }
+
+    fn poll_read_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        loop {
+            let mut guard = ready!(self.fd.poll_read_ready(cx))?;
+            match guard.try_io(|inner| recv(inner.get_ref(), buf, 0)) {
+                Ok(result) => return Poll::Ready(result.map(|_| ())),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_peek_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
+        loop {
+            let mut guard = ready!(self.fd.poll_read_ready(cx))?;
+            match guard.try_io(|inner| recv(inner.get_ref(), buf, MSG_PEEK)) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    async fn peek_priv(&self, buf: &mut [u8]) -> Result<usize> {
+        let mut buf = ReadBuf::new(buf);
+        loop {
+            let mut guard = self.fd.readable().await?;
+            match guard.try_io(|inner| recv(inner.get_ref(), &mut buf, MSG_PEEK)) {
+                Ok(result) => return result,
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_write_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        loop {
+            let mut guard = ready!(self.fd.poll_write_ready(cx))?;
+            match guard.try_io(|inner| write(inner.get_ref(), buf)) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_flush_priv(&self, _cx: &mut Context) -> Poll<Result<()>> {
+        // Flush is a no-op.
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown_priv(&self, _cx: &mut Context) -> Poll<Result<()>> {
+        shutdown(&self.fd.get_ref(), SHUT_WR)?;
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl<Type> AsRawFd for Socket<Type> {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl<Type> IntoRawFd for Socket<Type> {
+    fn into_raw_fd(self) -> RawFd {
+        self.fd.into_inner().into_raw_fd()
+    }
+}
+
+impl<Type> FromRawFd for Socket<Type> {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [Socket::from_raw_fd] for a non-panicing variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
+    }
+}
+
+impl Socket<Stream> {
+    /// Creates a new socket in of stream type.
+    pub fn new_stream() -> Result<Self> {
+        Ok(Self { fd: AsyncFd::new(socket(SOCK_STREAM)?)?, _type: PhantomData })
+    }
+
+    /// Convert the socket into a [StreamListener].
+    ///
+    /// `backlog` defines the maximum number of pending connections are queued by the operating system
+    /// at any given time.
+    pub fn listen(self, backlog: u32) -> Result<StreamListener> {
+        listen(
+            &self.fd.get_ref(),
+            backlog.try_into().map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid backlog"))?,
+        )?;
+        Ok(StreamListener { socket: self })
+    }
+
+    /// Establish a stream connection with a peer at the specified socket address.
+    pub async fn connect(self, sa: SocketAddr) -> Result<Stream> {
+        match connect(&self.fd.get_ref(), sa) {
+            Ok(()) => Stream::from_socket(self),
+            Err(err) if err.raw_os_error() == Some(EINPROGRESS) => {
+                loop {
+                    let mut guard = self.fd.writable().await?;
+                    match guard.try_io(|inner| {
+                        let err: c_int = getsockopt_level(&inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
+                        match err {
+                            0 => Ok(()),
+                            EINPROGRESS => Err(ErrorKind::WouldBlock.into()),
+                            _ => Err(Error::from_raw_os_error(err)),
+                        }
+                    }) {
+                        Ok(result) => break result,
+                        Err(_would_block) => continue,
+                    }
+                }?;
+                Stream::from_socket(self)
+            }
+            Err(err) => Err(err),
+        }
     }
 }
 
 /// An L2CAP socket server, listening for [Stream] connections.
+#[derive(Debug)]
 pub struct StreamListener {
-    inner: AsyncFd<OwnedFd>,
+    socket: Socket<Stream>,
 }
 
 impl StreamListener {
@@ -320,23 +566,22 @@ impl StreamListener {
     /// Specify [Address::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
-        let socket = socket(SOCK_STREAM)?;
-        bind(&socket, sa)?;
-        listen(&socket, 1)?;
-        Ok(Self { inner: AsyncFd::new(socket)? })
+        let socket = Socket::new_stream()?;
+        socket.bind(sa)?;
+        socket.listen(1)
     }
 
     /// Accepts a new incoming connection from this listener.
     pub async fn accept(&self) -> Result<(Stream, SocketAddr)> {
         let (fd, sa) = loop {
-            let mut guard = self.inner.readable().await?;
+            let mut guard = self.socket.fd.readable().await?;
             match guard.try_io(|inner| accept(&inner.get_ref())) {
                 Ok(result) => break result,
                 Err(_would_block) => continue,
             }
         }?;
 
-        let stream = Stream { inner: AsyncFd::new(fd)? };
+        let stream = Stream::from_socket(Socket::from_owned_fd(fd)?)?;
 
         Ok((stream, sa))
     }
@@ -344,48 +589,317 @@ impl StreamListener {
     /// Polls to accept a new incoming connection to this listener.
     pub fn poll_accept(&self, cx: &mut Context) -> Poll<Result<(Stream, SocketAddr)>> {
         let (fd, sa) = loop {
-            let mut guard = ready!(self.inner.poll_read_ready(cx))?;
+            let mut guard = ready!(self.socket.fd.poll_read_ready(cx))?;
             match guard.try_io(|inner| accept(&inner.get_ref())) {
                 Ok(result) => break result,
                 Err(_would_block) => continue,
             }
         }?;
 
-        let stream = Stream { inner: AsyncFd::new(fd)? };
+        let stream = Stream::from_socket(Socket::from_owned_fd(fd)?)?;
 
         Poll::Ready(Ok((stream, sa)))
     }
+}
 
-    /// Constructs a new Listener from the given raw file descriptor.
-    ///
-    /// This function *consumes ownership* of the specified file descriptor.
-    /// The returned object will take responsibility for closing it when the object goes out of scope.
-    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
-        Ok(Self { inner: AsyncFd::new(OwnedFd::new(fd))? })
+impl AsRef<Socket<Stream>> for StreamListener {
+    fn as_ref(&self) -> &Socket<Stream> {
+        &self.socket
     }
 }
 
 impl AsRawFd for StreamListener {
     fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
-    }
-}
-
-impl IntoRawFd for StreamListener {
-    fn into_raw_fd(self) -> RawFd {
-        self.inner.into_inner().into_raw_fd()
+        self.socket.as_raw_fd()
     }
 }
 
 /// An L2CAP stream between a local and remote socket (sequenced, reliable, two-way, connection-based).
+#[derive(Debug)]
 pub struct Stream {
-    inner: AsyncFd<OwnedFd>,
+    socket: Socket<Stream>,
+    send_mtu: usize,
 }
 
 impl Stream {
-    // pub async fn connect(addr: SocketAddr) -> Result<Self> {
-    //
-    // }
+    /// Create Stream from Socket.
+    fn from_socket(socket: Socket<Stream>) -> Result<Self> {
+        let send_mtu = socket.send_mtu()?.into();
+        Ok(Self { socket, send_mtu })
+    }
+
+    /// Establish a stream connection with a peer at the specified socket address.
+    ///
+    /// Uses any local Bluetooth adapter.
+    pub async fn connect(addr: SocketAddr) -> Result<Self> {
+        let socket = Socket::new_stream()?;
+        socket.bind(SocketAddr::any())?;
+        socket.connect(addr).await
+    }
+
+    /// Receives data on the socket from the remote address to which it is connected,
+    /// without removing that data from the queue.
+    /// On success, returns the number of bytes peeked.
+    pub async fn peek(&self, buf: &mut [u8]) -> Result<usize> {
+        self.socket.peek_priv(buf).await
+    }
+
+    /// Attempts to receive data on the socket, without removing that data from
+    /// the queue, registering the current task for wakeup if data is not yet available.
+    pub fn poll_peek(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
+        self.socket.poll_peek_priv(cx, buf)
+    }
+
+    /// Splits the stream into a borrowed read half and a borrowed write half, which can be used
+    /// to read and write the stream concurrently.
+    pub fn split<'a>(&'a mut self) -> (ReadHalf<'a>, WriteHalf<'a>) {
+        (ReadHalf(self), WriteHalf(self))
+    }
+
+    /// Splits the into an owned read half and an owned write half, which can be used to read
+    /// and write the stream concurrently.
+    pub fn into_split(self) -> (OwnedReadHalf, OwnedWriteHalf) {
+        let stream = Arc::new(self);
+        let r = OwnedReadHalf { stream: ManuallyDrop::new(stream.clone()), shutdown_on_drop: true, drop: true };
+        let w = OwnedWriteHalf { stream, shutdown_on_drop: true };
+        (r, w)
+    }
+
+    fn poll_write_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        // Trying to send more than the MTU on an L2CAP socket results in an error,
+        // disregarding stream socket semantics. Thus we truncate the send buffer appropriately.
+        let max_len = buf.len().min(self.send_mtu);
+        let buf = &buf[..max_len];
+
+        self.socket.poll_write_priv(cx, buf)
+    }
+}
+
+impl AsRef<Socket<Stream>> for Stream {
+    fn as_ref(&self) -> &Socket<Stream> {
+        &self.socket
+    }
+}
+
+impl AsRawFd for Stream {
+    fn as_raw_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
+    }
+}
+
+impl AsyncRead for Stream {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        self.socket.poll_read_priv(cx, buf)
+    }
+}
+
+impl AsyncWrite for Stream {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        self.poll_write_priv(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.socket.poll_flush_priv(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.socket.poll_shutdown_priv(cx)
+    }
+}
+
+/// Borrowed read half of [Stream], created by [Stream::split].
+#[derive(Debug)]
+pub struct ReadHalf<'a>(&'a Stream);
+
+impl<'a> ReadHalf<'a> {
+    /// Receives data on the socket from the remote address to which it is connected,
+    /// without removing that data from the queue.
+    /// On success, returns the number of bytes peeked.
+    pub async fn peek(&self, buf: &mut [u8]) -> Result<usize> {
+        self.0.socket.peek_priv(buf).await
+    }
+
+    /// Attempts to receive data on the socket, without removing that data from
+    /// the queue, registering the current task for wakeup if data is not yet available.
+    pub fn poll_peek(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
+        self.0.socket.poll_peek_priv(cx, buf)
+    }
+}
+
+impl<'a> AsRef<Stream> for ReadHalf<'a> {
+    fn as_ref(&self) -> &Stream {
+        self.0
+    }
+}
+
+impl<'a> AsyncRead for ReadHalf<'a> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        self.0.socket.poll_read_priv(cx, buf)
+    }
+}
+
+/// Borrowed write half of [Stream], created by [Stream::split].
+#[derive(Debug)]
+pub struct WriteHalf<'a>(&'a Stream);
+
+impl<'a> AsRef<Stream> for WriteHalf<'a> {
+    fn as_ref(&self) -> &Stream {
+        self.0
+    }
+}
+
+impl<'a> AsyncWrite for WriteHalf<'a> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        self.0.poll_write_priv(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.0.socket.poll_flush_priv(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.0.socket.poll_shutdown_priv(cx)
+    }
+}
+
+/// Error indicating that two halves were not from the same socket,
+/// and thus could not be reunited.
+#[derive(Debug)]
+pub struct ReuniteError(pub OwnedReadHalf, pub OwnedWriteHalf);
+
+impl fmt::Display for ReuniteError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ReuniteError")
+    }
+}
+
+impl std::error::Error for ReuniteError {}
+
+pub(crate) fn reunite(
+    mut read: OwnedReadHalf, write: OwnedWriteHalf,
+) -> std::result::Result<Stream, ReuniteError> {
+    if Arc::ptr_eq(&read.stream, &write.stream) {
+        write.forget();
+
+        read.drop = false;
+        let stream_arc = unsafe { ManuallyDrop::take(&mut read.stream) };
+        Ok(Arc::try_unwrap(stream_arc).expect("Stream: try_unwrap failed"))
+    } else {
+        Err(ReuniteError(read, write))
+    }
+}
+
+/// Owned read half of [Stream], created by [Stream::into_split].
+///
+/// Dropping this causes read shut down.
+#[derive(Debug)]
+pub struct OwnedReadHalf {
+    stream: ManuallyDrop<Arc<Stream>>,
+    shutdown_on_drop: bool,
+    drop: bool,
+}
+
+impl OwnedReadHalf {
+    /// Attempts to put the two halves of a stream back together.     
+    pub fn reunite(self, other: OwnedWriteHalf) -> std::result::Result<Stream, ReuniteError> {
+        reunite(self, other)
+    }
+
+    /// Receives data on the socket from the remote address to which it is connected,
+    /// without removing that data from the queue.
+    /// On success, returns the number of bytes peeked.
+    pub async fn peek(&self, buf: &mut [u8]) -> Result<usize> {
+        self.stream.socket.peek_priv(buf).await
+    }
+
+    /// Attempts to receive data on the socket, without removing that data from
+    /// the queue, registering the current task for wakeup if data is not yet available.
+    pub fn poll_peek(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
+        self.stream.socket.poll_peek_priv(cx, buf)
+    }
+
+    /// Destroy this half, but don't close this half of the stream
+    /// until the other half is dropped.
+    pub fn forget(mut self) {
+        self.shutdown_on_drop = false;
+        drop(self);
+    }
+}
+
+impl AsRef<Stream> for OwnedReadHalf {
+    fn as_ref(&self) -> &Stream {
+        &*self.stream
+    }
+}
+
+impl AsyncRead for OwnedReadHalf {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        self.stream.socket.poll_read_priv(cx, buf)
+    }
+}
+
+impl Drop for OwnedReadHalf {
+    fn drop(&mut self) {
+        if self.drop {
+            if self.shutdown_on_drop {
+                let _ = shutdown(&self.stream.socket.fd.get_ref(), SHUT_RD);
+            }
+            unsafe {
+                ManuallyDrop::drop(&mut self.stream);
+            }
+        }
+    }
+}
+
+/// Owned write half of [Stream], created by [Stream::into_split].
+///
+/// Dropping this causes write shut down.
+#[derive(Debug)]
+pub struct OwnedWriteHalf {
+    stream: Arc<Stream>,
+    shutdown_on_drop: bool,
+}
+
+impl OwnedWriteHalf {
+    /// Attempts to put the two halves of a stream back together.     
+    pub fn reunite(self, other: OwnedReadHalf) -> std::result::Result<Stream, ReuniteError> {
+        reunite(other, self)
+    }
+
+    /// Destroy this half, but don't close this half of the stream
+    /// until the other half is dropped.
+    pub fn forget(mut self) {
+        self.shutdown_on_drop = false;
+        drop(self);
+    }
+}
+
+impl AsRef<Stream> for OwnedWriteHalf {
+    fn as_ref(&self) -> &Stream {
+        &*self.stream
+    }
+}
+
+impl AsyncWrite for OwnedWriteHalf {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        self.stream.poll_write_priv(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.stream.socket.poll_flush_priv(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        self.stream.socket.poll_shutdown_priv(cx)
+    }
+}
+
+impl Drop for OwnedWriteHalf {
+    fn drop(&mut self) {
+        if self.shutdown_on_drop {
+            let _ = shutdown(&self.stream.socket.fd.get_ref(), SHUT_WR);
+        }
+    }
 }
 
 /// An L2CAP socket server, listening for [SeqPacket] connections.

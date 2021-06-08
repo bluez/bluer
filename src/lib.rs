@@ -622,6 +622,12 @@ pub enum AddressType {
     Random,
 }
 
+impl Default for AddressType {
+    fn default() -> Self {
+        Self::Public
+    }
+}
+
 impl From<AddressType> for u8 {
     fn from(addr_type: AddressType) -> Self {
         match addr_type {
