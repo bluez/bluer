@@ -44,7 +44,7 @@ The following functionality is provided:
     * stream oriented
     * sequential packet oriented
     * datagram oriented
-    * async IO interface with [AsyncRead] and [AsyncWrite] support
+    * async IO interface with `AsyncRead` and `AsyncWrite` support
 
 Classic Bluetooth is unsupported except for device discovery.
 
