@@ -92,7 +92,7 @@ pub const PSM_DYN_START: u8 = 0x80;
 pub struct SocketAddr {
     /// Device address.
     ///
-    /// Specify [Address::any] for any local adapter address.
+    /// Specify [SocketAddr::any] for any local adapter address.
     pub addr: Address,
     /// Device address type.
     pub addr_type: AddressType,
@@ -443,6 +443,8 @@ pub enum FlowControl {
 
 /// An L2CAP socket that has not yet been converted to a [StreamListener], [Stream], [SeqPacketListener],
 /// [SeqPacket] or [Datagram].
+///
+/// The primary use of this is to configure the socket before connecting or listening.
 pub struct Socket<Type> {
     fd: AsyncFd<OwnedFd>,
     _type: PhantomData<Type>,
@@ -505,14 +507,14 @@ impl<Type> Socket<Type> {
         setsockopt(self.fd.get_ref(), BT_POWER, &value)
     }
 
-    /// Send MTU.
+    /// Get maximum transmission unit (MTU) for sending.
     ///
     /// This corresponds to the `BT_SNDMTU` socket option.
     pub fn send_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_SNDMTU)
     }
 
-    /// Receive MTU.
+    /// Get maximum transmission unit (MTU) for receiving.
     ///
     /// This corresponds to the `BT_RCVMTU` socket option.
     pub fn recv_mtu(&self) -> Result<u16> {
@@ -774,7 +776,7 @@ impl<Type> FromRawFd for Socket<Type> {
 
 impl Socket<Stream> {
     /// Creates a new socket in of stream type.
-    pub fn new() -> Result<Socket<Stream>> {
+    pub fn new_stream() -> Result<Socket<Stream>> {
         Ok(Self { fd: AsyncFd::new(socket(SOCK_STREAM)?)?, _type: PhantomData })
     }
 
@@ -799,7 +801,7 @@ impl Socket<Stream> {
 
 impl Socket<SeqPacket> {
     /// Creates a new socket in of sequential packet type.
-    pub fn new() -> Result<Socket<SeqPacket>> {
+    pub fn new_seq_packet() -> Result<Socket<SeqPacket>> {
         Ok(Self { fd: AsyncFd::new(socket(SOCK_SEQPACKET)?)?, _type: PhantomData })
     }
 
@@ -824,7 +826,7 @@ impl Socket<SeqPacket> {
 
 impl Socket<Datagram> {
     /// Creates a new socket in of datagram type.
-    pub fn new() -> Result<Socket<Datagram>> {
+    pub fn new_datagram() -> Result<Socket<Datagram>> {
         Ok(Self { fd: AsyncFd::new(socket(SOCK_DGRAM)?)?, _type: PhantomData })
     }
 
@@ -846,7 +848,7 @@ impl StreamListener {
     /// Specify [Address::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
-        let socket = Socket::<Stream>::new()?;
+        let socket = Socket::<Stream>::new_stream()?;
         socket.bind(sa)?;
         socket.listen(1)
     }
@@ -894,7 +896,7 @@ impl Stream {
     ///
     /// Uses any local Bluetooth adapter.
     pub async fn connect(addr: SocketAddr) -> Result<Self> {
-        let socket = Socket::<Stream>::new()?;
+        let socket = Socket::<Stream>::new_stream()?;
         socket.bind(SocketAddr::any())?;
         socket.connect(addr).await
     }
@@ -987,10 +989,10 @@ pub struct SeqPacketListener {
 impl SeqPacketListener {
     /// Creates a new Listener, which will be bound to the specified socket address.
     ///
-    /// Specify [Address::any] for any local adapter address.
+    /// Specify [SocketAddr::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
-        let socket = Socket::<SeqPacket>::new()?;
+        let socket = Socket::<SeqPacket>::new_seq_packet()?;
         socket.bind(sa)?;
         socket.listen(1)
     }
@@ -1032,7 +1034,7 @@ impl SeqPacket {
     ///
     /// Uses any local Bluetooth adapter.
     pub async fn connect(addr: SocketAddr) -> Result<Self> {
-        let socket = Socket::<SeqPacket>::new()?;
+        let socket = Socket::<SeqPacket>::new_seq_packet()?;
         socket.bind(SocketAddr::any())?;
         socket.connect(addr).await
     }
@@ -1044,21 +1046,21 @@ impl SeqPacket {
 
     /// Sends a packet.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub async fn send(&self, buf: &[u8]) -> Result<usize> {
         self.socket.send_priv(buf).await
     }
 
     /// Attempts to send a packet.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.socket.poll_send_priv(cx, buf)
     }
 
     /// Receives a packet.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
         self.socket.recv_priv(buf).await
@@ -1066,7 +1068,7 @@ impl SeqPacket {
 
     /// Attempts to receive a packet.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         self.socket.poll_recv_priv(cx, buf)
@@ -1075,6 +1077,16 @@ impl SeqPacket {
     /// Shuts down the read, write, or both halves of this connection.
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         self.socket.shutdown_priv(how)
+    }
+
+    /// Maximum transmission unit (MTU) for sending.
+    pub fn send_mtu(&self) -> Result<usize> {
+        self.socket.send_mtu().map(|v| v.into())
+    }
+
+    /// Maximum transmission unit (MTU) for receiving.
+    pub fn recv_mtu(&self) -> Result<usize> {
+        self.socket.recv_mtu().map(|v| v.into())
     }
 }
 
@@ -1099,10 +1111,10 @@ pub struct Datagram {
 impl Datagram {
     /// Creates a new datagram socket, which will be bound to the specified socket address.
     ///
-    /// Specify [Address::any] for any local adapter address.
+    /// Specify [SocketAddr::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
-        let socket = Socket::<Datagram>::new()?;
+        let socket = Socket::<Datagram>::new_datagram()?;
         socket.bind(sa)?;
         Ok(socket.into_datagram())
     }
@@ -1119,35 +1131,35 @@ impl Datagram {
 
     /// Sends a packet to the connected peer.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub async fn send(&self, buf: &[u8]) -> Result<usize> {
         self.socket.send_priv(buf).await
     }
 
     /// Attempts to send a packet to the connected peer.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.socket.poll_send_priv(cx, buf)
     }
 
     /// Sends a packet to the specified target address.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
         self.socket.send_to_priv(buf, target).await
     }
 
     /// Attempts to send a packet to the specified target address.
     ///
-    /// The packet length must not exceed the [Socket::send_mtu].
+    /// The packet length must not exceed the [send_mtu].
     pub fn poll_send_to(&self, cx: &mut Context, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>> {
         self.socket.poll_send_to_priv(cx, buf, target)
     }
 
     /// Receives a packet from the connected peer.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
         self.socket.recv_priv(buf).await
@@ -1155,7 +1167,7 @@ impl Datagram {
 
     /// Attempts to receive a packet from the connected peer.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         self.socket.poll_recv_priv(cx, buf)
@@ -1163,7 +1175,7 @@ impl Datagram {
 
     /// Receives a packet from anywhere.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
         self.socket.recv_from_priv(buf).await
@@ -1171,7 +1183,7 @@ impl Datagram {
 
     /// Attempts to receive a packet from anywhere.
     ///
-    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// The provided buffer must be of length [recv_mtu], otherwise
     /// the packet may be truncated.
     pub fn poll_recv_from(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<SocketAddr>> {
         self.socket.poll_recv_from_priv(cx, buf)
@@ -1180,6 +1192,16 @@ impl Datagram {
     /// Shuts down the read, write, or both halves of this connection.
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         self.socket.shutdown_priv(how)
+    }
+
+    /// Maximum transmission unit (MTU) for sending.
+    pub fn send_mtu(&self) -> Result<usize> {
+        self.socket.send_mtu().map(|v| v.into())
+    }
+
+    /// Maximum transmission unit (MTU) for receiving.
+    pub fn recv_mtu(&self) -> Result<usize> {
+        self.socket.recv_mtu().map(|v| v.into())
     }
 }
 
