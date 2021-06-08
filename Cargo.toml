@@ -1,6 +1,6 @@
 [package]
 name = "blez"
-version = "0.8.2-pre4"
+version = "0.8.2-pre5"
 description = "Asynchronous interface to official Bluetooth Low Energy APIs on Linux (BlueZ). Supports device discovery, events, local and remote GATT services, advertisements and L2CAP sockets."
 readme = "README.md"
 authors = [
