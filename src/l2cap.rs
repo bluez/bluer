@@ -12,8 +12,8 @@ use libbluetooth::{
     l2cap::sockaddr_l2,
 };
 use libc::{
-    sockaddr, socklen_t, AF_BLUETOOTH, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_WR, SOCK_STREAM, SOL_BLUETOOTH,
-    SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
+    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, EWOULDBLOCK, MSG_PEEK, SHUT_RD, SHUT_WR, SOCK_STREAM,
+    SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -127,6 +127,38 @@ fn bind(socket: &OwnedFd, sa: SocketAddr) -> Result<()> {
     }
 }
 
+/// Gets the address the L2CAP socket is bound to.
+fn getsockname(socket: &OwnedFd) -> Result<SocketAddr> {
+    let mut saddr: MaybeUninit<sockaddr_l2> = MaybeUninit::uninit();
+    let mut length = size_of::<sockaddr_l2>() as socklen_t;
+
+    if unsafe { libc::getsockname(socket.as_raw_fd(), saddr.as_mut_ptr() as *mut _, &mut length) } == -1 {
+        return Err(Error::last_os_error());
+    };
+
+    if length != size_of::<sockaddr_l2>() as socklen_t {
+        return Err(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2 length from getsockname"));
+    }
+    let saddr = unsafe { saddr.assume_init() };
+    SocketAddr::try_from(saddr)
+}
+
+/// Gets the address the L2CAP socket is connected to.
+fn getpeername(socket: &OwnedFd) -> Result<SocketAddr> {
+    let mut saddr: MaybeUninit<sockaddr_l2> = MaybeUninit::uninit();
+    let mut length = size_of::<sockaddr_l2>() as socklen_t;
+
+    if unsafe { libc::getpeername(socket.as_raw_fd(), saddr.as_mut_ptr() as *mut _, &mut length) } == -1 {
+        return Err(Error::last_os_error());
+    };
+
+    if length != size_of::<sockaddr_l2>() as socklen_t {
+        return Err(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2 length from getpeername"));
+    }
+    let saddr = unsafe { saddr.assume_init() };
+    SocketAddr::try_from(saddr)
+}
+
 /// Puts L2CAP socket in listen mode.
 fn listen(socket: &OwnedFd, backlog: i32) -> Result<()> {
     if unsafe { libc::listen(socket.as_raw_fd(), backlog) } == 0 {
@@ -155,6 +187,9 @@ fn accept(socket: &OwnedFd) -> Result<(OwnedFd, SocketAddr)> {
         fd => unsafe { OwnedFd::new(fd) },
     };
 
+    if length != size_of::<sockaddr_l2>() as socklen_t {
+        return Err(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2 length"));
+    }    
     let saddr = unsafe { saddr.assume_init() };
     let sa = SocketAddr::try_from(saddr)?;
 
@@ -194,9 +229,9 @@ fn recv(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<usize> {
     }
 }
 
-/// Write from buffer into socket.
-fn write(socket: &OwnedFd, buf: &[u8]) -> Result<usize> {
-    match unsafe { libc::write(socket.as_raw_fd(), buf.as_ptr() as *const _, buf.len()) } {
+/// Sends from buffer into socket.
+fn send(socket: &OwnedFd, buf: &[u8], flags: c_int) -> Result<usize> {
+    match unsafe { libc::send(socket.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
         -1 => Err(Error::last_os_error()),
         n => Ok(n as _),
     }
@@ -328,6 +363,16 @@ impl<Type> Socket<Type> {
     /// Bind the socket to the given address.
     pub fn bind(&self, sa: SocketAddr) -> Result<()> {
         bind(self.fd.get_ref(), sa)
+    }
+
+    /// Get the local address of this socket.
+    pub fn local_addr(&self) -> Result<SocketAddr> {
+        getsockname(self.fd.get_ref())
+    }
+
+    /// Get the peer address of this socket.
+    fn peer_addr_priv(&self) -> Result<SocketAddr> {
+        getpeername(self.fd.get_ref())
     }
 
     /// Get socket security.
@@ -466,7 +511,7 @@ impl<Type> Socket<Type> {
     fn poll_write_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         loop {
             let mut guard = ready!(self.fd.poll_write_ready(cx))?;
-            match guard.try_io(|inner| write(inner.get_ref(), buf)) {
+            match guard.try_io(|inner| send(inner.get_ref(), buf, 0)) {
                 Ok(result) => return Poll::Ready(result),
                 Err(_would_block) => continue,
             }
@@ -532,14 +577,14 @@ impl Socket<Stream> {
     pub async fn connect(self, sa: SocketAddr) -> Result<Stream> {
         match connect(&self.fd.get_ref(), sa) {
             Ok(()) => Stream::from_socket(self),
-            Err(err) if err.raw_os_error() == Some(EINPROGRESS) => {
+            Err(err) if err.raw_os_error() == Some(EINPROGRESS) || err.raw_os_error() == Some(EAGAIN) => {
                 loop {
                     let mut guard = self.fd.writable().await?;
                     match guard.try_io(|inner| {
                         let err: c_int = getsockopt_level(&inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
                         match err {
                             0 => Ok(()),
-                            EINPROGRESS => Err(ErrorKind::WouldBlock.into()),
+                            EINPROGRESS | EAGAIN => Err(ErrorKind::WouldBlock.into()),
                             _ => Err(Error::from_raw_os_error(err)),
                         }
                     }) {
@@ -635,6 +680,11 @@ impl Stream {
         let socket = Socket::new_stream()?;
         socket.bind(SocketAddr::any())?;
         socket.connect(addr).await
+    }
+
+    /// Gets the peer address of this stream.
+    pub fn peer_addr(&self) -> Result<SocketAddr> {
+        self.socket.peer_addr_priv()
     }
 
     /// Receives data on the socket from the remote address to which it is connected,
