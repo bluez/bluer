@@ -334,7 +334,7 @@ impl Characteristic {
         Ok(())
     }
 
-    /// Acquire file descriptor and MTU for writing.
+    /// Acquire writer for writing with low overhead.
     ///
     /// It only works with characteristic that has
     /// the [write_without_response](CharacteristicFlags::write_without_response) flag set.
@@ -399,7 +399,7 @@ impl Characteristic {
             .await
     }
 
-    /// Acquire file descriptor and MTU for notify.
+    /// Acquire reader for notify with low overhead.
     ///
     /// It only works with characteristic that has
     /// the [notify](CharacteristicFlags::notify) flag set and no other client has called
@@ -424,7 +424,7 @@ impl Characteristic {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
         let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
-        Ok(CharacteristicReader { mtu: mtu.into(), stream })
+        Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
     }
 
     dbus_interface!();

@@ -1,8 +1,9 @@
 //! Local and remote GATT services.
 
+use futures::ready;
 use pin_project::pin_project;
 use std::{
-    fmt,
+    mem::MaybeUninit,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -98,12 +99,19 @@ impl Default for WriteOp {
     }
 }
 
-/// Streams data from a characteristic.
+/// Streams data from a characteristic with low overhead.
+///
+/// When using the [AsyncRead] trait and a buffer of size less than [mtu] bytes
+/// is provided, the received characteristic value will be split over multiple
+/// read operations.
+/// For best efficiency provide a buffer of at least [mtu] bytes.
 #[pin_project]
+#[derive(Debug)]
 pub struct CharacteristicReader {
     mtu: usize,
     #[pin]
     stream: UnixStream,
+    buf: Vec<u8>,
 }
 
 impl CharacteristicReader {
@@ -126,22 +134,66 @@ impl CharacteristicReader {
     pub fn into_inner(self) -> UnixStream {
         self.stream
     }
-}
 
-impl fmt::Debug for CharacteristicReader {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CharacteristicReader {{ {:?} }}", &self.stream)
+    /// Receive the characteristic value from a single notify or write operation.
+    pub async fn recv(&self) -> std::io::Result<Vec<u8>> {
+        loop {
+            self.stream.readable().await?;
+            let mut buf = Vec::with_capacity(self.mtu);
+            match self.stream.try_read_buf(&mut buf) {
+                Ok(n) => {
+                    buf.truncate(n);
+                    return Ok(buf);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(err) => return Err(err),
+            }
+        }
     }
 }
 
 impl AsyncRead for CharacteristicReader {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_read(cx, buf)
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<std::io::Result<()>> {
+        let buf_space = buf.remaining();
+        if !self.buf.is_empty() {
+            // Return buffered data first, if any.
+            let to_read = buf_space.min(self.buf.len());
+            let remaining = self.buf.split_off(to_read);
+            buf.put_slice(&self.buf);
+            self.buf = remaining;
+            Poll::Ready(Ok(()))
+        } else {
+            if buf_space < self.mtu {
+                let this = self.project();
+
+                // If provided buffer is too small, read into temporary buffer.
+                let mut mtu_buf: Vec<MaybeUninit<u8>> = vec![MaybeUninit::uninit(); *this.mtu];
+                let mut mtu_read_buf = ReadBuf::uninit(&mut mtu_buf);
+                ready!(this.stream.poll_read(cx, &mut mtu_read_buf))?;
+                let n = mtu_read_buf.filled().len();
+                drop(mtu_read_buf);
+                mtu_buf.truncate(n);
+                let mut mtu_buf: Vec<u8> = mtu_buf.into_iter().map(|v| unsafe { v.assume_init() }).collect();
+
+                // Then fill provided buffer appropriately and keep the rest in
+                // our internal buffer.
+                *this.buf = mtu_buf.split_off(buf_space);
+                buf.put_slice(&mtu_buf);
+
+                Poll::Ready(Ok(()))
+            } else {
+                self.project().stream.poll_read(cx, buf)
+            }
+        }
     }
 }
 
-/// Streams data to a characteristic.
+/// Streams data to a characteristic with low overhead.
+///
+/// When using the [AsyncWrite] trait, a single write operation will send no more than
+/// [mtu] bytes.
 #[pin_project]
+#[derive(Debug)]
 pub struct CharacteristicWriter {
     mtu: usize,
     #[pin]
@@ -168,16 +220,30 @@ impl CharacteristicWriter {
     pub fn into_inner(self) -> UnixStream {
         self.stream
     }
-}
 
-impl fmt::Debug for CharacteristicWriter {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CharacteristicWriter {{ {:?} }}", &self.stream)
+    /// Send the characteristic value using a single write or notify operation.
+    ///
+    /// The length of `buf` must not exceed [mtu].
+    pub async fn send(&self, buf: &[u8]) -> std::io::Result<()> {
+        if buf.len() > self.mtu {
+            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "data length exceeds MTU"));
+        }
+        loop {
+            self.stream.writable().await?;
+            match self.stream.try_write(buf) {
+                Ok(n) if n == buf.len() => return Ok(()),
+                Ok(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, "partial write occured")),
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(err) => return Err(err),
+            }
+        }
     }
 }
 
 impl AsyncWrite for CharacteristicWriter {
     fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
+        let max_len = buf.len().min(self.mtu);
+        let buf = &buf[..max_len];
         self.project().stream.poll_write(cx, buf)
     }
 

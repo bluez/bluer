@@ -312,6 +312,7 @@ pub enum CharacteristicWriteMethod {
     /// Call specified function for each write request.
     Fun(CharacteristicWriteFun),
     /// Provide written data over asynchronous IO functions.
+    /// This has low overhead.
     ///
     /// Use [CharacteristicControl] to obtain reader.
     Io,
@@ -377,6 +378,7 @@ pub enum CharacteristicNotifyMethod {
     /// Call specified function when client starts a notification session.
     Fun(CharacteristicNotifyFun),
     /// Write notify data over asynchronous IO.
+    /// This has low overhead.
     ///
     /// Use [CharacteristicControl] to obtain writer.
     Io,
@@ -608,7 +610,7 @@ impl CharacteristicWriteIoRequest {
         let CharacteristicWriteIoRequest { mtu, tx, .. } = self;
         let (fd, stream) = make_socket_pair()?;
         let _ = tx.send(Ok(fd));
-        Ok(CharacteristicReader { mtu: mtu.into(), stream })
+        Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
     }
 
     /// Reject the write request.
