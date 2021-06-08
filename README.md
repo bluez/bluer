@@ -48,9 +48,9 @@ The following functionality is provided:
 
 Classic Bluetooth is unsupported except for device discovery.
 
-Feature flags
--------------
-All features are enabled by default.
+Crate features
+--------------
+All crate features are enabled by default.
 
 * `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
   For building, D-Bus library headers must be installed.

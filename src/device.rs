@@ -509,6 +509,7 @@ define_properties!(
 );
 
 /// Bluetooth device event.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Debug, Clone)]
 pub enum DeviceEvent {
     /// Property changed.

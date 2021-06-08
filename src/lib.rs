@@ -44,8 +44,8 @@
 //!
 //! Classic Bluetooth is unsupported except for device discovery.
 //!
-//! ## Feature flags
-//! All features are enabled by default.
+//! ## Crate features
+//! All crate features are enabled by default.
 //!
 //! * `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
 //! * `l2cap`: Enables L2CAP sockets.
@@ -287,6 +287,7 @@ macro_rules! define_properties {
         }
 
         $(#[$enum_outer])*
+        #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
         #[derive(Debug, Clone)]
         $enum_vis enum $enum_name {
             $(
