@@ -12,8 +12,8 @@ use libbluetooth::{
     l2cap::sockaddr_l2,
 };
 use libc::{
-    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, EWOULDBLOCK, MSG_PEEK, SHUT_RD, SHUT_WR, SOCK_STREAM,
-    SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
+    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_DGRAM,
+    SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -22,7 +22,8 @@ use std::{
     fmt,
     io::{Error, ErrorKind, Result},
     marker::PhantomData,
-    mem::{self, size_of, take, ManuallyDrop, MaybeUninit},
+    mem::{size_of, ManuallyDrop, MaybeUninit},
+    net::Shutdown,
     os::{
         raw::{c_int, c_ulong},
         unix::prelude::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
@@ -34,6 +35,9 @@ use std::{
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 /// First unprivileged protocol service multiplexor (PSM).
+///
+/// Listening on a PSM below this requires the
+/// `CAP_NET_BIND_SERVICE` capability.
 pub const PSM_DYN_START: u8 = 0x80;
 
 /// An L2CAP socket address.
@@ -189,7 +193,7 @@ fn accept(socket: &OwnedFd) -> Result<(OwnedFd, SocketAddr)> {
 
     if length != size_of::<sockaddr_l2>() as socklen_t {
         return Err(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2 length"));
-    }    
+    }
     let saddr = unsafe { saddr.assume_init() };
     let sa = SocketAddr::try_from(saddr)?;
 
@@ -213,6 +217,32 @@ fn connect(socket: &OwnedFd, sa: SocketAddr) -> Result<()> {
     }
 }
 
+/// Sends from buffer into socket.
+fn send(socket: &OwnedFd, buf: &[u8], flags: c_int) -> Result<usize> {
+    match unsafe { libc::send(socket.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
+        -1 => Err(Error::last_os_error()),
+        n => Ok(n as _),
+    }
+}
+
+/// Sends from buffer into socket using destination address.
+fn sendto(socket: &OwnedFd, buf: &[u8], flags: c_int, sa: SocketAddr) -> Result<usize> {
+    let addr: sockaddr_l2 = sa.into();
+    match unsafe {
+        libc::sendto(
+            socket.as_raw_fd(),
+            buf.as_ptr() as *const _,
+            buf.len(),
+            flags,
+            &addr as *const sockaddr_l2 as *const sockaddr,
+            size_of::<sockaddr_l2>() as socklen_t,
+        )
+    } {
+        -1 => Err(Error::last_os_error()),
+        n => Ok(n as _),
+    }
+}
+
 /// Receive from socket into buffer.
 fn recv(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<usize> {
     let unfilled = unsafe { buf.unfilled_mut() };
@@ -229,11 +259,37 @@ fn recv(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<usize> {
     }
 }
 
-/// Sends from buffer into socket.
-fn send(socket: &OwnedFd, buf: &[u8], flags: c_int) -> Result<usize> {
-    match unsafe { libc::send(socket.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
+/// Receive from socket into buffer with source address.
+fn recvfrom(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<(usize, SocketAddr)> {
+    let unfilled = unsafe { buf.unfilled_mut() };
+    let mut saddr: MaybeUninit<sockaddr_l2> = MaybeUninit::uninit();
+    let mut length = size_of::<sockaddr_l2>() as libc::socklen_t;
+    match unsafe {
+        libc::recvfrom(
+            socket.as_raw_fd(),
+            unfilled.as_mut_ptr() as *mut _,
+            unfilled.len(),
+            flags,
+            saddr.as_mut_ptr() as *mut _,
+            &mut length,
+        )
+    } {
         -1 => Err(Error::last_os_error()),
-        n => Ok(n as _),
+        n => {
+            let n = n as usize;
+            unsafe {
+                buf.assume_init(n);
+            }
+            buf.advance(n);
+
+            if length != size_of::<sockaddr_l2>() as socklen_t {
+                return Err(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2 length"));
+            }
+            let saddr = unsafe { saddr.assume_init() };
+            let sa = SocketAddr::try_from(saddr)?;
+
+            Ok((n, sa))
+        }
     }
 }
 
@@ -477,7 +533,108 @@ impl<Type> Socket<Type> {
         Ok(Self { fd: AsyncFd::new(fd)?, _type: PhantomData })
     }
 
-    fn poll_read_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+    async fn accept_priv(&self) -> Result<(Self, SocketAddr)> {
+        let (fd, sa) = loop {
+            let mut guard = self.fd.readable().await?;
+            match guard.try_io(|inner| accept(&inner.get_ref())) {
+                Ok(result) => break result,
+                Err(_would_block) => continue,
+            }
+        }?;
+
+        let socket = Self::from_owned_fd(fd)?;
+        Ok((socket, sa))
+    }
+
+    fn poll_accept_priv(&self, cx: &mut Context) -> Poll<Result<(Self, SocketAddr)>> {
+        let (fd, sa) = loop {
+            let mut guard = ready!(self.fd.poll_read_ready(cx))?;
+            match guard.try_io(|inner| accept(&inner.get_ref())) {
+                Ok(result) => break result,
+                Err(_would_block) => continue,
+            }
+        }?;
+
+        let socket = Self::from_owned_fd(fd)?;
+        Poll::Ready(Ok((socket, sa)))
+    }
+
+    async fn connect_priv(&self, sa: SocketAddr) -> Result<()> {
+        match connect(&self.fd.get_ref(), sa) {
+            Ok(()) => Ok(()),
+            Err(err) if err.raw_os_error() == Some(EINPROGRESS) || err.raw_os_error() == Some(EAGAIN) => {
+                loop {
+                    let mut guard = self.fd.writable().await?;
+                    match guard.try_io(|inner| {
+                        let err: c_int = getsockopt_level(&inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
+                        match err {
+                            0 => Ok(()),
+                            EINPROGRESS | EAGAIN => Err(ErrorKind::WouldBlock.into()),
+                            _ => Err(Error::from_raw_os_error(err)),
+                        }
+                    }) {
+                        Ok(result) => break result,
+                        Err(_would_block) => continue,
+                    }
+                }?;
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn send_priv(&self, buf: &[u8]) -> Result<usize> {
+        loop {
+            let mut guard = self.fd.writable().await?;
+            match guard.try_io(|inner| send(inner.get_ref(), buf, 0)) {
+                Ok(result) => return result,
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_send_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        loop {
+            let mut guard = ready!(self.fd.poll_write_ready(cx))?;
+            match guard.try_io(|inner| send(inner.get_ref(), buf, 0)) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    async fn send_to_priv(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
+        loop {
+            let mut guard = self.fd.writable().await?;
+            match guard.try_io(|inner| sendto(inner.get_ref(), buf, 0, target)) {
+                Ok(result) => return result,
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_send_to_priv(&self, cx: &mut Context, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>> {
+        loop {
+            let mut guard = ready!(self.fd.poll_write_ready(cx))?;
+            match guard.try_io(|inner| sendto(inner.get_ref(), buf, 0, target)) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    async fn recv_priv(&self, buf: &mut [u8]) -> Result<usize> {
+        let mut buf = ReadBuf::new(buf);
+        loop {
+            let mut guard = self.fd.readable().await?;
+            match guard.try_io(|inner| recv(inner.get_ref(), &mut buf, 0)) {
+                Ok(result) => return result,
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_recv_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         loop {
             let mut guard = ready!(self.fd.poll_read_ready(cx))?;
             match guard.try_io(|inner| recv(inner.get_ref(), buf, 0)) {
@@ -487,11 +644,22 @@ impl<Type> Socket<Type> {
         }
     }
 
-    fn poll_peek_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
+    async fn recv_from_priv(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
+        let mut buf = ReadBuf::new(buf);
+        loop {
+            let mut guard = self.fd.readable().await?;
+            match guard.try_io(|inner| recvfrom(inner.get_ref(), &mut buf, 0)) {
+                Ok(result) => return result,
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_recv_from_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<SocketAddr>> {
         loop {
             let mut guard = ready!(self.fd.poll_read_ready(cx))?;
-            match guard.try_io(|inner| recv(inner.get_ref(), buf, MSG_PEEK)) {
-                Ok(result) => return Poll::Ready(result),
+            match guard.try_io(|inner| recvfrom(inner.get_ref(), buf, 0)) {
+                Ok(result) => return Poll::Ready(result.map(|(_n, sa)| sa)),
                 Err(_would_block) => continue,
             }
         }
@@ -508,10 +676,10 @@ impl<Type> Socket<Type> {
         }
     }
 
-    fn poll_write_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+    fn poll_peek_priv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<usize>> {
         loop {
-            let mut guard = ready!(self.fd.poll_write_ready(cx))?;
-            match guard.try_io(|inner| send(inner.get_ref(), buf, 0)) {
+            let mut guard = ready!(self.fd.poll_read_ready(cx))?;
+            match guard.try_io(|inner| recv(inner.get_ref(), buf, MSG_PEEK)) {
                 Ok(result) => return Poll::Ready(result),
                 Err(_would_block) => continue,
             }
@@ -523,8 +691,18 @@ impl<Type> Socket<Type> {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown_priv(&self, _cx: &mut Context) -> Poll<Result<()>> {
-        shutdown(&self.fd.get_ref(), SHUT_WR)?;
+    fn shutdown_priv(&self, how: Shutdown) -> Result<()> {
+        let how = match how {
+            Shutdown::Read => SHUT_RD,
+            Shutdown::Write => SHUT_WR,
+            Shutdown::Both => SHUT_RDWR,
+        };
+        shutdown(&self.fd.get_ref(), how)?;
+        Ok(())
+    }
+
+    fn poll_shutdown_priv(&self, _cx: &mut Context, how: Shutdown) -> Poll<Result<()>> {
+        self.shutdown_priv(how)?;
         Poll::Ready(Ok(()))
     }
 }
@@ -557,7 +735,7 @@ impl<Type> FromRawFd for Socket<Type> {
 
 impl Socket<Stream> {
     /// Creates a new socket in of stream type.
-    pub fn new_stream() -> Result<Self> {
+    pub fn new() -> Result<Socket<Stream>> {
         Ok(Self { fd: AsyncFd::new(socket(SOCK_STREAM)?)?, _type: PhantomData })
     }
 
@@ -575,27 +753,45 @@ impl Socket<Stream> {
 
     /// Establish a stream connection with a peer at the specified socket address.
     pub async fn connect(self, sa: SocketAddr) -> Result<Stream> {
-        match connect(&self.fd.get_ref(), sa) {
-            Ok(()) => Stream::from_socket(self),
-            Err(err) if err.raw_os_error() == Some(EINPROGRESS) || err.raw_os_error() == Some(EAGAIN) => {
-                loop {
-                    let mut guard = self.fd.writable().await?;
-                    match guard.try_io(|inner| {
-                        let err: c_int = getsockopt_level(&inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
-                        match err {
-                            0 => Ok(()),
-                            EINPROGRESS | EAGAIN => Err(ErrorKind::WouldBlock.into()),
-                            _ => Err(Error::from_raw_os_error(err)),
-                        }
-                    }) {
-                        Ok(result) => break result,
-                        Err(_would_block) => continue,
-                    }
-                }?;
-                Stream::from_socket(self)
-            }
-            Err(err) => Err(err),
-        }
+        self.connect_priv(sa).await?;
+        Stream::from_socket(self)
+    }
+}
+
+impl Socket<SeqPacket> {
+    /// Creates a new socket in of sequential packet type.
+    pub fn new() -> Result<Socket<SeqPacket>> {
+        Ok(Self { fd: AsyncFd::new(socket(SOCK_SEQPACKET)?)?, _type: PhantomData })
+    }
+
+    /// Convert the socket into a [SeqPacketListener].
+    ///
+    /// `backlog` defines the maximum number of pending connections are queued by the operating system
+    /// at any given time.
+    pub fn listen(self, backlog: u32) -> Result<SeqPacketListener> {
+        listen(
+            &self.fd.get_ref(),
+            backlog.try_into().map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid backlog"))?,
+        )?;
+        Ok(SeqPacketListener { socket: self })
+    }
+
+    /// Establish a sequential packet connection with a peer at the specified socket address.
+    pub async fn connect(self, sa: SocketAddr) -> Result<SeqPacket> {
+        self.connect_priv(sa).await?;
+        Ok(SeqPacket { socket: self })
+    }
+}
+
+impl Socket<Datagram> {
+    /// Creates a new socket in of datagram type.
+    pub fn new() -> Result<Socket<Datagram>> {
+        Ok(Self { fd: AsyncFd::new(socket(SOCK_DGRAM)?)?, _type: PhantomData })
+    }
+
+    /// Convert the socket into a [Datagram].
+    pub fn into_datagram(self) -> Datagram {
+        Datagram { socket: self }
     }
 }
 
@@ -611,39 +807,21 @@ impl StreamListener {
     /// Specify [Address::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
-        let socket = Socket::new_stream()?;
+        let socket = Socket::<Stream>::new()?;
         socket.bind(sa)?;
         socket.listen(1)
     }
 
     /// Accepts a new incoming connection from this listener.
     pub async fn accept(&self) -> Result<(Stream, SocketAddr)> {
-        let (fd, sa) = loop {
-            let mut guard = self.socket.fd.readable().await?;
-            match guard.try_io(|inner| accept(&inner.get_ref())) {
-                Ok(result) => break result,
-                Err(_would_block) => continue,
-            }
-        }?;
-
-        let stream = Stream::from_socket(Socket::from_owned_fd(fd)?)?;
-
-        Ok((stream, sa))
+        let (socket, sa) = self.socket.accept_priv().await?;
+        Ok((Stream::from_socket(socket)?, sa))
     }
 
     /// Polls to accept a new incoming connection to this listener.
     pub fn poll_accept(&self, cx: &mut Context) -> Poll<Result<(Stream, SocketAddr)>> {
-        let (fd, sa) = loop {
-            let mut guard = ready!(self.socket.fd.poll_read_ready(cx))?;
-            match guard.try_io(|inner| accept(&inner.get_ref())) {
-                Ok(result) => break result,
-                Err(_would_block) => continue,
-            }
-        }?;
-
-        let stream = Stream::from_socket(Socket::from_owned_fd(fd)?)?;
-
-        Poll::Ready(Ok((stream, sa)))
+        let (socket, sa) = ready!(self.socket.poll_accept_priv(cx))?;
+        Poll::Ready(Ok((Stream::from_socket(socket)?, sa)))
     }
 }
 
@@ -677,7 +855,7 @@ impl Stream {
     ///
     /// Uses any local Bluetooth adapter.
     pub async fn connect(addr: SocketAddr) -> Result<Self> {
-        let socket = Socket::new_stream()?;
+        let socket = Socket::<Stream>::new()?;
         socket.bind(SocketAddr::any())?;
         socket.connect(addr).await
     }
@@ -721,7 +899,7 @@ impl Stream {
         let max_len = buf.len().min(self.send_mtu);
         let buf = &buf[..max_len];
 
-        self.socket.poll_write_priv(cx, buf)
+        self.socket.poll_send_priv(cx, buf)
     }
 }
 
@@ -739,7 +917,7 @@ impl AsRawFd for Stream {
 
 impl AsyncRead for Stream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
-        self.socket.poll_read_priv(cx, buf)
+        self.socket.poll_recv_priv(cx, buf)
     }
 }
 
@@ -753,7 +931,7 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
-        self.socket.poll_shutdown_priv(cx)
+        self.socket.poll_shutdown_priv(cx, Shutdown::Write)
     }
 }
 
@@ -784,7 +962,7 @@ impl<'a> AsRef<Stream> for ReadHalf<'a> {
 
 impl<'a> AsyncRead for ReadHalf<'a> {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
-        self.0.socket.poll_read_priv(cx, buf)
+        self.0.socket.poll_recv_priv(cx, buf)
     }
 }
 
@@ -808,7 +986,7 @@ impl<'a> AsyncWrite for WriteHalf<'a> {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
-        self.0.socket.poll_shutdown_priv(cx)
+        self.0.socket.poll_shutdown_priv(cx, Shutdown::Write)
     }
 }
 
@@ -884,7 +1062,7 @@ impl AsRef<Stream> for OwnedReadHalf {
 
 impl AsyncRead for OwnedReadHalf {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
-        self.stream.socket.poll_read_priv(cx, buf)
+        self.stream.socket.poll_recv_priv(cx, buf)
     }
 }
 
@@ -940,7 +1118,7 @@ impl AsyncWrite for OwnedWriteHalf {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
-        self.stream.socket.poll_shutdown_priv(cx)
+        self.stream.socket.poll_shutdown_priv(cx, Shutdown::Write)
     }
 }
 
@@ -953,11 +1131,218 @@ impl Drop for OwnedWriteHalf {
 }
 
 /// An L2CAP socket server, listening for [SeqPacket] connections.
-pub struct SeqPacketListener {}
+#[derive(Debug)]
+pub struct SeqPacketListener {
+    socket: Socket<SeqPacket>,
+}
+
+impl SeqPacketListener {
+    /// Creates a new Listener, which will be bound to the specified socket address.
+    ///
+    /// Specify [Address::any] for any local adapter address.
+    /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
+    pub async fn bind(sa: SocketAddr) -> Result<Self> {
+        let socket = Socket::<SeqPacket>::new()?;
+        socket.bind(sa)?;
+        socket.listen(1)
+    }
+
+    /// Accepts a new incoming connection from this listener.
+    pub async fn accept(&self) -> Result<(SeqPacket, SocketAddr)> {
+        let (socket, sa) = self.socket.accept_priv().await?;
+        Ok((SeqPacket { socket }, sa))
+    }
+
+    /// Polls to accept a new incoming connection to this listener.
+    pub fn poll_accept(&self, cx: &mut Context) -> Poll<Result<(SeqPacket, SocketAddr)>> {
+        let (socket, sa) = ready!(self.socket.poll_accept_priv(cx))?;
+        Poll::Ready(Ok((SeqPacket { socket }, sa)))
+    }
+}
+
+impl AsRef<Socket<SeqPacket>> for SeqPacketListener {
+    fn as_ref(&self) -> &Socket<SeqPacket> {
+        &self.socket
+    }
+}
+
+impl AsRawFd for SeqPacketListener {
+    fn as_raw_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
+    }
+}
 
 /// An L2CAP sequential packet socket (sequenced, reliable, two-way connection-based data transmission path for
 /// datagrams of fixed maximum length).
-pub struct SeqPacket {}
+#[derive(Debug)]
+pub struct SeqPacket {
+    socket: Socket<SeqPacket>,
+}
+
+impl SeqPacket {
+    /// Establish a sequential packet connection with a peer at the specified socket address.
+    ///
+    /// Uses any local Bluetooth adapter.
+    pub async fn connect(addr: SocketAddr) -> Result<Self> {
+        let socket = Socket::<SeqPacket>::new()?;
+        socket.bind(SocketAddr::any())?;
+        socket.connect(addr).await
+    }
+
+    /// Gets the peer address of this stream.
+    pub fn peer_addr(&self) -> Result<SocketAddr> {
+        self.socket.peer_addr_priv()
+    }
+
+    /// Sends a packet.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub async fn send(&self, buf: &[u8]) -> Result<usize> {
+        self.socket.send_priv(buf).await
+    }
+
+    /// Attempts to send a packet.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        self.socket.poll_send_priv(cx, buf)
+    }
+
+    /// Receives a packet.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
+        self.socket.recv_priv(buf).await
+    }
+
+    /// Attempts to receive a packet.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        self.socket.poll_recv_priv(cx, buf)
+    }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+        self.socket.shutdown_priv(how)
+    }
+}
+
+impl AsRef<Socket<SeqPacket>> for SeqPacket {
+    fn as_ref(&self) -> &Socket<SeqPacket> {
+        &self.socket
+    }
+}
+
+impl AsRawFd for SeqPacket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
+    }
+}
 
 /// An L2CAP datagram socket (connectionless, unreliable messages of a fixed maximum length).
-pub struct Datagram {}
+#[derive(Debug)]
+pub struct Datagram {
+    socket: Socket<Datagram>,
+}
+
+impl Datagram {
+    /// Creates a new datagram socket, which will be bound to the specified socket address.
+    ///
+    /// Specify [Address::any] for any local adapter address.
+    /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
+    pub async fn bind(sa: SocketAddr) -> Result<Self> {
+        let socket = Socket::<Datagram>::new()?;
+        socket.bind(sa)?;
+        Ok(socket.into_datagram())
+    }
+
+    /// Establish a datagram connection with a peer at the specified socket address.
+    pub async fn connect(&self, sa: SocketAddr) -> Result<()> {
+        self.socket.connect_priv(sa).await
+    }
+
+    /// Gets the peer address of this stream.
+    pub fn peer_addr(&self) -> Result<SocketAddr> {
+        self.socket.peer_addr_priv()
+    }
+
+    /// Sends a packet to the connected peer.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub async fn send(&self, buf: &[u8]) -> Result<usize> {
+        self.socket.send_priv(buf).await
+    }
+
+    /// Attempts to send a packet to the connected peer.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub fn poll_send(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+        self.socket.poll_send_priv(cx, buf)
+    }
+
+    /// Sends a packet to the specified target address.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
+        self.socket.send_to_priv(buf, target).await
+    }
+
+    /// Attempts to send a packet to the specified target address.
+    ///
+    /// The packet length must not exceed the [Socket::send_mtu].
+    pub fn poll_send_to(&self, cx: &mut Context, buf: &[u8], target: SocketAddr) -> Poll<Result<usize>> {
+        self.socket.poll_send_to_priv(cx, buf, target)
+    }
+
+    /// Receives a packet from the connected peer.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub async fn recv(&self, buf: &mut [u8]) -> Result<usize> {
+        self.socket.recv_priv(buf).await
+    }
+
+    /// Attempts to receive a packet from the connected peer.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub fn poll_recv(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
+        self.socket.poll_recv_priv(cx, buf)
+    }
+
+    /// Receives a packet from anywhere.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
+        self.socket.recv_from_priv(buf).await
+    }
+
+    /// Attempts to receive a packet from anywhere.
+    ///
+    /// The provided buffer must be of length [Socket::recv_mtu], otherwise
+    /// the packet may be truncated.
+    pub fn poll_recv_from(&self, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<SocketAddr>> {
+        self.socket.poll_recv_from_priv(cx, buf)
+    }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+        self.socket.shutdown_priv(how)
+    }
+}
+
+impl AsRef<Socket<Datagram>> for Datagram {
+    fn as_ref(&self) -> &Socket<Datagram> {
+        &self.socket
+    }
+}
+
+impl AsRawFd for Datagram {
+    fn as_raw_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
+    }
+}
