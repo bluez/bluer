@@ -3,10 +3,11 @@
 //! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 //! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
 //! Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
+//! L2CAP sockets are presented using an API similar to Tokio networking.
 //!
 //! This library depends on the [tokio] asynchronous runtime.
 //!
-//! The following features are provided.
+//! The following functionality is provided.
 //!
 //! * Bluetooth adapters
 //!     * enumeration
@@ -33,50 +34,80 @@
 //! * efficient event dispatching
 //!     * not affected by D-Bus match rule count
 //!     * O(1) in number of subscriptions
+//! * L2CAP sockets
+//!     * stream oriented
+//!     * sequential packet oriented
+//!     * datagram oriented
+//!     * async IO interface with [AsyncRead] and [AsyncWrite] support
 //!
 //! Classic Bluetooth is unsupported except for device discovery.
 //!
+//! ## Feature flags
+//! All features are enabled by default.
+//!
+//! * `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
+//! * `l2cap`: Enables L2CAP sockets.
+//!
 //! ## Basic usage
-//! Create a [Session] using [Session::new].
+//! Create a [Session] using [Session::new]; this establishes a connection to `bluetoothd`.
 //! Then obtain a Bluetooth adapter using [Session::adapter].
 //! From there on you can access most of the functionality using the methods provided by [Adapter].
+//!
+//! ## L2CAP sockets
+//! Refer to the [l2cap] module.
+//! No [Session] and therefore no running `bluetoothd` is required.
 //!
 //! [AsyncRead]: tokio::io::AsyncRead
 //! [AsyncWrite]: tokio::io::AsyncWrite
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "bluetoothd")]
 use dbus::{
     arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
     nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
     Path,
 };
+#[cfg(feature = "bluetoothd")]
 use hex::FromHex;
-use libbluetooth::bluetooth::{bdaddr_t, BDADDR_LE_PUBLIC, BDADDR_LE_RANDOM};
+#[cfg(feature = "bluetoothd")]
 use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
 use num_derive::FromPrimitive;
+#[cfg(feature = "bluetoothd")]
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
-    fmt::{self, Debug, Display, Formatter},
-    ops::{Deref, DerefMut},
-    os::unix::prelude::{FromRawFd, RawFd},
-    str::FromStr,
+    os::unix::io::{FromRawFd, RawFd},
     time::Duration,
 };
+use std::{
+    convert::TryInto,
+    fmt::{self, Debug, Display, Formatter},
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 use strum::{Display, EnumString};
+#[cfg(feature = "bluetoothd")]
 use tokio::{net::UnixStream, task::JoinError};
 
+#[cfg(feature = "bluetoothd")]
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
+#[cfg(feature = "bluetoothd")]
 pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
+#[cfg(feature = "bluetoothd")]
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
+// Redefine here to avoid dependency on libbluetooth for AddressType.
+pub(crate) const BDADDR_LE_PUBLIC: i32 = 0x01;
+pub(crate) const BDADDR_LE_RANDOM: i32 = 0x02;
+
+#[cfg(feature = "bluetoothd")]
 macro_rules! publish_path {
     ($path:expr) => {
         concat!("/io/crates/", env!("CARGO_PKG_NAME"), "/", $path)
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! dbus_interface {
     () => {
         #[allow(dead_code)]
@@ -136,6 +167,7 @@ macro_rules! dbus_interface {
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! dbus_default_interface {
     ($interface:expr) => {
         #[allow(dead_code)]
@@ -173,6 +205,7 @@ macro_rules! dbus_default_interface {
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
@@ -293,6 +326,7 @@ macro_rules! define_properties {
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! cr_property {
     ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
         $ib.property($dbus_name).get(|ctx, $obj| {
@@ -306,6 +340,7 @@ macro_rules! cr_property {
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! define_flags {
     ($name:ident, $doc:tt => {
         $(
@@ -349,29 +384,44 @@ macro_rules! define_flags {
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! read_prop {
     ($dict:expr, $name:expr, $type:ty) => {
         dbus::arg::prop_cast::<$type>($dict, $name).ok_or(MethodErr::invalid_arg($name))?.to_owned()
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 macro_rules! read_opt_prop {
     ($dict:expr, $name:expr, $type:ty) => {
         dbus::arg::prop_cast::<$type>($dict, $name).cloned()
     };
 }
 
+#[cfg(feature = "bluetoothd")]
 mod adapter;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod adv;
+#[cfg(feature = "bluetoothd")]
 mod device;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod gatt;
+#[cfg(feature = "l2cap")]
+#[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "bluetoothd")]
 mod session;
 
+#[cfg(feature = "bluetoothd")]
 pub use crate::{adapter::*, device::*, session::*};
+
 pub use uuid::Uuid;
 
 /// Bluetooth error.
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Error {
     /// Error kind.
@@ -381,6 +431,8 @@ pub struct Error {
 }
 
 /// Bluetooth error kind.
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
 #[non_exhaustive]
 pub enum ErrorKind {
@@ -450,6 +502,8 @@ pub enum ErrorKind {
 ///
 /// This is most likely caused by incompatibilities between this library
 /// and the version of the Bluetooth daemon.
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[non_exhaustive]
 pub enum InternalErrorKind {
@@ -471,12 +525,14 @@ pub enum InternalErrorKind {
     DBusConnectionLost,
 }
 
+#[cfg(feature = "bluetoothd")]
 impl Error {
     pub(crate) fn new(kind: ErrorKind) -> Self {
         Self { kind, message: String::new() }
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.message.is_empty() {
@@ -487,8 +543,10 @@ impl fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 impl std::error::Error for Error {}
 
+#[cfg(feature = "bluetoothd")]
 impl From<dbus::Error> for Error {
     fn from(err: dbus::Error) -> Self {
         log::trace!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
@@ -507,25 +565,37 @@ impl From<dbus::Error> for Error {
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 impl From<JoinError> for Error {
     fn from(err: JoinError) -> Self {
         Self { kind: ErrorKind::Internal(InternalErrorKind::JoinError), message: err.to_string() }
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 impl From<strum::ParseError> for Error {
     fn from(_: strum::ParseError) -> Self {
         Self { kind: ErrorKind::Internal(InternalErrorKind::InvalidValue), message: String::new() }
     }
 }
 
+#[cfg(feature = "bluetoothd")]
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Self { kind: ErrorKind::Internal(InternalErrorKind::Io(err.kind())), message: err.to_string() }
     }
 }
 
+#[cfg(feature = "bluetoothd")]
+impl From<InvalidAddress> for Error {
+    fn from(err: InvalidAddress) -> Self {
+        Self::new(ErrorKind::InvalidAddress(err.0))
+    }
+}
+
 /// Bluetooth result.
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Bluetooth address.
@@ -545,14 +615,16 @@ impl Address {
         Self([0; 6])
     }
 
-    /// Address as socket address type [bdaddr_t].
-    pub fn to_bdaddr(mut self) -> bdaddr_t {
+    /// Address as system socket address type.
+    #[cfg(feature = "l2cap")]
+    pub fn to_bdaddr(mut self) -> libbluetooth::bluetooth::bdaddr_t {
         self.0.reverse();
-        bdaddr_t { b: self.0 }
+        libbluetooth::bluetooth::bdaddr_t { b: self.0 }
     }
 
-    /// Address from socket address type [bdaddr_t].
-    pub fn from_bdaddr(mut addr: bdaddr_t) -> Self {
+    /// Address from system socket address type.
+    #[cfg(feature = "l2cap")]
+    pub fn from_bdaddr(mut addr: libbluetooth::bluetooth::bdaddr_t) -> Self {
         addr.b.reverse();
         Self(addr.b)
     }
@@ -588,15 +660,26 @@ impl Debug for Address {
     }
 }
 
-impl FromStr for Address {
-    type Err = Error;
+/// Invalid Bluetooth address error.
+#[derive(Debug, Clone)]
+pub struct InvalidAddress(String);
 
-    fn from_str(s: &str) -> Result<Self> {
+impl fmt::Display for InvalidAddress {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "invalid Bluetooth address: {}", &self.0)
+    }
+}
+
+impl std::error::Error for InvalidAddress {}
+
+impl FromStr for Address {
+    type Err = InvalidAddress;
+    fn from_str(s: &str) -> std::result::Result<Self, InvalidAddress> {
         let fields = s
             .split(':')
-            .map(|s| u8::from_str_radix(s, 16).map_err(|_| Error::new(ErrorKind::InvalidAddress(s.to_string()))))
-            .collect::<Result<Vec<_>>>()?;
-        Ok(Self(fields.try_into().map_err(|_| Error::new(ErrorKind::InvalidAddress(s.to_string())))?))
+            .map(|s| u8::from_str_radix(s, 16).map_err(|_| InvalidAddress(s.to_string())))
+            .collect::<std::result::Result<Vec<_>, InvalidAddress>>()?;
+        Ok(Self(fields.try_into().map_err(|_| InvalidAddress(s.to_string()))?))
     }
 }
 
@@ -630,6 +713,8 @@ impl Default for AddressType {
 }
 
 /// Linux kernel modalias information.
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Modalias {
     /// Source.
@@ -642,6 +727,7 @@ pub struct Modalias {
     pub device: u32,
 }
 
+#[cfg(feature = "bluetoothd")]
 impl FromStr for Modalias {
     type Err = Error;
 
@@ -667,6 +753,7 @@ impl FromStr for Modalias {
 }
 
 /// Gets all D-Bus objects from the BlueZ service.
+#[cfg(feature = "bluetoothd")]
 async fn all_dbus_objects(
     connection: &SyncConnection,
 ) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
@@ -675,6 +762,7 @@ async fn all_dbus_objects(
 }
 
 /// Read value from D-Bus dictionary.
+#[cfg(feature = "bluetoothd")]
 pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
@@ -682,6 +770,7 @@ pub(crate) fn read_dict<'a, T: 'static>(
 }
 
 /// Creates a UNIX socket pair.
+#[cfg(feature = "bluetoothd")]
 pub(crate) fn make_socket_pair() -> std::result::Result<(OwnedFd, UnixStream), std::io::Error> {
     let mut sv: [RawFd; 2] = [0; 2];
     unsafe {
@@ -698,6 +787,7 @@ pub(crate) fn make_socket_pair() -> std::result::Result<(OwnedFd, UnixStream), s
 }
 
 /// Returns the parent path of the specified D-Bus path.
+#[cfg(feature = "bluetoothd")]
 pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
     let mut comps: Vec<_> = path.split('/').collect();
     comps.pop();

@@ -99,6 +99,7 @@ impl Drop for SingleSessionToken {
 /// Bluetooth session.
 ///
 /// Encapsulates a connection to the system Bluetooth daemon.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub struct Session {
     inner: Arc<SessionInner>,
 }
@@ -110,6 +111,7 @@ impl Debug for Session {
 }
 
 /// Bluetooth session event.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SessionEvent {
     /// Adapter added.

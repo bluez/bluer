@@ -1,11 +1,10 @@
-//! L2CAP sockets.
+//! Logical Link Control and Adaptation Protocol (L2CAP) sockets.
 //!
 //! L2CAP sockets provide Bluetooth LE Connection Oriented Channels (CoC).
 //! This enables the efficient transfer of large data streams between two devices
 //! using socket-oriented programming.
 
 use crate::{Address, AddressType};
-use dbus::arg::OwnedFd;
 use futures::ready;
 use libbluetooth::{
     bluetooth::{
@@ -31,7 +30,7 @@ use std::{
     net::Shutdown,
     os::{
         raw::{c_int, c_ulong},
-        unix::prelude::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
+        unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     },
     pin::Pin,
     sync::Arc,
@@ -44,6 +43,40 @@ const BT_MODE: i32 = 15;
 #[repr(C)]
 struct bt_power {
     force_active: u8,
+}
+
+/// File descriptor that is closed on drop.
+struct OwnedFd {
+    fd: RawFd,
+    close_on_drop: bool,
+}
+
+impl OwnedFd {
+    /// Create new OwnedFd taking ownership of file descriptor.
+    pub unsafe fn new(fd: RawFd) -> Self {
+        Self { fd, close_on_drop: true }
+    }
+}
+
+impl AsRawFd for OwnedFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
+impl IntoRawFd for OwnedFd {
+    fn into_raw_fd(mut self) -> RawFd {
+        self.close_on_drop = false;
+        self.fd
+    }
+}
+
+impl Drop for OwnedFd {
+    fn drop(&mut self) {
+        if self.close_on_drop {
+            unsafe { libc::close(self.fd) };
+        }
+    }
 }
 
 /// First unprivileged protocol service multiplexor (PSM).
@@ -375,9 +408,9 @@ pub enum SecurityLevel {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Security {
     /// Level.
-    level: SecurityLevel,
+    pub level: SecurityLevel,
     /// Key size.
-    key_size: u8,
+    pub key_size: u8,
 }
 
 impl From<Security> for bt_security {

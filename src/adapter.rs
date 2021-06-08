@@ -28,6 +28,7 @@ pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PREFIX: &str = "/org/bluez/";
 
 /// Interface to a Bluetooth adapter.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone)]
 pub struct Adapter {
     inner: Arc<SessionInner>,
@@ -542,6 +543,7 @@ define_properties!(
 );
 
 /// Bluetooth adapter event.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug)]
 pub enum AdapterEvent {
     /// Bluetooth device with specified address was added.

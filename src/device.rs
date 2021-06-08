@@ -24,6 +24,7 @@ use crate::{
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
 
 /// Interface to a Bluetooth device.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone)]
 pub struct Device {
     inner: Arc<SessionInner>,

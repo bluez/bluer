@@ -11,8 +11,9 @@ since then become a full rewrite.
 Documentation has been mostly copied from the
 [BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
 also adapted where it makes sense.
+L2CAP sockets are presented using an API similar to Tokio networking.
 
-The following features are provided:
+The following functionality is provided:
 
 * Bluetooth adapters
     * enumeration
@@ -39,8 +40,21 @@ The following features are provided:
 * efficient event dispatching
     * not affected by D-Bus match rule count
     * O(1) in number of subscriptions
+* L2CAP sockets
+    * stream oriented
+    * sequential packet oriented
+    * datagram oriented
+    * async IO interface with [AsyncRead] and [AsyncWrite] support
 
 Classic Bluetooth is unsupported except for device discovery.
+
+Feature flags
+-------------
+All features are enabled by default.
+
+* `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
+  For building, D-Bus library headers must be installed.
+* `l2cap`: Enables L2CAP sockets.
 
 Requirements
 ------------
@@ -49,10 +63,10 @@ This library has been tested with BlueZ version 5.56.
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
 
-`bluetoothd` must be running and configured for access over D-Bus.
+If any `bluetoothd` feature is used the `bluetoothd` daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
-For building, D-Bus library headers must be installed.
+For building, D-Bus library headers must be installed if the `bluetoothd` feature is enabled.
 On Debian-based distributions install the package `libdbus-1-dev`.
 
 Troubleshooting
