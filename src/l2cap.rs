@@ -1,4 +1,8 @@
 //! L2CAP sockets.
+//!
+//! L2CAP sockets provide Bluetooth LE Connection Oriented Channels (CoC).
+//! This enables the efficient transfer of large data streams between two devices
+//! using socket-oriented programming.
 
 use crate::{Address, AddressType};
 use dbus::arg::OwnedFd;
@@ -12,8 +16,9 @@ use libbluetooth::{
     l2cap::sockaddr_l2,
 };
 use libc::{
-    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_DGRAM,
-    SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
+    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, FD_CLOEXEC, FIONBIO, F_SETFD, MSG_PEEK, SHUT_RD,
+    SHUT_RDWR, SHUT_WR, SOCK_CLOEXEC, SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH,
+    SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -33,6 +38,13 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
+
+// Native types missing in libbluetooth crate.
+const BT_MODE: i32 = 15;
+#[repr(C)]
+struct bt_power {
+    force_active: u8,
+}
 
 /// First unprivileged protocol service multiplexor (PSM).
 ///
@@ -75,7 +87,7 @@ impl From<SocketAddr> for sockaddr_l2 {
             l2_psm: (sa.psm as u16).to_le(),
             l2_cid: 0,
             l2_bdaddr: sa.addr.to_bdaddr(),
-            l2_bdaddr_type: sa.addr_type.into(),
+            l2_bdaddr_type: sa.addr_type as _,
         }
     }
 }
@@ -88,8 +100,8 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
         }
         Ok(Self {
             addr: Address::from_bdaddr(saddr.l2_bdaddr),
-            addr_type: AddressType::try_from(saddr.l2_bdaddr_type)
-                .map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
+            addr_type: AddressType::from_u8(saddr.l2_bdaddr_type)
+                .ok_or(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
             psm: u16::from_le(saddr.l2_psm)
                 .try_into()
                 .map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_psm"))?,
@@ -106,8 +118,12 @@ fn socket(ty: c_int) -> Result<OwnedFd> {
         fd => unsafe { OwnedFd::new(fd) },
     };
 
+    if unsafe { libc::fcntl(fd.as_raw_fd(), F_SETFD, FD_CLOEXEC) } == -1 {
+        return Err(Error::last_os_error());
+    }
+
     let mut nonblocking: c_int = 1;
-    if unsafe { libc::ioctl(fd.as_raw_fd(), libc::FIONBIO, &mut nonblocking) } == -1 {
+    if unsafe { libc::ioctl(fd.as_raw_fd(), FIONBIO, &mut nonblocking) } == -1 {
         return Err(Error::last_os_error());
     }
 
@@ -177,15 +193,10 @@ fn listen(socket: &OwnedFd, backlog: i32) -> Result<()> {
 /// The accepted socket is set into non-blocking mode.
 fn accept(socket: &OwnedFd) -> Result<(OwnedFd, SocketAddr)> {
     let mut saddr: MaybeUninit<sockaddr_l2> = MaybeUninit::uninit();
-    let mut length = size_of::<sockaddr_l2>() as libc::socklen_t;
+    let mut length = size_of::<sockaddr_l2>() as socklen_t;
 
     let fd = match unsafe {
-        libc::accept4(
-            socket.as_raw_fd(),
-            saddr.as_mut_ptr() as *mut _,
-            &mut length,
-            libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-        )
+        libc::accept4(socket.as_raw_fd(), saddr.as_mut_ptr() as *mut _, &mut length, SOCK_CLOEXEC | SOCK_NONBLOCK)
     } {
         -1 => return Err(Error::last_os_error()),
         fd => unsafe { OwnedFd::new(fd) },
@@ -263,7 +274,7 @@ fn recv(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<usize> {
 fn recvfrom(socket: &OwnedFd, buf: &mut ReadBuf, flags: c_int) -> Result<(usize, SocketAddr)> {
     let unfilled = unsafe { buf.unfilled_mut() };
     let mut saddr: MaybeUninit<sockaddr_l2> = MaybeUninit::uninit();
-    let mut length = size_of::<sockaddr_l2>() as libc::socklen_t;
+    let mut length = size_of::<sockaddr_l2>() as socklen_t;
     match unsafe {
         libc::recvfrom(
             socket.as_raw_fd(),
@@ -394,13 +405,6 @@ pub enum FlowControl {
     /// Extended flow control.
     Extended = 0x04,
 }
-
-#[repr(C)]
-struct bt_power {
-    force_active: u8,
-}
-
-const BT_MODE: i32 = 15;
 
 /// An L2CAP socket that has not yet been converted to a [StreamListener], [Stream], [SeqPacketListener],
 /// [SeqPacket] or [Datagram].

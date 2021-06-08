@@ -54,6 +54,7 @@ use dbus::{
 use hex::FromHex;
 use libbluetooth::bluetooth::{bdaddr_t, BDADDR_LE_PUBLIC, BDADDR_LE_RANDOM};
 use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
+use num_derive::FromPrimitive;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -612,40 +613,19 @@ impl From<Address> for [u8; 6] {
 }
 
 /// Bluetooth device address type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
 pub enum AddressType {
     /// Public address
     #[strum(serialize = "public")]
-    Public,
+    Public = BDADDR_LE_PUBLIC as _,
     /// Random address
     #[strum(serialize = "random")]
-    Random,
+    Random = BDADDR_LE_RANDOM as _,
 }
 
 impl Default for AddressType {
     fn default() -> Self {
         Self::Public
-    }
-}
-
-impl From<AddressType> for u8 {
-    fn from(addr_type: AddressType) -> Self {
-        match addr_type {
-            AddressType::Public => BDADDR_LE_PUBLIC.try_into().unwrap(),
-            AddressType::Random => BDADDR_LE_RANDOM.try_into().unwrap(),
-        }
-    }
-}
-
-impl TryFrom<u8> for AddressType {
-    type Error = u8;
-
-    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
-        match value.into() {
-            BDADDR_LE_PUBLIC => Ok(Self::Public),
-            BDADDR_LE_RANDOM => Ok(Self::Random),
-            _ => Err(value),
-        }
     }
 }
 
