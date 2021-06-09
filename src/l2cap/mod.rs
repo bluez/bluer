@@ -144,7 +144,7 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
     }
 }
 
-/// Creates a L2CAP socket of the specified type and returns its file descriptors.
+/// Creates a L2CAP socket of the specified type and returns its file descriptor.
 ///
 /// The socket is set to non-blocking mode.
 fn socket(ty: c_int) -> Result<OwnedFd> {

@@ -1,4 +1,4 @@
-//! Opens a listening L2CAP socket and accepts connections.
+//! Opens a listening L2CAP socket, accepts connections and echos incoming data.
 
 use blez::{
     adv::Advertisement,
@@ -6,11 +6,13 @@ use blez::{
 };
 use std::time::Duration;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     time::sleep,
 };
 
-include!("gatt.inc");
+const SERVICE_UUID: uuid::Uuid = uuid::Uuid::from_u128(0xFEED0000F00D);
+
+include!("l2cap.inc");
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blez::Result<()> {
@@ -35,19 +37,19 @@ async fn main() -> blez::Result<()> {
     };
     let adv_handle = adapter.advertise(le_advertisement).await?;
 
-    let psm = PSM_DYN_START + 5;
-    println!("Listening on PSM {}. Press enter to quit.", psm);
-
-    let local_sa = SocketAddr { addr: adapter_addr, addr_type: adapter_addr_type, psm };
+    let local_sa = SocketAddr { addr: adapter_addr, addr_type: adapter_addr_type, psm: PSM };
     let listener = StreamListener::bind(local_sa).await?;
 
+    println!("addr: {:?}", &listener.as_ref().local_addr()?);
+
+    println!("Listening on PSM {}. Press enter to quit.", PSM);
     let stdin = BufReader::new(tokio::io::stdin());
     let mut lines = stdin.lines();
 
     loop {
-        println!("Waiting for connection...");
+        println!("\nWaiting for connection...");
 
-        let (stream, sa) = tokio::select! {
+        let (mut stream, sa) = tokio::select! {
             l = listener.accept() => {
                 match l {
                     Ok(v) => v,
@@ -60,7 +62,34 @@ async fn main() -> blez::Result<()> {
         };
 
         println!("Accepted connection from {:?}", &sa);
-        sleep(Duration::from_secs(5)).await;
+
+        println!("Sending hello");
+        if let Err(err) = stream.write_all(HELLO_MSG).await {
+            println!("Write failed: {}", &err);
+            continue;
+        }
+
+        loop {
+            let mut buf = [0; 100];
+            let n = match stream.read(&mut buf).await {
+                Ok(0) => {
+                    println!("Stream ended");
+                    break;
+                }
+                Ok(n) => n,
+                Err(err) => {
+                    println!("Read failed: {}", &err);
+                    continue;
+                }
+            };
+            let buf = &buf[..n];
+
+            println!("Echoing {} bytes", buf.len());
+            if let Err(err) = stream.write_all(&buf).await {
+                println!("Write failed: {}", &err);
+                continue;
+            }
+        }
     }
 
     println!("Removing advertisement");
