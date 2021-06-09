@@ -26,9 +26,13 @@ async fn main() -> blez::Result<()> {
     println!("Connecting to {:?}", &target_sa);
     let mut stream = Stream::connect(target_sa).await.expect("connection failed");
     println!("Local address: {:?}", stream.as_ref().local_addr()?);
-    println!("Remote address: {:?}", stream.as_ref().remote_addr()?);
+    println!("Remote address: {:?}", stream.peer_addr()?);
+    println!("Send MTU: {}", stream.as_ref().send_mtu()?);
+    println!("Recv MTU: {}", stream.as_ref().recv_mtu()?);
+    println!("Security: {:?}", stream.as_ref().security()?);
+    // println!("Flow control: {:?}", stream.as_ref().flow_control()?);
 
-    println!("Receiving hello");
+    println!("\nReceiving hello");
     let mut hello_buf = [0u8; HELLO_MSG.len()];
     stream.read_exact(&mut hello_buf).await.expect("read failed");
     println!("Received: {}", String::from_utf8_lossy(&hello_buf));
@@ -37,7 +41,7 @@ async fn main() -> blez::Result<()> {
     }
 
     let mut rng = rand::thread_rng();
-    for i in 0..100 {
+    for i in 0..15 {
         let len = rng.gen_range(0..1000);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 

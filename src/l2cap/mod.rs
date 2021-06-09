@@ -100,6 +100,8 @@ pub struct SocketAddr {
     ///
     /// Listening on a PSM below [PSM_DYN_START] requires the
     /// `CAP_NET_BIND_SERVICE` capability.
+    ///
+    /// Set to 0 for listening to assign an available PSM.
     pub psm: u8,
 }
 

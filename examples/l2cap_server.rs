@@ -40,9 +40,7 @@ async fn main() -> blez::Result<()> {
     let local_sa = SocketAddr { addr: adapter_addr, addr_type: adapter_addr_type, psm: PSM };
     let listener = StreamListener::bind(local_sa).await?;
 
-    println!("addr: {:?}", &listener.as_ref().local_addr()?);
-
-    println!("Listening on PSM {}. Press enter to quit.", PSM);
+    println!("Listening on PSM {}. Press enter to quit.", listener.as_ref().local_addr()?.psm);
     let stdin = BufReader::new(tokio::io::stdin());
     let mut lines = stdin.lines();
 

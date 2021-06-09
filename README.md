@@ -97,6 +97,10 @@ The following example applications are provided.
 
   - **gatt_server_io**: Corresponding GATT server implemented using IO programming model.
 
+  - **l2cap_client**: Simple L2CAP socket client that connects to a socket and sends and receives test data.
+
+  - **l2cap_server**: Corresponding L2CAP socket server that echos received data.
+
   - **le_advertise**: Register Bluetooth LE advertisement.
 
   - **list_adapters**: List installed Bluetooth adapters and their properties.
