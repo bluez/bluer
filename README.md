@@ -87,8 +87,6 @@ Refer to the [API documentation](https://docs.rs/blez) and
 
 The following example applications are provided.
 
-  - **device_monitor**: Scans for and monitors Bluetooth devices similar to `top`.
-
   - **discover_devices**: Discover Bluetooth devices and print their properties.
 
   - **gatt_client**: Simple GATT client that calls read, write and notify on a characteristic.
@@ -106,4 +104,17 @@ The following example applications are provided.
   - **list_adapters**: List installed Bluetooth adapters and their properties.
 
 Use `cargo run --example <name>` to run a particular example application.
+
+Tools
+-----
+
+The following tools are included and also serve as examples.
+
+  - **blemon**: Scans for and monitors Bluetooth LE devices similar to `top`.
+
+  - **gattcat**: netcat-like for GATT characteristics.
+
+  - **l2cat**: netcat-like for L2CAP sockets.
+
+Use `cargo install blez --example <name>` to install a tool on your system.
 

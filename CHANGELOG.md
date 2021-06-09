@@ -10,12 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `l2cap_client` and `l2cap_server` examples.
 - `send`, `try_send` and `sendable` methods on `CharacteristicWriter`.
 - `recv`, `try_recv` and `recvable` methods on `CharacteristicReader`.
-- `l2cat` tool.
+- `l2cat` and `gattcat` examples.
 ### Changed
 - Allow data larger than MTU when using `AsyncWrite` on `CharacteristicWriter`.
 - Allow buffers smaller than MTU when using `AsyncRead` on `CharacteristicReader`.
 - Provide `AsRawFd` and `IntoRawFd` on `CharacteristicReader` and `CharacteristicWriter`
   instead of UNIX socket access.
+- close notification for `CharacteristicWriter`.
 
 ## 0.8.1 - 2021-06-06
 ### Added

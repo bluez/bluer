@@ -33,7 +33,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Clap)]
 #[clap(
-    name = "charcat",
+    name = "gattcat",
     about = "Arbitrary GATT characteristic connections and listens.",
     author = "Sebastian Urban <surban@surban.net>"
 )]
