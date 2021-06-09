@@ -194,7 +194,7 @@ impl Session {
 
     /// Stream adapter added and removed events.
     pub async fn events(&self) -> Result<impl Stream<Item = SessionEvent>> {
-        let obj_events = self.inner.events(adapter::PREFIX.into(), true).await?;
+        let obj_events = self.inner.events(adapter::PATH.into(), true).await?;
         let events = obj_events.filter_map(|evt| async move {
             match evt {
                 Event::ObjectAdded { object, interfaces }

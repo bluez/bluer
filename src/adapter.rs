@@ -25,6 +25,7 @@ use crate::{
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
+pub(crate) const PATH: &str = "/org/bluez";
 pub(crate) const PREFIX: &str = "/org/bluez/";
 
 /// Interface to a Bluetooth adapter.
