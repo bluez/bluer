@@ -9,7 +9,7 @@ use blez::{
         },
         remote, CharacteristicReader, CharacteristicWriter,
     },
-    Adapter, AdapterEvent, Address, Device, Session, Uuid,
+    Adapter, AdapterEvent, Address, Device, Session, SessionEvent, Uuid,
 };
 use bytes::BytesMut;
 use clap::Clap;
@@ -234,6 +234,9 @@ struct ListenOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
+    /// Print listen and peer address to standard error.
+    #[clap(long, short)]
+    verbose: bool,
     /// Switch the terminal into raw mode when input is a TTY.
     #[clap(long)]
     raw: bool,
@@ -253,6 +256,10 @@ impl ListenOpts {
         let (_session, adapter) = get_session_adapter(self.bind).await?;
         let (_adv, _app, mut control) =
             make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
+
+        if self.verbose {
+            println!("Serving on {}", adapter.address().await?);
+        }
 
         let is_tty = std::io::stdin().is_tty();
         let in_raw = if is_tty && self.raw {
@@ -307,9 +314,28 @@ impl ServeOpts {
     pub async fn perform(self) -> Result<()> {
         use tab_pty_process::CommandExt;
 
-        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let (session, adapter) = get_session_adapter(self.bind).await?;
         let (_adv, _app, mut control) =
             make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
+
+        if self.verbose {
+            println!("Serving on {}", adapter.address().await?);
+        }
+
+        let adapter_name = adapter.name().to_string();
+        let events = session.events().await?;
+        tokio::spawn(async move {
+            pin_mut!(events);
+            loop {
+                match events.next().await {
+                    Some(SessionEvent::AdapterRemoved(name)) if name == adapter_name => break,
+                    None => break,
+                    _ => (),
+                }
+            }
+            eprintln!("Adapter was disconnected or bluetoothd crashed");
+            exit(3);
+        });
 
         loop {
             let mut rh = None;
@@ -441,6 +467,7 @@ async fn io_loop_serve(
     is_std: bool, rh_required: bool, pin_required: bool,
 ) -> Result<()> {
     let mut rh_closed = false;
+    let mut wh_closed = false;
 
     let mut pin = Some(pin);
     let mut pout = Some(pout);
@@ -452,6 +479,9 @@ async fn io_loop_serve(
         if pin_required && pin.is_none() {
             break;
         }
+        if wh_closed {
+            break;
+        }
 
         let mtu = match (&rh, &wh) {
             (Some(rh), _) => rh.mtu(),
@@ -461,6 +491,7 @@ async fn io_loop_serve(
         let mut recv_buf = BytesMut::with_capacity(mtu as usize);
         let mut pin_buf = BytesMut::with_capacity(mtu as usize);
 
+        let wh_present = wh.is_some();
         select! {
             evt = control.next() => {
                 match evt {
@@ -501,7 +532,7 @@ async fn io_loop_serve(
             },
             res = async {
                 match pin.as_mut() {
-                    Some(pin) if wh.is_some() => pin.read_buf(&mut pin_buf).await,
+                    Some(pin) if wh_present => pin.read_buf(&mut pin_buf).await,
                     _ => future::pending().await,
                 }
             } => {
@@ -522,6 +553,17 @@ async fn io_loop_serve(
                         }
                     }
                 }
+            },
+            res = async {
+                match wh.as_mut() {
+                    Some(wh) => wh.wait_closed().await,
+                    None => future::pending().await,
+                }
+            } => {
+                res.unwrap();
+                log::debug!("remote writer closed");
+                wh = None;
+                wh_closed = true;
             },
         }
     }
