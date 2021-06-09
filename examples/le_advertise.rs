@@ -14,6 +14,7 @@ async fn main() -> blez::Result<()> {
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
+    adapter.set_powered(true).await?;
 
     println!("Advertising on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
     let le_advertisement = Advertisement {

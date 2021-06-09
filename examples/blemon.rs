@@ -178,6 +178,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     let adapter = session.adapter(&adapter_name)?;
+    adapter.set_powered(true).await?;
     DeviceMonitor::run(adapter).await?;
 
     Ok(())

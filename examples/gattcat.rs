@@ -580,6 +580,7 @@ async fn get_session_adapter(addr: Option<Address>) -> Result<(Session, Adapter)
             for adapter_name in adapter_names {
                 let adapter = session.adapter(&adapter_name)?;
                 if adapter.address().await? == addr {
+                    adapter.set_powered(true).await?;
                     return Ok((session, adapter));
                 }
             }
@@ -588,6 +589,7 @@ async fn get_session_adapter(addr: Option<Address>) -> Result<(Session, Adapter)
         None => {
             let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
             let adapter = session.adapter(&adapter_name)?;
+            adapter.set_powered(true).await?;
             Ok((session, adapter))
         }
     }

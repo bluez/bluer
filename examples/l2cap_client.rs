@@ -13,6 +13,11 @@ include!("l2cap.inc");
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> blez::Result<()> {
     env_logger::init();
+    let session = blez::Session::new().await?;
+    let adapter_names = session.adapter_names().await?;
+    let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
+    let adapter = session.adapter(&adapter_name)?;
+    adapter.set_powered(true).await?;
 
     let args: Vec<_> = env::args().collect();
     if args.len() != 2 {
