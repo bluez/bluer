@@ -887,8 +887,10 @@ impl RegisteredCharacteristic {
                         match &reg.c.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
                                 let (tx, rx) = oneshot::channel();
+                                // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
+                                let mtu = options.mtu.saturating_sub(5);
                                 let req =
-                                    CharacteristicWriteIoRequest { mtu: options.mtu, link: options.link, tx };
+                                    CharacteristicWriteIoRequest { mtu, link: options.link, tx };
                                 reg.c
                                     .control_handle
                                     .events_tx
@@ -915,7 +917,9 @@ impl RegisteredCharacteristic {
                                 // BlueZ has already confirmed the start of the notification session.
                                 // So there is no point in making this fail-able by our users.
                                 let (fd, stream) = make_socket_pair().map_err(|_| ReqError::Failed)?;
-                                let writer = CharacteristicWriter { mtu: options.mtu.into(), stream };
+                                // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
+                                let mtu = options.mtu.saturating_sub(5).into();
+                                let writer = CharacteristicWriter { mtu, stream };
                                 let _ = reg
                                     .c
                                     .control_handle
