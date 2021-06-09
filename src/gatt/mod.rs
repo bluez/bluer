@@ -225,6 +225,21 @@ impl CharacteristicWriter {
         self.mtu
     }
 
+    /// Waits for the remote device to stop the notification session.
+    pub async fn wait_closed(&self) -> std::io::Result<()> {
+        self.stream.readable().await
+    }
+
+    /// Checks if the remote device has stopped the notification session.
+    pub fn is_closed(&self) -> std::io::Result<bool> {
+        let mut buf = [0u8];
+        match self.stream.try_read(&mut buf) {
+            Ok(_) => Ok(true),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Waits for send space to become available.
     pub async fn sendable(&self) -> std::io::Result<()> {
         self.stream.writable().await
