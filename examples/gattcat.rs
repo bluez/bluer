@@ -340,19 +340,22 @@ impl ServeOpts {
         loop {
             let mut rh = None;
             let mut wh = None;
+            let mtu;
 
             match control.next().await {
                 Some(CharacteristicControlEvent::Write(req)) => {
+                    mtu = req.mtu();
                     rh = Some(req.accept()?);
                 }
                 Some(CharacteristicControlEvent::Notify(notifier)) => {
+                    mtu = notifier.mtu();
                     wh = Some(notifier);
                 }
                 None => break,
             }
 
             if self.verbose {
-                eprintln!("Connected");
+                eprintln!("Connected with MTU {} bytes", mtu);
             }
 
             if self.pty {
