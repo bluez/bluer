@@ -66,21 +66,15 @@
 
 #[cfg(feature = "bluetoothd")]
 use dbus::{
-    arg::{prop_cast, OwnedFd, PropMap, RefArg, Variant},
+    arg::{prop_cast, PropMap, RefArg, Variant},
     nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
     Path,
 };
 #[cfg(feature = "bluetoothd")]
 use hex::FromHex;
-#[cfg(feature = "bluetoothd")]
-use libc::{c_int, socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
-use std::{
-    collections::HashMap,
-    os::unix::io::{FromRawFd, RawFd},
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 use std::{
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
@@ -89,7 +83,7 @@ use std::{
 };
 use strum::{Display, EnumString};
 #[cfg(feature = "bluetoothd")]
-use tokio::{net::UnixStream, task::JoinError};
+use tokio::task::JoinError;
 
 #[cfg(feature = "bluetoothd")]
 pub(crate) const SERVICE_NAME: &str = "org.bluez";
@@ -770,23 +764,6 @@ pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
     prop_cast(dict, key).ok_or(Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))
-}
-
-/// Creates a UNIX socket pair.
-#[cfg(feature = "bluetoothd")]
-pub(crate) fn make_socket_pair() -> std::result::Result<(OwnedFd, UnixStream), std::io::Error> {
-    let mut sv: [RawFd; 2] = [0; 2];
-    unsafe {
-        if socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int) == -1 {
-            return Err(std::io::Error::last_os_error());
-        }
-    }
-    let [fd1, fd2] = sv;
-
-    let fd1 = unsafe { OwnedFd::new(fd1) };
-    let us = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) })?;
-
-    Ok((fd1, us))
 }
 
 /// Returns the parent path of the specified D-Bus path.

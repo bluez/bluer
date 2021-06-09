@@ -1,10 +1,15 @@
 //! Local and remote GATT services.
 
+use dbus::arg::OwnedFd;
 use futures::ready;
+use libc::{socketpair, AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
 use pin_project::pin_project;
 use std::{
     mem::MaybeUninit,
-    os::unix::prelude::{AsRawFd, IntoRawFd, RawFd},
+    os::{
+        raw::c_int,
+        unix::prelude::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
+    },
     pin::Pin,
     task::{Context, Poll},
 };
@@ -292,4 +297,20 @@ impl IntoRawFd for CharacteristicWriter {
     fn into_raw_fd(self) -> RawFd {
         self.into_raw_fd().expect("into_raw_fd failed")
     }
+}
+
+/// Creates a UNIX socket pair for communication with bluetoothd.
+pub(crate) fn make_socket_pair() -> std::io::Result<(OwnedFd, UnixStream)> {
+    let mut sv: [RawFd; 2] = [0; 2];
+    unsafe {
+        if socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int) == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    let [fd1, fd2] = sv;
+
+    let fd1 = unsafe { OwnedFd::new(fd1) };
+    let us = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) })?;
+
+    Ok((fd1, us))
 }

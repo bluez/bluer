@@ -26,13 +26,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
+    make_socket_pair, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
-use crate::{
-    make_socket_pair, parent_path, Adapter, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME,
-    TIMEOUT,
-};
+use crate::{parent_path, Adapter, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 
