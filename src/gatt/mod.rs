@@ -4,6 +4,7 @@ use futures::ready;
 use pin_project::pin_project;
 use std::{
     mem::MaybeUninit,
+    os::unix::prelude::{AsRawFd, IntoRawFd, RawFd},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -100,11 +101,6 @@ impl Default for WriteOp {
 }
 
 /// Streams data from a characteristic with low overhead.
-///
-/// When using the [AsyncRead] trait and a buffer of size less than [CharacteristicReader::mtu] bytes
-/// is provided, the received characteristic value will be split over multiple
-/// read operations.
-/// For best efficiency provide a buffer of at least [CharacteristicReader::mtu] bytes.
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicReader {
@@ -120,39 +116,48 @@ impl CharacteristicReader {
         self.mtu
     }
 
-    /// Gets the underlying UNIX socket.
-    pub fn get(&self) -> &UnixStream {
-        &self.stream
+    /// Wait for a new characteristic value to become available.
+    pub async fn recvable(&self) -> std::io::Result<()> {
+        self.stream.readable().await
     }
 
-    /// Gets the underlying UNIX socket mutably.
-    pub fn get_mut(&mut self) -> &mut UnixStream {
-        &mut self.stream
-    }
-
-    /// Transforms the reader into the underlying UNIX socket.
-    pub fn into_inner(self) -> UnixStream {
-        self.stream
+    /// Try to receive the characteristic value from a single notify or write operation.
+    ///
+    /// Does not wait for new data to arrive.
+    pub fn try_recv(&self) -> std::io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(self.mtu);
+        let n = self.stream.try_read_buf(&mut buf)?;
+        buf.truncate(n);
+        Ok(buf)
     }
 
     /// Receive the characteristic value from a single notify or write operation.
+    ///
+    /// Waits for data to arrive.
     pub async fn recv(&self) -> std::io::Result<Vec<u8>> {
         loop {
-            self.stream.readable().await?;
-            let mut buf = Vec::with_capacity(self.mtu);
-            match self.stream.try_read_buf(&mut buf) {
-                Ok(n) => {
-                    buf.truncate(n);
-                    return Ok(buf);
-                }
+            self.recvable().await?;
+            match self.try_recv() {
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(err) => return Err(err),
+                res => return res,
             }
         }
+    }
+
+    /// Consumes this object, returning the raw underlying file descriptor.
+    pub fn into_raw_fd(self) -> std::io::Result<RawFd> {
+        Ok(self.stream.into_std()?.into_raw_fd())
     }
 }
 
 impl AsyncRead for CharacteristicReader {
+    /// Attempts to read from the characteristic value stream into `buf`.
+    ///
+    /// When a buffer of size less than [mtu] bytes is provided, the received
+    /// characteristic value will be buffered internally and split over multiple read operations.
+    /// Thus, for best efficiency, provide a buffer of at least [mtu] bytes.
+    ///
+    /// [mtu]: CharacteristicReader::mtu
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<std::io::Result<()>> {
         let buf_space = buf.remaining();
         if !self.buf.is_empty() {
@@ -188,10 +193,19 @@ impl AsyncRead for CharacteristicReader {
     }
 }
 
+impl AsRawFd for CharacteristicReader {
+    fn as_raw_fd(&self) -> RawFd {
+        self.stream.as_raw_fd()
+    }
+}
+
+impl IntoRawFd for CharacteristicReader {
+    fn into_raw_fd(self) -> RawFd {
+        self.into_raw_fd().expect("into_raw_fd failed")
+    }
+}
+
 /// Streams data to a characteristic with low overhead.
-///
-/// When using the [AsyncWrite] trait, a single write operation will send no more than
-/// [CharacteristicWriter::mtu] bytes.
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicWriter {
@@ -206,41 +220,53 @@ impl CharacteristicWriter {
         self.mtu
     }
 
-    /// Gets the underlying UNIX socket.
-    pub fn get(&self) -> &UnixStream {
-        &self.stream
+    /// Waits for send space to become available.
+    pub async fn sendable(&self) -> std::io::Result<()> {
+        self.stream.writable().await
     }
 
-    /// Gets the underlying UNIX socket mutably.
-    pub fn get_mut(&mut self) -> &mut UnixStream {
-        &mut self.stream
-    }
-
-    /// Transforms the writer into the underlying UNIX socket.
-    pub fn into_inner(self) -> UnixStream {
-        self.stream
+    /// Tries to send the characteristic value using a single write or notify operation.
+    ///
+    /// The length of `buf` must not exceed [Self::mtu].
+    ///
+    /// Does not wait for send space to become available.
+    pub fn try_send(&self, buf: &[u8]) -> std::io::Result<()> {
+        if buf.len() > self.mtu {
+            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "data length exceeds MTU"));
+        }
+        match self.stream.try_write(buf) {
+            Ok(n) if n == buf.len() => Ok(()),
+            Ok(_) => Err(std::io::Error::new(std::io::ErrorKind::Other, "partial write occured")),
+            Err(err) => Err(err),
+        }
     }
 
     /// Send the characteristic value using a single write or notify operation.
     ///
-    /// The length of `buf` must not exceed [CharacteristicWriter::mtu].
+    /// The length of `buf` must not exceed [Self::mtu].
+    ///
+    /// Waits for send space to become available.
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<()> {
-        if buf.len() > self.mtu {
-            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "data length exceeds MTU"));
-        }
         loop {
-            self.stream.writable().await?;
-            match self.stream.try_write(buf) {
-                Ok(n) if n == buf.len() => return Ok(()),
-                Ok(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, "partial write occured")),
+            self.sendable().await?;
+            match self.try_send(buf) {
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(err) => return Err(err),
+                res => return res,
             }
         }
+    }
+
+    /// Consumes this object, returning the raw underlying file descriptor.
+    pub fn into_raw_fd(self) -> std::io::Result<RawFd> {
+        Ok(self.stream.into_std()?.into_raw_fd())
     }
 }
 
 impl AsyncWrite for CharacteristicWriter {
+    /// Attempt to write bytes from `buf` into the characteristic value stream.
+    ///
+    /// A single write operation will send no more than [mtu](CharacteristicWriter::mtu) bytes.
+    /// However, attempting to send a larger buffer will not result in an error but a partial send.
     fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
         let max_len = buf.len().min(self.mtu);
         let buf = &buf[..max_len];
@@ -253,5 +279,17 @@ impl AsyncWrite for CharacteristicWriter {
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         self.project().stream.poll_shutdown(cx)
+    }
+}
+
+impl AsRawFd for CharacteristicWriter {
+    fn as_raw_fd(&self) -> RawFd {
+        self.stream.as_raw_fd()
+    }
+}
+
+impl IntoRawFd for CharacteristicWriter {
+    fn into_raw_fd(self) -> RawFd {
+        self.into_raw_fd().expect("into_raw_fd failed")
     }
 }

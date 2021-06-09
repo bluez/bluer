@@ -665,7 +665,7 @@ impl Debug for Address {
 
 /// Invalid Bluetooth address error.
 #[derive(Debug, Clone)]
-pub struct InvalidAddress(String);
+pub struct InvalidAddress(pub String);
 
 impl fmt::Display for InvalidAddress {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
