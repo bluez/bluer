@@ -15,9 +15,9 @@ use libbluetooth::{
     l2cap::sockaddr_l2,
 };
 use libc::{
-    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, FD_CLOEXEC, FIONBIO, F_SETFD, MSG_PEEK, SHUT_RD,
-    SHUT_RDWR, SHUT_WR, SOCK_CLOEXEC, SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH,
-    SOL_SOCKET, SO_ERROR, TIOCINQ, TIOCOUTQ,
+    sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_CLOEXEC,
+    SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ,
+    TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -148,20 +148,10 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
 ///
 /// The socket is set to non-blocking mode.
 fn socket(ty: c_int) -> Result<OwnedFd> {
-    let fd = match unsafe { libc::socket(AF_BLUETOOTH, ty, BTPROTO_L2CAP) } {
+    let fd = match unsafe { libc::socket(AF_BLUETOOTH, ty | SOCK_NONBLOCK | SOCK_CLOEXEC, BTPROTO_L2CAP) } {
         -1 => return Err(Error::last_os_error()),
         fd => unsafe { OwnedFd::new(fd) },
     };
-
-    if unsafe { libc::fcntl(fd.as_raw_fd(), F_SETFD, FD_CLOEXEC) } == -1 {
-        return Err(Error::last_os_error());
-    }
-
-    let mut nonblocking: c_int = 1;
-    if unsafe { libc::ioctl(fd.as_raw_fd(), FIONBIO, &mut nonblocking) } == -1 {
-        return Err(Error::last_os_error());
-    }
-
     Ok(fd)
 }
 
