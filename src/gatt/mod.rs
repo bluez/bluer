@@ -187,7 +187,7 @@ impl AsyncRead for CharacteristicReader {
 
                 // Then fill provided buffer appropriately and keep the rest in
                 // our internal buffer.
-                *this.buf = mtu_buf.split_off(buf_space);
+                *this.buf = mtu_buf.split_off(buf_space.min(n));
                 buf.put_slice(&mtu_buf);
 
                 Poll::Ready(Ok(()))
