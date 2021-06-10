@@ -103,7 +103,10 @@ async fn main() -> blez::Result<()> {
                     }
                     Ok(n) => {
                         let value = read_buf[..n].to_vec();
-                        println!("Echoing {} bytes", value.len());
+                        println!("Echoing {} bytes: {:x?} ... {:x?}", value.len(), &value[0..4.min(value.len())], &value[value.len().saturating_sub(4) ..]);
+                        if value.len() < 512 {
+                            println!();
+                        }
                         if let Err(err) = writer_opt.as_mut().unwrap().write_all(&value).await {
                             println!("Write failed: {}", &err);
                             writer_opt = None;

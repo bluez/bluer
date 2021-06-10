@@ -72,7 +72,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     while let Ok(Ok(_)) = timeout(Duration::from_secs(1), notify_io.read(&mut buf)).await {}
 
     let mut rng = rand::thread_rng();
-    for i in 0..128 {
+    for i in 0..1024 {
         let len = rng.gen_range(0..20000);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
@@ -104,11 +104,23 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
             println!("Send data:     {:x?}", &data);
             println!("Received data: {:x?}", &echo_buf);
             println!();
+            println!("By 512 blocks:");
+            for (sent, recv) in data.chunks(512).zip(echo_buf.chunks(512)) {
+                println!();
+                println!(
+                    "Send: {:x?} ... {:x?}",
+                    &sent[0..4.min(sent.len())],
+                    &sent[sent.len().saturating_sub(4)..]
+                );
+                println!(
+                    "Recv: {:x?} ... {:x?}",
+                    &recv[0..4.min(recv.len())],
+                    &recv[recv.len().saturating_sub(4)..]
+                );
+            }
+            println!();
 
-            return Err(blez::Error {
-                kind: blez::ErrorKind::Internal(blez::InternalErrorKind::InvalidValue),
-                message: "echoed data does not match sent data".to_string(),
-            });
+            panic!("echoed data does not match sent data");
         }
         println!("    Data matches");
     }
