@@ -33,7 +33,10 @@ use std::{
         unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     },
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
@@ -502,6 +505,10 @@ impl<Type> Socket<Type> {
     /// Get maximum transmission unit (MTU) for sending.
     ///
     /// This corresponds to the `BT_SNDMTU` socket option.
+    ///
+    /// Note that this value may not be available directly after an connection
+    /// has been established and this function will return an error.
+    /// In this case, try re-querying the MTU after send or receiving some data.
     pub fn send_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_SNDMTU)
     }
@@ -874,14 +881,13 @@ impl AsRawFd for StreamListener {
 #[derive(Debug)]
 pub struct Stream {
     socket: Socket<Stream>,
-    send_mtu: usize,
+    send_mtu: AtomicUsize,
 }
 
 impl Stream {
     /// Create Stream from Socket.
     fn from_socket(socket: Socket<Stream>) -> Result<Self> {
-        let send_mtu = socket.send_mtu()?.into();
-        Ok(Self { socket, send_mtu })
+        Ok(Self { socket, send_mtu: 0.into() })
     }
 
     /// Establish a stream connection with a peer at the specified socket address.
@@ -933,7 +939,30 @@ impl Stream {
     fn poll_write_priv(&self, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         // Trying to send more than the MTU on an L2CAP socket results in an error,
         // disregarding stream socket semantics. Thus we truncate the send buffer appropriately.
-        let max_len = buf.len().min(self.send_mtu);
+        // Note that no data is lost, since we return the number of actually transmitted
+        // bytes and a partial write is perfectly legal.
+        //
+        // Additionally, the send MTU may not be available when the connection is
+        // established. We handle this by assuming an MTU of 16 until it becomes
+        // available.
+        let send_mtu = {
+            match self.send_mtu.load(Ordering::Acquire) {
+                0 => match self.socket.send_mtu() {
+                    Ok(mtu) => {
+                        let mtu = mtu.into();
+                        log::trace!("Obtained send MTU {}", mtu);
+                        self.send_mtu.store(mtu, Ordering::Release);
+                        mtu
+                    }
+                    Err(_) => {
+                        log::trace!("Send MTU not yet available, assuming 16");
+                        16
+                    }
+                },
+                mtu => mtu,
+            }
+        };
+        let max_len = buf.len().min(send_mtu);
         let buf = &buf[..max_len];
 
         self.socket.poll_send_priv(cx, buf)
