@@ -226,7 +226,7 @@ impl CharacteristicWriter {
     }
 
     /// Waits for the remote device to stop the notification session.
-    pub async fn wait_closed(&self) -> std::io::Result<()> {
+    pub async fn closed(&self) -> std::io::Result<()> {
         self.stream.readable().await
     }
 

@@ -559,7 +559,7 @@ async fn io_loop_serve(
             },
             res = async {
                 match wh.as_mut() {
-                    Some(wh) => wh.wait_closed().await,
+                    Some(wh) => wh.closed().await,
                     None => future::pending().await,
                 }
             } => {
