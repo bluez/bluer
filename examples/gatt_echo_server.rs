@@ -20,7 +20,7 @@ use tokio::{
 
 include!("gatt_echo.inc");
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> blez::Result<()> {
     env_logger::init();
     let session = blez::Session::new().await?;

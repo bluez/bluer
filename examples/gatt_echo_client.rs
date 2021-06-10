@@ -62,22 +62,37 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
 }
 
 async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
-    println!("    Obtaining write IO");
     let mut write_io = char.write_io().await?;
-    println!("    Obtaining notification IO");
+    println!("    Obtained write IO with MTU {} bytes", write_io.mtu());
     let mut notify_io = char.notify_io().await?;
+    println!("    Obtained notification IO with MTU {} bytes", notify_io.mtu());
 
     let mut rng = rand::thread_rng();
-    for i in 0..15 {
-        let len = rng.gen_range(0..1000);
+    for i in 0..128 {
+        let len = rng.gen_range(0..20000);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         println!("    Test iteration {} with data size {}", i, len);
+
+        // We must read back the data while sending, otherwise the connection
+        // buffer will overrun and we will lose data.
+        let read_task = tokio::spawn(async move {
+            let mut echo_buf = vec![0u8; len];
+            let res = match notify_io.read_exact(&mut echo_buf).await {
+                Ok(_) => Ok(echo_buf),
+                Err(err) => Err(err),
+            };
+            (notify_io, res)
+        });
+
+        // Note that write_all will automatically split the buffer into
+        // multiple writes of MTU size.
         write_io.write_all(&data).await.expect("write failed");
 
         println!("    Waiting for echo");
-        let mut echo_buf = vec![0u8; len];
-        notify_io.read_exact(&mut echo_buf).await.expect("read failed");
+        let (notify_io_back, res) = read_task.await.unwrap();
+        notify_io = notify_io_back;
+        let echo_buf = res.expect("read failed");
 
         if echo_buf != data {
             println!();
@@ -97,7 +112,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> blez::Result<()> {
     env_logger::init();
     let session = blez::Session::new().await?;

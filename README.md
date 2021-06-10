@@ -95,6 +95,10 @@ The following example applications are provided.
 
   - **gatt_server_io**: Corresponding GATT server implemented using IO programming model.
 
+  - **gatt_echo_client**: Simple GATT client that connects to a server and sends and receives test data.
+
+  - **gatt_echo_server**: Corresponding GATT server that echos received data.
+
   - **l2cap_client**: Simple L2CAP socket client that connects to a socket and sends and receives test data.
 
   - **l2cap_server**: Corresponding L2CAP socket server that echos received data.
