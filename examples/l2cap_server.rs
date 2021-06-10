@@ -14,7 +14,7 @@ const SERVICE_UUID: uuid::Uuid = uuid::Uuid::from_u128(0xFEED0000F00D);
 
 include!("l2cap.inc");
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> blez::Result<()> {
     env_logger::init();
     let session = blez::Session::new().await?;
@@ -59,8 +59,9 @@ async fn main() -> blez::Result<()> {
             },
             _ = lines.next_line() => break,
         };
+        let recv_mtu = stream.as_ref().recv_mtu()?;
 
-        println!("Accepted connection from {:?}", &sa);
+        println!("Accepted connection from {:?} with receive MTU {} bytes", &sa, &recv_mtu);
 
         println!("Sending hello");
         if let Err(err) = stream.write_all(HELLO_MSG).await {
@@ -68,8 +69,15 @@ async fn main() -> blez::Result<()> {
             continue;
         }
 
+        let mut n = 0;
         loop {
-            let mut buf = [0; 100];
+            n += 1;
+
+            // Vary buffer size between MTU and smaller value to test
+            // partial reads.
+            let buf_size = if n % 5 == 0 { recv_mtu - 70 } else { recv_mtu };
+            let mut buf = vec![0; buf_size as _];
+
             let n = match stream.read(&mut buf).await {
                 Ok(0) => {
                     println!("Stream ended");

@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 include!("l2cap.inc");
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> blez::Result<()> {
     env_logger::init();
     let session = blez::Session::new().await?;
@@ -32,10 +32,10 @@ async fn main() -> blez::Result<()> {
     let mut stream = Stream::connect(target_sa).await.expect("connection failed");
     println!("Local address: {:?}", stream.as_ref().local_addr()?);
     println!("Remote address: {:?}", stream.peer_addr()?);
-    println!("Send MTU: {}", stream.as_ref().send_mtu()?);
+    println!("Send MTU: {:?}", stream.as_ref().send_mtu());
     println!("Recv MTU: {}", stream.as_ref().recv_mtu()?);
     println!("Security: {:?}", stream.as_ref().security()?);
-    // println!("Flow control: {:?}", stream.as_ref().flow_control()?);
+    println!("Flow control: {:?}", stream.as_ref().flow_control());
 
     println!("\nReceiving hello");
     let mut hello_buf = [0u8; HELLO_MSG.len()];
@@ -45,17 +45,33 @@ async fn main() -> blez::Result<()> {
         panic!("Wrong hello message");
     }
 
+    let (mut rh, mut wh) = stream.into_split();
     let mut rng = rand::thread_rng();
     for i in 0..15 {
-        let len = rng.gen_range(0..1000);
+        let len = rng.gen_range(0..50000);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         println!("\nTest iteration {} with data size {}", i, len);
-        stream.write_all(&data).await.expect("write failed");
+
+        // We must read back the data while sending, otherwise the connection
+        // buffer will overrun and we will lose data.
+        let read_task = tokio::spawn(async move {
+            let mut echo_buf = vec![0u8; len];
+            let res = match rh.read_exact(&mut echo_buf).await {
+                Ok(_) => Ok(echo_buf),
+                Err(err) => Err(err),
+            };
+            (rh, res)
+        });
+
+        // Note that write_all will automatically split the buffer into
+        // multiple writes of MTU size.
+        wh.write_all(&data).await.expect("write failed");
 
         println!("Waiting for echo");
-        let mut echo_buf = vec![0u8; len];
-        stream.read_exact(&mut echo_buf).await.expect("read failed");
+        let (rh_back, res) = read_task.await.unwrap();
+        rh = rh_back;
+        let echo_buf = res.expect("read failed");
 
         if echo_buf != data {
             panic!("Echoed data does not match sent data");
