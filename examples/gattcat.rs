@@ -315,8 +315,6 @@ impl ServeOpts {
         use tab_pty_process::CommandExt;
 
         let (session, adapter) = get_session_adapter(self.bind).await?;
-        let (_adv, _app, mut control) =
-            make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
 
         if self.verbose {
             println!("Serving on {}", adapter.address().await?);
@@ -338,6 +336,9 @@ impl ServeOpts {
         });
 
         loop {
+            let (_adv, _app, mut control) =
+                make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
+
             let mut rh = None;
             let mut wh = None;
             let mtu;
