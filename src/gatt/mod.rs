@@ -315,18 +315,22 @@ impl IntoRawFd for CharacteristicWriter {
 }
 
 /// Creates a UNIX socket pair for communication with bluetoothd.
-pub(crate) fn make_socket_pair() -> std::io::Result<(OwnedFd, UnixStream)> {
+pub(crate) fn make_socket_pair(non_block: bool) -> std::io::Result<(OwnedFd, UnixStream)> {
     let mut sv: [RawFd; 2] = [0; 2];
-    if unsafe {
-        libc::socketpair(AF_LOCAL, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, &mut sv as *mut c_int)
-    } == -1
-    {
+    let mut ty = SOCK_SEQPACKET | SOCK_CLOEXEC;
+    if non_block {
+        ty |= SOCK_NONBLOCK;
+    }
+    if unsafe { libc::socketpair(AF_LOCAL, ty, 0, &mut sv as *mut c_int) } == -1 {
         return Err(std::io::Error::last_os_error());
     }
     let [fd1, fd2] = sv;
 
     let fd1 = unsafe { OwnedFd::new(fd1) };
-    let us = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) })?;
+    let us = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd2) };
+
+    us.set_nonblocking(true)?;
+    let us = UnixStream::from_std(us)?;
 
     Ok((fd1, us))
 }

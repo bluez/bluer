@@ -351,7 +351,9 @@ impl Characteristic {
     pub async fn write_io(&self) -> Result<CharacteristicWriter> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
-        let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
+        let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) };
+        stream.set_nonblocking(true)?;
+        let stream = UnixStream::from_std(stream)?;
         // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
         let mtu = mtu.saturating_sub(5).into();
         Ok(CharacteristicWriter { mtu, stream })
@@ -425,7 +427,9 @@ impl Characteristic {
     pub async fn notify_io(&self) -> Result<CharacteristicReader> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
-        let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
+        let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) };
+        stream.set_nonblocking(true)?;
+        let stream = UnixStream::from_std(stream)?;
         Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
     }
 
