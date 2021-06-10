@@ -352,7 +352,9 @@ impl Characteristic {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
         let stream = UnixStream::from_std(unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) })?;
-        Ok(CharacteristicWriter { mtu: mtu.into(), stream })
+        // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
+        let mtu = mtu.saturating_sub(5).into();
+        Ok(CharacteristicWriter { mtu, stream })
     }
 
     /// Starts a notification or indication session from this characteristic

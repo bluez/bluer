@@ -887,10 +887,8 @@ impl RegisteredCharacteristic {
                         match &reg.c.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
                                 let (tx, rx) = oneshot::channel();
-                                // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
-                                let mtu = options.mtu.saturating_sub(5);
                                 let req =
-                                    CharacteristicWriteIoRequest { mtu, link: options.link, tx };
+                                    CharacteristicWriteIoRequest { mtu: options.mtu, link: options.link, tx };
                                 reg.c
                                     .control_handle
                                     .events_tx
