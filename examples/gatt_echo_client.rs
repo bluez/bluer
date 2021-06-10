@@ -6,7 +6,7 @@ use rand::Rng;
 use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::sleep,
+    time::{sleep, timeout},
 };
 
 include!("gatt_echo.inc");
@@ -67,6 +67,10 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     let mut notify_io = char.notify_io().await?;
     println!("    Obtained notification IO with MTU {} bytes", notify_io.mtu());
 
+    // Flush notify buffer.
+    let mut buf = [0; 1024];
+    while let Ok(Ok(_)) = timeout(Duration::from_secs(1), notify_io.read(&mut buf)).await {}
+
     let mut rng = rand::thread_rng();
     for i in 0..128 {
         let len = rng.gen_range(0..20000);
@@ -106,6 +110,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
                 message: "echoed data does not match sent data".to_string(),
             });
         }
+        println!("    Data matches");
     }
 
     println!("    Test okay");
