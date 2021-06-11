@@ -38,7 +38,7 @@ async fn main() -> blez::Result<()> {
     };
     let adv_handle = adapter.advertise(le_advertisement).await?;
 
-    let local_sa = SocketAddr { addr: adapter_addr, addr_type: adapter_addr_type, psm: PSM };
+    let local_sa = SocketAddr::new(adapter_addr, adapter_addr_type, PSM);
     let listener = StreamListener::bind(local_sa).await?;
 
     println!("Listening on PSM {}. Press enter to quit.", listener.as_ref().local_addr()?.psm);

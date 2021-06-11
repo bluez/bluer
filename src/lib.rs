@@ -695,10 +695,10 @@ impl From<Address> for [u8; 6] {
 /// Bluetooth device address type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
 pub enum AddressType {
-    /// Public address
+    /// Public address.
     #[strum(serialize = "public")]
     Public = BDADDR_LE_PUBLIC as _,
-    /// Random address
+    /// Random address.
     #[strum(serialize = "random")]
     Random = BDADDR_LE_RANDOM as _,
 }
