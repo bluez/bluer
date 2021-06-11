@@ -28,7 +28,7 @@ const SERVICE_UUID: Uuid = Uuid::from_u128(0xdb9517c5d364d6fa1160931502091984);
 #[derive(Parser)]
 #[clap(
     name = "l2cat",
-    about = "Arbitrary Bluetooth LE L2CAP connections and listens.",
+    about = "Arbitrary Bluetooth BR/EDR/LE L2CAP connections and listens.",
     author = "Sebastian Urban <surban@surban.net>",
     version = env!("CARGO_PKG_VERSION"),
 )]
@@ -57,19 +57,31 @@ struct ConnectOpts {
     /// Use together with --pty when serving.
     #[clap(long, short)]
     raw: bool,
+    /// Use classic Bluetooth (BR/EDR).
+    /// Otherwise Bluetooth Low Energy (LE) is used.
+    #[clap(long, short = 'c')]
+    br_edr: bool,
     /// Public Bluetooth address of target device.
     address: Address,
     /// Target PSM.
+    ///
+    /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1.
     psm: u16,
 }
 
 impl ConnectOpts {
     pub async fn perform(self) -> Result<()> {
+        let addr_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+
         let socket = Socket::new_stream()?;
-        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, 0);
+        let local_sa = match self.bind {
+            Some(bind_addr) => SocketAddr::new(bind_addr, addr_type, 0),
+            None if self.br_edr => SocketAddr::any_br_edr(),
+            None => SocketAddr::any_le(),
+        };
         socket.bind(local_sa)?;
 
-        let peer_sa = SocketAddr::new(self.address, AddressType::Public, self.psm);
+        let peer_sa = SocketAddr::new(self.address, addr_type, self.psm);
         let stream = socket.connect(peer_sa).await?;
 
         let is_tty = std::io::stdin().is_tty();
@@ -104,9 +116,16 @@ struct ListenOpts {
     /// Do not send LE advertisement packets.
     #[clap(long, short)]
     no_advertise: bool,
+    /// Use classic Bluetooth (BR/EDR).
+    /// Otherwise Bluetooth Low Energy (LE) is used.
+    #[clap(long, short = 'c')]
+    br_edr: bool,
     /// PSM to listen on.
+    ///
+    /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1 and a
+    /// value below 4097 is privileged.
+    /// For LE, a value below 128 is privileged.
     /// Specify 0 to auto allocate an available PSM.
-    /// A value below 128 is privileged.
     psm: u16,
 }
 
@@ -114,7 +133,8 @@ impl ListenOpts {
     pub async fn perform(self) -> Result<()> {
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, self.psm);
+        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
         if self.verbose && self.psm == 0 {
@@ -162,9 +182,16 @@ struct ServeOpts {
     /// Use together with --raw when connecting.
     #[clap(long, short)]
     pty: bool,
+    /// Use classic Bluetooth (BR/EDR).
+    /// Otherwise Bluetooth Low Energy (LE) is used.
+    #[clap(long, short = 'c')]
+    br_edr: bool,
     /// PSM to listen on.
+    ///
+    /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1 and a
+    /// value below 4097 is privileged.
+    /// For LE, a value below 128 is privileged.
     /// Specify 0 to auto allocate an available PSM.
-    /// A value below 128 is privileged.
     psm: u16,
     /// Program to execute once connection is established.
     command: OsString,
@@ -178,7 +205,8 @@ impl ServeOpts {
 
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, self.psm);
+        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
         if !self.verbose && self.psm == 0 {
@@ -263,7 +291,7 @@ async fn io_loop(
     stream: Stream, pin: impl AsyncRead + Unpin, pout: impl AsyncWrite + Unpin, is_std: bool, rh_required: bool,
     pin_required: bool,
 ) -> Result<()> {
-    let mtu = stream.as_ref().recv_mtu()?;
+    let mtu = stream.as_ref().recv_mtu().unwrap_or(8192);
 
     let (rh, wh) = stream.into_split();
     let mut rh = Some(rh);

@@ -2,7 +2,7 @@
 
 use bluer::{
     adv::Advertisement,
-    l2cap::{SocketAddr, StreamListener, PSM_DYN_START},
+    l2cap::{SocketAddr, StreamListener, PSM_LE_DYN_START},
 };
 use std::time::Duration;
 use tokio::{

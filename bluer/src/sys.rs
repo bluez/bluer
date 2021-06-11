@@ -40,7 +40,7 @@ pub struct bdaddr_t {
     pub b: [u8; 6],
 }
 
-// pub const BDADDR_BREDR: u8 = 0x00;
+pub const BDADDR_BREDR: u8 = 0x00;
 pub const BDADDR_LE_PUBLIC: u8 = 0x01;
 pub const BDADDR_LE_RANDOM: u8 = 0x02;
 

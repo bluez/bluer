@@ -1,8 +1,11 @@
 //! Logical Link Control and Adaptation Protocol (L2CAP) sockets.
 //!
-//! L2CAP sockets provide Bluetooth LE Connection Oriented Channels (CoC).
+//! L2CAP sockets provide Bluetooth Connection Oriented Channels (CoC).
 //! This enables the efficient transfer of large data streams between two devices
 //! using socket-oriented programming.
+//!
+//! L2CAP sockets work with both Bluetooth classic (BR/EDR) and Bluetooth Low Energy (LE).
+//!
 
 use crate::{
     sys::{
@@ -76,11 +79,18 @@ impl Drop for OwnedFd {
     }
 }
 
-/// First unprivileged protocol service multiplexor (PSM).
+/// First unprivileged protocol service multiplexor (PSM) for
+/// Bluetooth classic (BR/EDR).
 ///
 /// Listening on a PSM below this requires the
 /// `CAP_NET_BIND_SERVICE` capability.
-pub const PSM_DYN_START: u16 = 0x80;
+pub const PSM_BR_EDR_DYN_START: u16 = 0x1001;
+
+/// First unprivileged protocol service multiplexor (PSM) for Bluetooth LE.
+///
+/// Listening on a PSM below this requires the
+/// `CAP_NET_BIND_SERVICE` capability.
+pub const PSM_LE_DYN_START: u16 = 0x80;
 
 /// The highest protocol service multiplexor (PSM) for Bluetooth Low Energy.
 pub const PSM_LE_MAX: u16 = 0xff;
@@ -96,9 +106,14 @@ pub struct SocketAddr {
     pub addr_type: AddressType,
     /// Protocol service multiplexor (PSM).
     ///
-    /// Listening on a PSM below [PSM_DYN_START] requires the
-    /// `CAP_NET_BIND_SERVICE` capability.
-    /// The highest PSM for Bluetooth Low Energy is [PSM_LE_MAX].
+    /// For classic Bluetooth (BR/EDR), listening on a PSM below [PSM_BR_EDR_DYN_START]
+    /// requires the `CAP_NET_BIND_SERVICE` capability.
+    /// The PSM must be odd and the last bit of the upper byte must be zero, i.e.
+    /// it must follow the bit pattern `xxxxxxx0_xxxxxxx1` where `x` may be `1` or `0`.
+    ///
+    /// For Bluetooth Low Energy, listening on a PSM below [PSM_LE_DYN_START]
+    /// requires the `CAP_NET_BIND_SERVICE` capability.
+    /// The highest allowed PSM for LE is [PSM_LE_MAX].
     ///
     /// Set to 0 for listening to assign an available PSM.
     pub psm: u16,
@@ -114,8 +129,15 @@ impl SocketAddr {
         Self { addr, addr_type, psm, cid: 0 }
     }
 
-    /// When specified to [Socket::bind] binds to any local adapter address.
-    pub const fn any() -> Self {
+    /// When specified to [Socket::bind] binds to any local adapter address
+    /// using classic Bluetooth (BR/EDR) and a dynamically allocated PSM.
+    pub const fn any_br_edr() -> Self {
+        Self { addr: Address::any(), addr_type: AddressType::BrEdr, psm: 0, cid: 0 }
+    }
+
+    /// When specified to [Socket::bind] binds to any public, local adapter address
+    /// using Bluetooth Low Energy and a dynamically allocated PSM.
+    pub const fn any_le() -> Self {
         Self { addr: Address::any(), addr_type: AddressType::Public, psm: 0, cid: 0 }
     }
 }
@@ -385,6 +407,14 @@ fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
     Ok(value)
 }
 
+/// Any bind address for connecting to specified address.
+fn any_bind_addr(addr: &SocketAddr) -> SocketAddr {
+    match addr.addr_type {
+        AddressType::BrEdr => SocketAddr::any_br_edr(),
+        AddressType::Public | AddressType::Random => SocketAddr::any_le(),
+    }
+}
+
 /// L2CAP socket security level.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, FromPrimitive, ToPrimitive)]
 pub enum SecurityLevel {
@@ -508,6 +538,9 @@ impl<Type> Socket<Type> {
     /// Note that this value may not be available directly after an connection
     /// has been established and this function will return an error.
     /// In this case, try re-querying the MTU after send or receiving some data.
+    ///
+    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
+    /// [AddressType::Public] or [AddressType::Random].
     pub fn send_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_SNDMTU)
     }
@@ -515,6 +548,9 @@ impl<Type> Socket<Type> {
     /// Get maximum transmission unit (MTU) for receiving.
     ///
     /// This corresponds to the `BT_RCVMTU` socket option.
+    ///
+    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
+    /// [AddressType::Public] or [AddressType::Random].
     pub fn recv_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_RCVMTU)
     }
@@ -522,6 +558,9 @@ impl<Type> Socket<Type> {
     /// Set receive MTU.
     ///
     /// This corresponds to the `BT_RCVMTU` socket option.
+    ///
+    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
+    /// [AddressType::Public] or [AddressType::Random].
     pub fn set_recv_mtu(&self, recv_mtu: u16) -> Result<()> {
         setsockopt(self.fd.get_ref(), BT_RCVMTU, &recv_mtu)
     }
@@ -847,8 +886,8 @@ pub struct StreamListener {
 impl StreamListener {
     /// Creates a new Listener, which will be bound to the specified socket address.
     ///
-    /// Specify [SocketAddr::any] for any local adapter address.
-    /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
+    /// Specify [SocketAddr::any_br_edr] or [SocketAddr::any_le] for any local adapter
+    /// address with a dynamically allocated PSM.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
         let socket = Socket::<Stream>::new_stream()?;
         socket.bind(sa)?;
@@ -898,7 +937,7 @@ impl Stream {
     /// Uses any local Bluetooth adapter.
     pub async fn connect(addr: SocketAddr) -> Result<Self> {
         let socket = Socket::<Stream>::new_stream()?;
-        socket.bind(SocketAddr::any())?;
+        socket.bind(any_bind_addr(&addr))?;
         socket.connect(addr).await
     }
 
@@ -1014,8 +1053,8 @@ pub struct SeqPacketListener {
 impl SeqPacketListener {
     /// Creates a new Listener, which will be bound to the specified socket address.
     ///
-    /// Specify [SocketAddr::any] for any local adapter address.
-    /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
+    /// Specify [SocketAddr::any_br_edr] or [SocketAddr::any_le] for any local adapter
+    /// address with a dynamically allocated PSM.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
         let socket = Socket::<SeqPacket>::new_seq_packet()?;
         socket.bind(sa)?;
@@ -1060,7 +1099,7 @@ impl SeqPacket {
     /// Uses any local Bluetooth adapter.
     pub async fn connect(addr: SocketAddr) -> Result<Self> {
         let socket = Socket::<SeqPacket>::new_seq_packet()?;
-        socket.bind(SocketAddr::any())?;
+        socket.bind(any_bind_addr(&addr))?;
         socket.connect(addr).await
     }
 
@@ -1136,8 +1175,8 @@ pub struct Datagram {
 impl Datagram {
     /// Creates a new datagram socket, which will be bound to the specified socket address.
     ///
-    /// Specify [SocketAddr::any] for any local adapter address.
-    /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
+    /// Specify [SocketAddr::any_br_edr] or [SocketAddr::any_le] for any local adapter
+    /// address with a dynamically allocated PSM.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
         let socket = Socket::<Datagram>::new_datagram()?;
         socket.bind(sa)?;

@@ -38,6 +38,7 @@ The following functionality is provided:
     * not affected by D-Bus match rule count
     * O(1) in number of subscriptions
 * L2CAP sockets
+    * support for both classic Bluetooth (BR/EDR) and Bluetooth LE
     * stream oriented
     * sequential packet oriented
     * datagram oriented

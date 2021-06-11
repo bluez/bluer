@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-//! # BlueR - Official BlueZ Bindings for Rust
+//! # BlueR — Official BlueZ Bindings for Rust
 //!
 //! This library provides the official Rust interface to the [Linux Bluetooth protocol stack (BlueZ)].
 //! Both publishing local and consuming remote [GATT services] using *idiomatic* Rust code is supported.
@@ -37,6 +37,7 @@
 //!     * not affected by D-Bus match rule count
 //!     * O(1) in number of subscriptions
 //! * [L2CAP sockets](l2cap)
+//!     * support for both classic Bluetooth (BR/EDR) and Bluetooth LE
 //!     * stream oriented
 //!     * sequential packet oriented
 //!     * datagram oriented
@@ -714,10 +715,13 @@ impl From<Address> for [u8; 6] {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
 #[repr(u8)]
 pub enum AddressType {
-    /// Public address.
+    /// Classic Bluetooth (BR/EDR) address.
+    #[strum(serialize = "br/edr")]
+    BrEdr = sys::BDADDR_BREDR,
+    /// Bluetooth Low Energy (LE) public address.
     #[strum(serialize = "public")]
     Public = sys::BDADDR_LE_PUBLIC,
-    /// Random address.
+    /// Bluetooth Low Energy (LE) random address.
     #[strum(serialize = "random")]
     Random = sys::BDADDR_LE_RANDOM,
 }
