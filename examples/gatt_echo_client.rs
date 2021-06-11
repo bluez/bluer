@@ -73,10 +73,23 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 
     let mut rng = rand::thread_rng();
     for i in 0..1024 {
-        let len = rng.gen_range(0..20000);
-        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+        let mut len = rng.gen_range(0..20000);
+
+        // Try to trigger packet reordering over EATT.
+        if i % 10 == 0 {
+            // Big packet is split into multiple small packets.
+            // (by L2CAP layer, because GATT MTU is bigger than L2CAP MTU)
+            len = write_io.mtu(); // 512
+        }
+        if i % 10 == 1 {
+            // Small packet can use different L2CAP channel when EATT is enabled.
+            len = 20;
+        }
+        // Thus small packet can arrive before big packet.
+        // The solution is to disable EATT in /etc/bluetooth/main.conf.
 
         println!("    Test iteration {} with data size {}", i, len);
+        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         // We must read back the data while sending, otherwise the connection
         // buffer will overrun and we will lose data.
