@@ -47,7 +47,7 @@
 //! ## Crate features
 //! All crate features are enabled by default.
 //!
-//! * `bluetoothd`: Enables all functions requiring a running `bluetoothd` daemon.
+//! * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
 //! * `l2cap`: Enables L2CAP sockets.
 //!
 //! ## Basic usage

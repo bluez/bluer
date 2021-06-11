@@ -105,7 +105,7 @@ struct ListenOpts {
     no_advertise: bool,
     /// PSM to listen on.
     /// Specify 0 to auto allocate an available PSM.
-    /// A value below 128 is priviledged.
+    /// A value below 128 is privileged.
     psm: u8,
 }
 
@@ -163,7 +163,7 @@ struct ServeOpts {
     pty: bool,
     /// PSM to listen on.
     /// Specify 0 to auto allocate an available PSM.
-    /// A value below 128 is priviledged.
+    /// A value below 128 is privileged.
     psm: u8,
     /// Program to execute once connection is established.
     command: OsString,

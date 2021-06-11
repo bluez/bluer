@@ -52,22 +52,37 @@ Crate features
 --------------
 All crate features are enabled by default.
 
-* `bluetoothd`: Enables all functions requiring a running `bluetoothd`.
+* `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
   For building, D-Bus library headers must be installed.
 * `l2cap`: Enables L2CAP sockets.
 
 Requirements
 ------------
 
-This library has been tested with BlueZ version 5.56.
+This library has been tested with BlueZ version 5.58 with [additional patches](https://github.com/surban/bluez/tree/all-fixes) applied.
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
 
-If any `bluetoothd` feature is used the `bluetoothd` daemon must be running and configured for access over D-Bus.
+If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
 For building, D-Bus library headers must be installed if the `bluetoothd` feature is enabled.
 On Debian-based distributions install the package `libdbus-1-dev`.
+
+Configuration
+-------------
+
+The following options in `/etc/bluetooth/main.conf` are helpful.
+
+    [GATT]
+    Cache = no
+    Channels = 1
+
+This disables the GATT cache to avoid stale data during device discovery.
+
+By only allowing one channel the extended attribute protocol (EATT) is disabled.
+If EATT is enabled, all GATT commands and notifications are sent over multiple L2CAP channels and can be reordered arbitrarily by lower layers of the protocol stack.
+This makes sequential data transmission over GATT characteristics more difficult.
 
 Troubleshooting
 ---------------
@@ -79,6 +94,9 @@ Set the Rust log level to `trace` to see all D-Bus communications with BlueZ.
 In some cases checking the Bluetooth system log might provide further insights.
 On Debian-based systems it can be displayed by executing `journalctl -u bluetooth`.
 Check the `bluetoothd` man page for increasing the log level.
+
+Sometimes deleting the system Bluetooth cache at `/var/lib/bluetooth` and restarting
+`bluetoothd` is helpful.
 
 Examples
 --------
@@ -116,9 +134,9 @@ The following tools are included and also serve as examples.
 
   - **blemon**: Scans for and monitors Bluetooth LE devices similar to `top`.
 
-  - **gattcat**: netcat-like for GATT characteristics.
+  - **gattcat**: `netcat`-like for GATT characteristics.
 
-  - **l2cat**: netcat-like for L2CAP sockets.
+  - **l2cat**: `netcat`-like for L2CAP sockets.
 
 Use `cargo install blez --example <name>` to install a tool on your system.
 

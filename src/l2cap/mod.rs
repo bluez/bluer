@@ -772,7 +772,7 @@ impl<Type> FromRawFd for Socket<Type> {
     ///
     /// # Panics
     /// Panics when the conversion fails.
-    /// Use [Socket::from_raw_fd] for a non-panicing variant.
+    /// Use [Socket::from_raw_fd] for a non-panicking variant.
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
@@ -1128,7 +1128,7 @@ impl AsRawFd for SeqPacket {
     }
 }
 
-/// An L2CAP datagram socket (connectionless, unreliable messages of a fixed maximum length).
+/// An L2CAP datagram socket (connection-less, unreliable messages of a fixed maximum length).
 #[derive(Debug)]
 pub struct Datagram {
     socket: Socket<Datagram>,
