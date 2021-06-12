@@ -59,8 +59,9 @@ Crate features
 All crate features are enabled by default.
 
 * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
-  For building, D-Bus library headers must be installed.
+  For building, D-Bus library headers, provided by `libdbus-1-dev` on Debian, must be installed.
 * `l2cap`: Enables L2CAP sockets.
+  For building, Bluetooth library headers, provided by `libbluetooth-dev` on Debian, must be installed.
 
 Requirements
 ------------
@@ -71,9 +72,6 @@ Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/Cha
 
 If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
-
-For building, D-Bus library headers must be installed if the `bluetoothd` feature is enabled.
-On Debian-based distributions install the package `libdbus-1-dev`.
 
 Configuration
 -------------
