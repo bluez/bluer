@@ -1,17 +1,14 @@
 BLEZ - Asynchronous Bluetooth Low Energy on Linux for Rust
 ==========================================================
 
+[![crates.io page](https://img.shields.io/crates/v/blez)](https://crates.io/crates/blez)
+[![docs.rs page](https://docs.rs/blez/badge.svg)](https://docs.rs/blez)
+[![BSD-2-Clause license](https://img.shields.io/crates/l/blez)](https://github.com/surban/blez/blob/master/LICENSE)
+
 This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
 APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/) for [Rust](https://www.rust-lang.org/).
 Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
-Asynchronous support is dependent by [Tokio](https://tokio.rs/).
-
-This project started as a fork of [blurz](https://github.com/szeged/blurz) but has
-since then become a full rewrite.
-Documentation has been mostly copied from the
-[BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
-also adapted where it makes sense.
-L2CAP sockets are presented using an API similar to Tokio networking.
+L2CAP sockets are presented using an API similar to [Tokio](https://tokio.rs/) networking.
 
 The following functionality is provided:
 
@@ -47,6 +44,15 @@ The following functionality is provided:
     * async IO interface with `AsyncRead` and `AsyncWrite` support
 
 Classic Bluetooth is unsupported except for device discovery.
+
+History
+-------
+
+This project started as a fork of [blurz](https://github.com/szeged/blurz) but has
+since then become a full rewrite.
+Documentation has been mostly copied from the
+[BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
+also adapted where it makes sense.
 
 Crate features
 --------------
