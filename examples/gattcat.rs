@@ -254,7 +254,7 @@ impl DiscoverOpts {
         //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(Self::to_hex(&data));
-            Self::print_list(2, &format!("Service {}", uuid), lines);
+            Self::print_list(2, &format!("Service data {}", uuid), lines);
         }
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(Self::to_hex(&data));
@@ -366,7 +366,7 @@ struct ConnectOpts {
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// Target GATT characteristic.
-    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     characteristic: Uuid,
     /// Public Bluetooth address of target device.
     address: Address,
@@ -547,7 +547,7 @@ struct ListenOpts {
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// GATT characteristic to publish.
-    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     characteristic: Uuid,
 }
 
@@ -602,7 +602,7 @@ struct ServeOpts {
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// GATT characteristic to publish.
-    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     characteristic: Uuid,
     /// Program to execute once connection is established.
     command: OsString,
