@@ -7,17 +7,22 @@ use blez::{
             self, characteristic_control, Application, ApplicationHandle, CharacteristicControl,
             CharacteristicControlEvent, CharacteristicNotify, CharacteristicWrite, Service,
         },
-        remote, CharacteristicReader, CharacteristicWriter,
+        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags,
     },
-    Adapter, AdapterEvent, Address, Device, Session, SessionEvent, Uuid,
+    Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
+    Uuid,
 };
 use bytes::BytesMut;
 use clap::Clap;
 use crossterm::{terminal, tty::IsTty};
-use futures::{future, pin_mut, StreamExt};
+use futures::{future, pin_mut, stream::SelectAll, FutureExt, StreamExt, TryFutureExt};
 use libc::{STDIN_FILENO, STDOUT_FILENO};
+use pretty_hex::{hex_write, HexConfig};
 use std::{
+    collections::HashSet,
     ffi::OsString,
+    fmt::Display,
+    iter,
     process::{exit, Command, Stdio},
     time::Duration,
 };
@@ -25,7 +30,7 @@ use tab_pty_process::AsyncPtyMaster;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     select,
-    time::sleep,
+    time::{sleep, timeout},
 };
 use tokio_compat_02::IoCompat;
 
@@ -44,6 +49,8 @@ struct Opts {
 
 #[derive(Clap)]
 enum Cmd {
+    /// Perform service discovery.
+    Discover(DiscoverOpts),
     /// Connect to remote device.
     Connect(ConnectOpts),
     /// Listen for connection from remote device.
@@ -51,6 +58,299 @@ enum Cmd {
     /// Listen for connection from remote device and serve a program
     /// once a connection is established.
     Serve(ServeOpts),
+}
+
+async fn connect(device: &Device) -> Result<()> {
+    if !device.is_connected().await? {
+        let mut retries = 2;
+        loop {
+            match device.connect().and_then(|_| device.services()).await {
+                Ok(_) => break,
+                Err(_) if retries > 0 => {
+                    retries -= 1;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn char_flags_to_vec(f: &CharacteristicFlags) -> Vec<&'static str> {
+    let mut v = Vec::new();
+    if f.read {
+        v.push("read");
+    };
+    if f.secure_read {
+        v.push("secure read");
+    };
+    if f.encrypt_read {
+        v.push("encrypt read");
+    }
+    if f.notify {
+        v.push("notify");
+    };
+    if f.indicate {
+        v.push("indicate");
+    }
+    if f.broadcast {
+        v.push("broadcast");
+    }
+    if f.write {
+        v.push("write")
+    };
+    if f.write_without_response {
+        v.push("write without respone");
+    }
+    if f.reliable_write {
+        v.push("reliable write");
+    }
+    if f.secure_write {
+        v.push("secure write")
+    }
+    if f.encrypt_write {
+        v.push("encrypt write")
+    };
+    if f.authenticated_signed_writes {
+        v.push("authenticated signed writes");
+    };
+    if f.encrypt_authenticated_write {
+        v.push("encrypt authenticated write");
+    }
+    if f.writable_auxiliaries {
+        v.push("writable auxiliaries")
+    }
+    if f.authorize {
+        v.push("authorize");
+    }
+    v
+}
+
+fn desc_flags_to_vec(f: &DescriptorFlags) -> Vec<&'static str> {
+    let mut v = Vec::new();
+    if f.read {
+        v.push("read");
+    };
+    if f.secure_read {
+        v.push("secure read");
+    };
+    if f.encrypt_read {
+        v.push("encrypt read");
+    }
+    if f.write {
+        v.push("write")
+    };
+    if f.secure_write {
+        v.push("secure write")
+    }
+    if f.encrypt_write {
+        v.push("encrypt write")
+    };
+    if f.encrypt_authenticated_write {
+        v.push("encrypt authenticated write");
+    }
+    if f.authorize {
+        v.push("authorize");
+    }
+    v
+}
+
+#[derive(Clap)]
+struct DiscoverOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Timeout in seconds for discovering a device.
+    #[clap(long, short, default_value = "15")]
+    timeout: u64,
+    /// Only show devices with public addresses.
+    #[clap(long, short)]
+    public_only: bool,
+    /// Do not connect to discovered devices for GATT service discovery.
+    #[clap(long, short)]
+    no_connect: bool,
+    /// Addresses of Bluetooth devices.
+    /// If unspecified gattcat scans for devices.
+    address: Vec<Address>,
+}
+
+impl DiscoverOpts {
+    pub async fn perform(mut self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let mut discover = adapter.discover_devices().await?;
+        let mut changes = SelectAll::new();
+        let mut timeout = sleep(Duration::from_secs(self.timeout)).boxed();
+
+        let mut addresses: HashSet<_> = self.address.drain(..).collect();
+        let mut done = HashSet::new();
+        let filter = !addresses.is_empty();
+
+        loop {
+            if filter && addresses.is_empty() {
+                break;
+            }
+            let addr = select! {
+                _ = &mut timeout => break,
+                evt = discover.next() => {
+                    match evt {
+                        Some(AdapterEvent::DeviceAdded(addr)) => addr,
+                        None => break,
+                        _ => continue,
+                    }
+                },
+                Some((addr, evt)) = changes.next() => {
+                    match evt {
+                        DeviceEvent::PropertyChanged(DeviceProperty::Rssi(_)) => addr,
+                        _ => continue,
+                    }
+                }
+            };
+            if (filter && !addresses.contains(&addr)) || done.contains(&addr) {
+                continue;
+            }
+
+            let dev = adapter.device(addr)?;
+            if self.public_only && dev.address_type().await.unwrap_or_default() == AddressType::Random {
+                continue;
+            }
+            if let Ok(Some(_)) = dev.rssi().await {
+                // If RSSI is available, device is present.
+                if let Err(err) = Self::handle_device(&dev, self.no_connect).await {
+                    println!("  Error: {}", err);
+                }
+                let _ = dev.disconnect().await;
+                println!();
+                addresses.remove(&addr);
+                done.insert(addr);
+            } else {
+                // Device may be cached, wait for RSSI to become available.
+                if let Ok(events) = dev.events().await {
+                    changes.push(events.map(move |evt| (addr, evt)).boxed());
+                }
+            }
+
+            timeout = sleep(Duration::from_secs(self.timeout)).boxed();
+        }
+
+        Ok(())
+    }
+
+    async fn handle_device(dev: &Device, no_connect: bool) -> Result<()> {
+        println!("Device {} [{}]", dev.address(), dev.address_type().await.unwrap_or_default());
+        Self::print_device_info(&dev).await?;
+        if !no_connect {
+            Self::enumerate_services(&dev).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn print_device_info(dev: &Device) -> Result<()> {
+        Self::print_if_some(2, "Name", dev.name().await?, "");
+        Self::print_if_some(2, "Icon", dev.icon().await?, "");
+        Self::print_if_some(2, "Class", dev.class().await?, "");
+        Self::print_if_some(2, "RSSI", dev.rssi().await?, "dBm");
+        Self::print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
+        //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
+        for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
+            let lines = iter::once(String::new()).chain(Self::to_hex(&data));
+            Self::print_list(2, &format!("Service {}", uuid), lines);
+        }
+        for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
+            let lines = iter::once(String::new()).chain(Self::to_hex(&data));
+            Self::print_list(2, &format!("Manufacturer data 0x{:04x}", id), lines);
+        }
+        Ok(())
+    }
+
+    async fn enumerate_services(dev: &Device) -> Result<()> {
+        match timeout(Duration::from_secs(20), connect(dev)).await {
+            Ok(Ok(())) => (),
+            Ok(Err(err)) => {
+                println!("  Connect failed: {}", &err);
+                return Ok(());
+            }
+            Err(_) => {
+                println!("  Connect timed out");
+                return Ok(());
+            }
+        }
+
+        for service in dev.services().await? {
+            if service.primary().await? {
+                println!("  Primary service {}", service.uuid().await?);
+            } else {
+                println!("  Secondary service {}", service.uuid().await?);
+            }
+
+            let mut includes = Vec::new();
+            for service_id in service.includes().await? {
+                let included = dev.service(service_id).await?;
+                includes.push(included.uuid().await?);
+            }
+            Self::print_list(4, "Includes", includes);
+
+            for char in service.characteristics().await? {
+                println!("    Characteristic {}", char.uuid().await?);
+                let flags = char.flags().await?;
+                Self::print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
+                if flags.read {
+                    if let Ok(value) = char.read().await {
+                        Self::print_list(6, "Read", Self::to_hex(&value));
+                    }
+                }
+                if flags.notify || flags.indicate {
+                    if let Ok(ns) = char.notify().await {
+                        pin_mut!(ns);
+                        if let Ok(Some(value)) = timeout(Duration::from_secs(5), ns.next()).await {
+                            Self::print_list(6, "Notify", Self::to_hex(&value));
+                        }
+                    }
+                }
+
+                for desc in char.descriptors().await? {
+                    println!("      Descriptor {}", desc.uuid().await?);
+                    if let Ok(flags) = desc.flags().await {
+                        Self::print_if_some(8, "Flags", Some(desc_flags_to_vec(&flags).join(", ")), "");
+                    }
+                    if let Ok(value) = desc.read().await {
+                        Self::print_list(8, "Read", Self::to_hex(&value));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn print_if_some<T: Display>(indent: usize, label: &str, value: Option<T>, unit: &str) {
+        if let Some(value) = value {
+            println!("{}{:10}{} {}", " ".repeat(indent), label, value, unit);
+        }
+    }
+
+    fn print_list<T: Display>(indent: usize, mut label: &str, values: impl IntoIterator<Item = T>) {
+        for value in values {
+            println!("{}{:10}{}", " ".repeat(indent), label, value);
+            label = "";
+        }
+    }
+
+    fn to_hex(v: &[u8]) -> Vec<String> {
+        let cfg = HexConfig { title: false, ascii: true, width: 10, group: 0, chunk: 1 };
+        let mut out = String::new();
+        hex_write(&mut out, &v, cfg).unwrap();
+
+        let mut lines = Vec::new();
+        for line in out.lines() {
+            let fields: Vec<_> = line.splitn(2, ':').collect();
+            if fields.len() == 1 {
+                lines.push(fields[0].to_string());
+            } else {
+                lines.push(fields[1].trim().to_string());
+            }
+        }
+        lines
+    }
 }
 
 #[derive(Clap)]
@@ -63,10 +363,10 @@ struct ConnectOpts {
     #[clap(long, short)]
     raw: bool,
     /// Target GATT service.
-    #[clap(long, short, default_value = "54af17d5-ecf2-4b12-8135-59f4b1d1904b")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// Target GATT characteristic.
-    #[clap(long, short, default_value = "53d53428-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
     characteristic: Uuid,
     /// Public Bluetooth address of target device.
     address: Address,
@@ -244,10 +544,10 @@ struct ListenOpts {
     #[clap(long, short)]
     no_advertise: bool,
     /// GATT service to publish.
-    #[clap(long, short, default_value = "54af17d5-ecf2-4b12-8135-59f4b1d1904b")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// GATT characteristic to publish.
-    #[clap(long, short, default_value = "53d53428-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
     characteristic: Uuid,
 }
 
@@ -299,10 +599,10 @@ struct ServeOpts {
     #[clap(long, short)]
     pty: bool,
     /// GATT service to publish.
-    #[clap(long, short, default_value = "54af17d5-ecf2-4b12-8135-59f4b1d1904b")]
+    #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: Uuid,
     /// GATT characteristic to publish.
-    #[clap(long, short, default_value = "53d53428-9964-464a-8263-ba1930e39939")]
+    #[clap(long, short, default_value = "02091984-9964-464a-8263-ba1930e39939")]
     characteristic: Uuid,
     /// Program to execute once connection is established.
     command: OsString,
@@ -606,6 +906,7 @@ async fn main() -> Result<()> {
     env_logger::init();
     let opts: Opts = Opts::parse();
     let result = match opts.cmd {
+        Cmd::Discover(d) => d.perform().await,
         Cmd::Connect(c) => c.perform().await,
         Cmd::Listen(l) => l.perform().await,
         Cmd::Serve(s) => s.perform().compat().await,

@@ -50,6 +50,7 @@ clap = "3.0.0-beta.2"
 bytes = "1"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
+pretty-hex = "0.2"
 
 [package.metadata.docs.rs]
 all-features = true
