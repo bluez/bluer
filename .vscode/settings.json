@@ -36,6 +36,7 @@
         "pairable",
         "pathloss",
         "reconnections",
+        "uart",
         "udev",
         "unpublish",
         "unregister",

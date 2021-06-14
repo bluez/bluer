@@ -38,8 +38,9 @@ impl Default for Type {
     }
 }
 
-/// Secondary channel to be used.
+/// Secondary channel for advertisement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[non_exhaustive]
 pub enum SecondaryChannel {
     /// 1M
     #[strum(serialize = "1M")]
@@ -60,6 +61,7 @@ impl Default for SecondaryChannel {
 
 /// Advertisement feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[non_exhaustive]
 pub enum Feature {
     /// TX power.
     #[strum(serialize = "tx-power")]

@@ -28,7 +28,7 @@ const SERVICE_UUID: Uuid = Uuid::from_u128(0xdb9517c5d364d6fa1160931502091984);
 #[derive(Clap)]
 #[clap(
     name = "l2cat",
-    about = "Arbitrary L2CAP connections and listens.",
+    about = "Arbitrary Bluetooth LE L2CAP connections and listens.",
     author = "Sebastian Urban <surban@surban.net>"
 )]
 struct Opts {

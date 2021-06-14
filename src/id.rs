@@ -1,6 +1,6 @@
 //! Manufacturer ids and assigned UUIDs for GATT services, GATT characteristics and GATT descriptors.
 //!
-//! The data herein is provided by the [Bluetooth numbers database] created by Nordic Semiconductor.
+//! The data herein is provided by the [Bluetooth numbers database] created by Nordic Semiconductor ASA.
 //!
 //! [Bluetooth numbers database]: https://github.com/NordicSemiconductor/bluetooth-numbers-database
 
