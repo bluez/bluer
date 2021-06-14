@@ -74,6 +74,7 @@ pub enum Feature {
 
 /// LE advertising platform feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[non_exhaustive]
 pub enum PlatformFeature {
     /// Indicates whether platform can
     /// specify TX power on each
@@ -89,6 +90,7 @@ pub enum PlatformFeature {
 
 /// Advertising-related controller capabilities.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub struct Capabilities {
     /// Maximum advertising data length.
     pub max_advertisement_length: u8,
