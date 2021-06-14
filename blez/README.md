@@ -108,7 +108,7 @@ Sometimes deleting the system Bluetooth cache at `/var/lib/bluetooth` and restar
 Examples
 --------
 Refer to the [API documentation](https://docs.rs/blez) and
-[examples folder](https://github.com/surban/blez/tree/master/examples) for examples.
+[examples folder](https://github.com/surban/blez/tree/master/blez/examples) for examples.
 
 The following example applications are provided.
 
