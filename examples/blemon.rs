@@ -3,7 +3,7 @@
 use blez::{Adapter, AdapterEvent, Address};
 use crossterm::{
     cursor, execute, queue,
-    style::{self, Colorize},
+    style::{self, Stylize},
     terminal::{self, ClearType},
 };
 use futures::{pin_mut, stream::SelectAll, FutureExt, StreamExt};
