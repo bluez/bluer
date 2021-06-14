@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - database of assigned number
 - `gattcat` example functionality.
+### Removed
+- `Descriptor::flags` because it is not provided by BlueZ.
 
 ## 0.9.0 - 2021-06-08
 ### Added
