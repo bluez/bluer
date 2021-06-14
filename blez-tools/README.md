@@ -24,8 +24,15 @@ The following command line tools are included.
     - listens on local L2CAP PSMs and accepts connections
     - serves a local program on an L2CAP PSM
 
-Use `cargo install blez-tools` to install the tools on your system.
-If you do not have cargo on your system, you can use [rustup](https://rustup.rs/) for installing it.
 Each tool supports the `--help` option for detailed usage information.
-
 A running [Bluetooth daemon (BlueZ)](http://www.bluez.org/) is required.
+
+Installation
+------------
+
+To install the tools on your system run
+
+    cargo install blez-tools
+
+If you do not have Cargo on your system, you can use [rustup](https://rustup.rs/) for installing it.
+
