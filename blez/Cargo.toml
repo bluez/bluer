@@ -1,6 +1,6 @@
 [package]
 name = "blez"
-version = "0.9.3"
+version = "0.9.4"
 description = "Asynchronous interface to official Bluetooth Low Energy APIs on Linux (BlueZ). Supports device discovery, events, local and remote GATT services, advertisements and L2CAP sockets."
 readme = "README.md"
 authors = [
@@ -13,6 +13,13 @@ keywords = ["bluetooth", "bluez", "ble", "gatt", "l2cap"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2018"
+exclude = [
+    "bluetooth-numbers-database/README.md",
+    "bluetooth-numbers-database/*.png",
+    "bluetooth-numbers-database/*.js",
+    "bluetooth-numbers-database/*.json",
+    "bluetooth-numbers-database/node_modules/*",
+]
 
 [features]
 default = ["bluetoothd", "l2cap"]
