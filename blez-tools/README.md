@@ -30,7 +30,12 @@ A running [Bluetooth daemon (BlueZ)](http://www.bluez.org/) is required.
 Installation
 ------------
 
-To install the tools on your system run
+First, install D-Bus and Bluetooth libraries on your system.
+On Debian this can be achieved by running
+
+    sudo apt install libdbus-1-dev libbluetooth-dev
+
+Then, run the following command to install BLEZ tools
 
     cargo install blez-tools
 
