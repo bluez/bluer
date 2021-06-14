@@ -7,10 +7,10 @@ use blez::{
             self, characteristic_control, Application, ApplicationHandle, CharacteristicControl,
             CharacteristicControlEvent, CharacteristicNotify, CharacteristicWrite, Service,
         },
-        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags,
+        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
     },
-    Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
-    Uuid,
+    id, Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
+    Uuid, UuidExt,
 };
 use bytes::BytesMut;
 use clap::Clap;
@@ -20,15 +20,17 @@ use libc::{STDIN_FILENO, STDOUT_FILENO};
 use pretty_hex::{hex_write, HexConfig};
 use std::{
     collections::HashSet,
+    convert::TryFrom,
     ffi::OsString,
-    fmt::Display,
+    fmt::{self, Display},
     iter,
     process::{exit, Command, Stdio},
+    str::FromStr,
     time::Duration,
 };
 use tab_pty_process::AsyncPtyMaster;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{stdin, stdout, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     select,
     time::{sleep, timeout},
 };
@@ -36,10 +38,102 @@ use tokio_compat_02::IoCompat;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[derive(Clone, Copy)]
+struct UuidOrShort(pub Uuid);
+
+impl FromStr for UuidOrShort {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.parse::<Uuid>() {
+            Ok(uuid) => Ok(Self(uuid)),
+            Err(_) => match u16::from_str_radix(s, 16) {
+                Ok(short) => Ok(Self(Uuid::from_u16(short))),
+                Err(_) => Err(s.to_string()),
+            },
+        }
+    }
+}
+
+impl From<UuidOrShort> for Uuid {
+    fn from(u: UuidOrShort) -> Self {
+        u.0
+    }
+}
+
+impl From<Uuid> for UuidOrShort {
+    fn from(u: Uuid) -> Self {
+        Self(u)
+    }
+}
+
+impl fmt::Display for UuidOrShort {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(s) = self.0.as_u16() {
+            write!(f, "{:04x}", s)
+        } else {
+            write!(f, "{}", self.0)
+        }
+    }
+}
+
+async fn find_device(adapter: &Adapter, address: Address) -> Result<Device> {
+    let mut disco = adapter.discover_devices().await?;
+    let timeout = sleep(Duration::from_secs(20));
+    pin_mut!(timeout);
+
+    loop {
+        select! {
+            Some(evt) = disco.next() => {
+                if let AdapterEvent::DeviceAdded(addr) = evt {
+                    if addr == address {
+                        return Ok(adapter.device(addr)?);
+                    }
+                }
+            }
+            _ = &mut timeout => {
+                return Err("device not found".into());
+            }
+        }
+    }
+}
+
+async fn connect(device: &Device) -> Result<()> {
+    if !device.is_connected().await? {
+        let mut retries = 2;
+        loop {
+            match device.connect().and_then(|_| device.services()).await {
+                Ok(_) => break,
+                _ if device.is_connected().await? => break,
+                Err(_) if retries > 0 => {
+                    retries -= 1;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn find_characteristic(
+    device: &Device, service_uuid: Uuid, char_uuid: Uuid,
+) -> Result<Option<remote::Characteristic>> {
+    for service in device.services().await? {
+        if service.uuid().await? == service_uuid {
+            for char in service.characteristics().await? {
+                if char.uuid().await? == char_uuid {
+                    return Ok(Some(char));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 #[derive(Clap)]
 #[clap(
     name = "gattcat",
-    about = "Arbitrary GATT characteristic connections and listens.",
+    about = "Swiss army knife for GATT services.",
     author = "Sebastian Urban <surban@surban.net>"
 )]
 struct Opts {
@@ -49,31 +143,44 @@ struct Opts {
 
 #[derive(Clap)]
 enum Cmd {
-    /// Perform service discovery.
+    /// Discover Bluetooth LE devices and their GATT services.
     Discover(DiscoverOpts),
-    /// Connect to remote device.
+    /// Connect to a remote Bluetooth device.
+    ConnectDevice(ConnectDeviceOpts),
+    /// Disconnect from a remote Bluetooth device.
+    DisconnectDevice(DisconnectDeviceOpts),
+    /// Read the value of a GATT characteristic.
+    Read(ReadOpts),
+    /// Subscribe to notifications from a GATT characteristic.
+    Notify(NotifyOpts),
+    /// Write the value of a GATT characteristic.
+    Write(WriteOpts),
+    /// Connect to a GATT characteristic on a remote Bluetooth device.
     Connect(ConnectOpts),
-    /// Listen for connection from remote device.
+    /// Serve a GATT characteristic that listens for connections from a remote Bluetooth device.
     Listen(ListenOpts),
-    /// Listen for connection from remote device and serve a program
-    /// once a connection is established.
+    /// Serve a GATT characteristic that listens for connections from a remote Bluetooth device
+    /// and serves a program once a connection is established.
     Serve(ServeOpts),
 }
 
-async fn connect(device: &Device) -> Result<()> {
-    if !device.is_connected().await? {
-        let mut retries = 2;
-        loop {
-            match device.connect().and_then(|_| device.services()).await {
-                Ok(_) => break,
-                Err(_) if retries > 0 => {
-                    retries -= 1;
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-    }
-    Ok(())
+#[derive(Clap)]
+struct DiscoverOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Timeout in seconds for discovering a device.
+    #[clap(long, short, default_value = "15")]
+    timeout: u64,
+    /// Only show devices with public addresses.
+    #[clap(long, short)]
+    public_only: bool,
+    /// Do not connect to discovered devices for GATT service discovery.
+    #[clap(long, short)]
+    no_connect: bool,
+    /// Addresses of Bluetooth devices.
+    /// If unspecified gattcat scans for devices.
+    address: Vec<Address>,
 }
 
 fn char_flags_to_vec(f: &CharacteristicFlags) -> Vec<&'static str> {
@@ -153,25 +260,6 @@ fn desc_flags_to_vec(f: &DescriptorFlags) -> Vec<&'static str> {
         v.push("authorize");
     }
     v
-}
-
-#[derive(Clap)]
-struct DiscoverOpts {
-    /// Address of local Bluetooth adapter to use.
-    #[clap(long, short)]
-    bind: Option<Address>,
-    /// Timeout in seconds for discovering a device.
-    #[clap(long, short, default_value = "15")]
-    timeout: u64,
-    /// Only show devices with public addresses.
-    #[clap(long, short)]
-    public_only: bool,
-    /// Do not connect to discovered devices for GATT service discovery.
-    #[clap(long, short)]
-    no_connect: bool,
-    /// Addresses of Bluetooth devices.
-    /// If unspecified gattcat scans for devices.
-    address: Vec<Address>,
 }
 
 impl DiscoverOpts {
@@ -254,11 +342,19 @@ impl DiscoverOpts {
         //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(Self::to_hex(&data));
-            Self::print_list(2, &format!("Service data {}", uuid), lines);
+            let id = match id::Service::try_from(uuid) {
+                Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                Err(_) => format!("{}", UuidOrShort(uuid)),
+            };
+            Self::print_list(2, &format!("Service data {}", id), lines);
         }
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(Self::to_hex(&data));
-            Self::print_list(2, &format!("Manufacturer data 0x{:04x}", id), lines);
+            let id = match id::Manufacturer::try_from(id) {
+                Ok(name) => format!("{} (0x{:04x})", name, id),
+                Err(_) => format!("0x{:04x}", id),
+            };
+            Self::print_list(2, &format!("Manufacturer data {}", id), lines);
         }
         Ok(())
     }
@@ -277,21 +373,37 @@ impl DiscoverOpts {
         }
 
         for service in dev.services().await? {
+            let uuid = service.uuid().await?;
+            let service_id = match id::Service::try_from(uuid) {
+                Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                Err(_) => format!("{}", UuidOrShort(uuid)),
+            };
             if service.primary().await? {
-                println!("  Primary service {}", service.uuid().await?);
+                println!("  Primary service {}", service_id);
             } else {
-                println!("  Secondary service {}", service.uuid().await?);
+                println!("  Secondary service {}", service_id);
             }
 
             let mut includes = Vec::new();
             for service_id in service.includes().await? {
                 let included = dev.service(service_id).await?;
-                includes.push(included.uuid().await?);
+                let uuid = included.uuid().await?;
+                let service_id = match id::Service::try_from(uuid) {
+                    Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                    Err(_) => format!("{}", UuidOrShort(uuid)),
+                };
+                includes.push(service_id);
             }
             Self::print_list(4, "Includes", includes);
 
             for char in service.characteristics().await? {
-                println!("    Characteristic {}", char.uuid().await?);
+                let uuid = char.uuid().await?;
+                let char_id = match id::Characteristic::try_from(uuid) {
+                    Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                    Err(_) => format!("{}", UuidOrShort(uuid)),
+                };
+                println!("    Characteristic {}", char_id);
+
                 let flags = char.flags().await?;
                 Self::print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
                 if flags.read {
@@ -309,7 +421,13 @@ impl DiscoverOpts {
                 }
 
                 for desc in char.descriptors().await? {
-                    println!("      Descriptor {}", desc.uuid().await?);
+                    let uuid = desc.uuid().await?;
+                    let desc_id = match id::Characteristic::try_from(uuid) {
+                        Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                        Err(_) => format!("{}", UuidOrShort(uuid)),
+                    };
+                    println!("      Descriptor {}", desc_id);
+
                     if let Ok(flags) = desc.flags().await {
                         Self::print_if_some(8, "Flags", Some(desc_flags_to_vec(&flags).join(", ")), "");
                     }
@@ -354,6 +472,249 @@ impl DiscoverOpts {
 }
 
 #[derive(Clap)]
+struct ConnectDeviceOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Public Bluetooth address of target device.
+    address: Address,
+    /// UUID of profile to connect.
+    /// If unspecified all profiles are connected and GATT services are resolved.
+    profile: Option<UuidOrShort>,
+}
+
+impl ConnectDeviceOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        match self.profile {
+            Some(profile) => dev.connect_profile(&profile.into()).await?,
+            None => connect(&dev).await?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct DisconnectDeviceOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Public Bluetooth address of target device.
+    address: Address,
+    /// UUID of profile to disconnect.
+    /// If unspecified all profiles are disconnected.
+    profile: Option<UuidOrShort>,
+}
+
+impl DisconnectDeviceOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        match self.profile {
+            Some(profile) => dev.disconnect_profile(&profile.into()).await?,
+            None => dev.disconnect().await?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct ReadOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Output raw data instead of hex dump.
+    #[clap(long, short)]
+    raw: bool,
+    /// Public Bluetooth address of target device.
+    address: Address,
+    /// UUID of target GATT service.
+    service: UuidOrShort,
+    /// UUID of target GATT characteristic.
+    characteristic: UuidOrShort,
+}
+
+impl ReadOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        connect(&dev).await?;
+
+        let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+            .await?
+            .ok_or("service or characteristic not found")?;
+
+        let value = char.read().await?;
+
+        if self.raw {
+            let mut stdout = stdout();
+            stdout.write_all(&value).await?;
+        } else {
+            let mut hex = String::new();
+            pretty_hex::pretty_hex_write(&mut hex, &value).unwrap();
+            println!("{}", hex);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct NotifyOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Output raw data instead of hex dump.
+    #[clap(long, short)]
+    raw: bool,
+    /// Limit the number of received notifications.
+    #[clap(long, short)]
+    count: Option<usize>,
+    /// Timeout in seconds.
+    #[clap(long, short)]
+    timeout: Option<f64>,
+    /// Public Bluetooth address of target device.
+    address: Address,
+    /// UUID of target GATT service.
+    service: UuidOrShort,
+    /// UUID of target GATT characteristic.
+    characteristic: UuidOrShort,
+}
+
+impl NotifyOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        connect(&dev).await?;
+
+        let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+            .await?
+            .ok_or("service or characteristic not found")?;
+
+        let notify = char.notify().await?;
+        pin_mut!(notify);
+
+        let mut timeout = match self.timeout {
+            Some(s) => {
+                let dur = Duration::from_secs_f64(s);
+                sleep(dur).boxed()
+            }
+            None => future::pending().boxed(),
+        };
+        let mut count = self.count;
+
+        loop {
+            match &mut count {
+                Some(0) => break,
+                Some(n) => *n = *n - 1,
+                None => (),
+            }
+
+            select! {
+                _ = &mut timeout => break,
+                evt = notify.next() => {
+                    match evt {
+                        Some(value) => {
+                            if self.raw {
+                                let mut stdout = stdout();
+                                stdout.write_all(&value).await?;
+                            } else {
+                                let mut hex = String::new();
+                                pretty_hex::pretty_hex_write(&mut hex, &value).unwrap();
+                                println!("{}", hex);
+                                println!();
+                            }
+                        },
+                        None => break,
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct WriteOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Characteristic write operation.
+    /// Can be command, request or reliable.
+    #[clap(long, short, parse(try_from_str=parse_write_op))]
+    op: Option<WriteOp>,
+    /// Prepare authorize request.
+    #[clap(long, short = 'a')]
+    prepare_authorize: bool,
+    /// Public Bluetooth address of target device.
+    address: Address,
+    /// UUID of target GATT service.
+    service: UuidOrShort,
+    /// UUID of target GATT characteristic.
+    characteristic: UuidOrShort,
+    /// Value to write in hex format.
+    /// If unspecified raw data is read from stdin.
+    value: Option<String>,
+}
+
+fn parse_write_op(s: &str) -> Result<WriteOp> {
+    match s {
+        "command" => Ok(WriteOp::Command),
+        "request" => Ok(WriteOp::Request),
+        "reliable" => Ok(WriteOp::Reliable),
+        _ => Err("unknown write operation".into()),
+    }
+}
+
+impl WriteOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        connect(&dev).await?;
+
+        let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+            .await?
+            .ok_or("service or characteristic not found")?;
+
+        let flags = char.flags().await?;
+        let op_type = if let Some(op) = self.op {
+            op
+        } else if flags.write {
+            WriteOp::Request
+        } else if flags.write_without_response {
+            WriteOp::Command
+        } else if flags.reliable_write {
+            WriteOp::Reliable
+        } else {
+            return Err("write operation unsupported".into());
+        };
+
+        let value = match &self.value {
+            Some(v) => {
+                let v = v.trim().replace(' ', "");
+                hex::decode(v)?
+            }
+            None => {
+                let mut stdin = stdin();
+                let mut buf = Vec::new();
+                stdin.read_to_end(&mut buf).await?;
+                buf
+            }
+        };
+
+        char.write_ext(
+            &value,
+            &remote::CharacteristicWriteRequest { offset: 0, op_type, prepare_authorize: self.prepare_authorize },
+        )
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
 struct ConnectOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -364,10 +725,10 @@ struct ConnectOpts {
     raw: bool,
     /// Target GATT service.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    service: Uuid,
+    service: UuidOrShort,
     /// Target GATT characteristic.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    characteristic: Uuid,
+    characteristic: UuidOrShort,
     /// Public Bluetooth address of target device.
     address: Address,
 }
@@ -375,30 +736,12 @@ struct ConnectOpts {
 impl ConnectOpts {
     pub async fn perform(self) -> Result<()> {
         let (_session, adapter) = get_session_adapter(self.bind).await?;
+        let dev = find_device(&adapter, self.address).await?;
+        connect(&dev).await?;
 
-        let mut disco = adapter.discover_devices().await?;
-        let timeout = sleep(Duration::from_secs(15));
-        pin_mut!(timeout);
-        let char = loop {
-            select! {
-                Some(evt) = disco.next() => {
-                    if let AdapterEvent::DeviceAdded(addr) = evt {
-                        if addr == self.address {
-                            let dev = adapter.device(addr)?;
-                            if let Ok(Some(char)) = self.find_characteristic(&dev).await {
-                                break char;
-                            } else {
-                                let _ = dev.disconnect().await;
-                                let _ = adapter.remove_device(addr).await;
-                            }
-                        }
-                    }
-                }
-                _ = &mut timeout => {
-                    return Err("device, service or characteristic not found".into());
-                }
-            }
-        };
+        let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+            .await?
+            .ok_or("service or characteristic not found")?;
 
         let rh = char.notify_io().await.ok();
         let wh = char.write_io().await.ok();
@@ -422,33 +765,6 @@ impl ConnectOpts {
         }
 
         Ok(())
-    }
-
-    async fn find_characteristic(&self, device: &Device) -> Result<Option<remote::Characteristic>> {
-        if !device.is_connected().await? {
-            let mut retries = 2;
-            loop {
-                match device.connect().await {
-                    Ok(()) => break,
-                    Err(_) if retries > 0 => {
-                        retries -= 1;
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-        }
-
-        for service in device.services().await? {
-            if service.uuid().await? == self.service {
-                for char in service.characteristics().await? {
-                    if char.uuid().await? == self.characteristic {
-                        return Ok(Some(char));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
     }
 }
 
@@ -545,17 +861,17 @@ struct ListenOpts {
     no_advertise: bool,
     /// GATT service to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    service: Uuid,
+    service: UuidOrShort,
     /// GATT characteristic to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    characteristic: Uuid,
+    characteristic: UuidOrShort,
 }
 
 impl ListenOpts {
     pub async fn perform(self) -> Result<()> {
         let (_session, adapter) = get_session_adapter(self.bind).await?;
         let (_adv, _app, mut control) =
-            make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
+            make_app(&adapter, self.no_advertise, self.service.into(), self.characteristic.into()).await?;
 
         if self.verbose {
             println!("Serving on {}", adapter.address().await?);
@@ -600,10 +916,10 @@ struct ServeOpts {
     pty: bool,
     /// GATT service to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    service: Uuid,
+    service: UuidOrShort,
     /// GATT characteristic to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
-    characteristic: Uuid,
+    characteristic: UuidOrShort,
     /// Program to execute once connection is established.
     command: OsString,
     /// Arguments to program.
@@ -637,7 +953,7 @@ impl ServeOpts {
 
         loop {
             let (_adv, _app, mut control) =
-                make_app(&adapter, self.no_advertise, self.service, self.characteristic).await?;
+                make_app(&adapter, self.no_advertise, self.service.into(), self.characteristic.into()).await?;
 
             let mut rh = None;
             let mut wh = None;
@@ -907,6 +1223,11 @@ async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
     let result = match opts.cmd {
         Cmd::Discover(d) => d.perform().await,
+        Cmd::ConnectDevice(c) => c.perform().await,
+        Cmd::DisconnectDevice(d) => d.perform().await,
+        Cmd::Read(r) => r.perform().await,
+        Cmd::Notify(n) => n.perform().await,
+        Cmd::Write(w) => w.perform().await,
         Cmd::Connect(c) => c.perform().await,
         Cmd::Listen(l) => l.perform().await,
         Cmd::Serve(s) => s.perform().compat().await,
