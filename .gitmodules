@@ -1,3 +1,3 @@
 [submodule "bluetooth-numbers-database"]
-	path = bluetooth-numbers-database
+	path = blez/bluetooth-numbers-database
 	url = https://github.com/surban/bluetooth-numbers-database.git
