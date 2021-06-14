@@ -1,6 +1,6 @@
 [package]
 name = "blez-tools"
-version = "0.1.0"
+version = "0.9.2"
 description = "Bluetooth LE tools: swiss army knife for GATT services and L2CAP sockets on Linux."
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>"]
