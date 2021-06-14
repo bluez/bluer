@@ -1,13 +1,13 @@
-//! Arbitrary GATT characteristic connections and listens.
+//! Swiss army knife for GATT services.
 
 use blez::{
     adv::{Advertisement, AdvertisementHandle},
     gatt::{
         local::{
-            self, characteristic_control, Application, ApplicationHandle, CharacteristicControl,
-            CharacteristicControlEvent, CharacteristicNotify, CharacteristicWrite, Service,
+            self, characteristic_control, Application, ApplicationHandle, CharacteristicControlEvent,
+            CharacteristicNotify, CharacteristicWrite, Service,
         },
-        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
+        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
     },
     id, Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
     Uuid, UuidExt,
@@ -15,7 +15,11 @@ use blez::{
 use bytes::BytesMut;
 use clap::Clap;
 use crossterm::{terminal, tty::IsTty};
-use futures::{future, pin_mut, stream::SelectAll, FutureExt, StreamExt, TryFutureExt};
+use futures::{
+    future, pin_mut,
+    stream::{self, SelectAll},
+    FutureExt, Stream, StreamExt, TryFutureExt,
+};
 use libc::{STDIN_FILENO, STDOUT_FILENO};
 use pretty_hex::{hex_write, HexConfig};
 use std::{
@@ -129,6 +133,42 @@ async fn find_characteristic(
     Ok(None)
 }
 
+fn print_if_some<T: Display>(indent: usize, label: &str, value: Option<T>, unit: &str) {
+    if let Some(value) = value {
+        println!("{}{:10}{} {}", " ".repeat(indent), label, value, unit);
+    }
+}
+
+fn print_if_some_20<T: Display>(indent: usize, label: &str, value: Option<T>, unit: &str) {
+    if let Some(value) = value {
+        println!("{}{:20}{} {}", " ".repeat(indent), label, value, unit);
+    }
+}
+
+fn print_list<T: Display>(indent: usize, mut label: &str, values: impl IntoIterator<Item = T>) {
+    for value in values {
+        println!("{}{:10}{}", " ".repeat(indent), label, value);
+        label = "";
+    }
+}
+
+fn to_hex(v: &[u8]) -> Vec<String> {
+    let cfg = HexConfig { title: false, ascii: true, width: 10, group: 0, chunk: 1 };
+    let mut out = String::new();
+    hex_write(&mut out, &v, cfg).unwrap();
+
+    let mut lines = Vec::new();
+    for line in out.lines() {
+        let fields: Vec<_> = line.splitn(2, ':').collect();
+        if fields.len() == 1 {
+            lines.push(fields[0].to_string());
+        } else {
+            lines.push(fields[1].trim().to_string());
+        }
+    }
+    lines
+}
+
 /// gattcat
 ///
 /// All UUIDs can be specified in full form or in 16-bit
@@ -136,7 +176,7 @@ async fn find_characteristic(
 #[derive(Clap)]
 #[clap(
     name = "gattcat",
-    about = "Swiss army knife for GATT services.",
+    about = "Swiss army knife for Bluetooth LE GATT services.",
     author = "Sebastian Urban <surban@surban.net>"
 )]
 struct Opts {
@@ -146,6 +186,8 @@ struct Opts {
 
 #[derive(Clap)]
 enum Cmd {
+    /// List installed Bluetooth adapters.
+    Adapters(AdaptersOpts),
     /// Discover Bluetooth LE devices and their GATT services.
     Discover(DiscoverOpts),
     /// Connect to a remote Bluetooth device.
@@ -168,6 +210,62 @@ enum Cmd {
     /// for connections from a remote Bluetooth device and serves a program
     /// once a connection is established.
     Serve(ServeOpts),
+}
+
+#[derive(Clap)]
+struct AdaptersOpts {}
+
+impl AdaptersOpts {
+    pub async fn perform(self) -> Result<()> {
+        let session = Session::new().await?;
+        let adapter_names = session.adapter_names().await?;
+        for adapter_name in adapter_names {
+            let adapter = session.adapter(&adapter_name)?;
+            println!("Bluetooth adapater {}", &adapter_name);
+
+            print_if_some_20(
+                2,
+                "Address",
+                Some(format!("{} [{}]", adapter.address().await?, adapter.address_type().await?)),
+                "",
+            );
+            print_if_some_20(2, "System name", Some(adapter.system_name().await?), "");
+            print_if_some_20(2, "Friendly name", Some(adapter.alias().await?), "");
+
+            print_if_some_20(2, "Powered", Some(adapter.is_powered().await?), "");
+            print_if_some_20(2, "Discoverabe", Some(adapter.is_discoverable().await?), "");
+            print_if_some_20(2, "Pairable", Some(adapter.is_pairable().await?), "");
+
+            println!("  Advertising");
+            print_if_some_20(4, "Active instances", Some(adapter.active_advertising_instances().await?), "");
+            print_if_some_20(
+                4,
+                "Supported instances",
+                Some(adapter.supported_advertising_instances().await?),
+                "",
+            );
+            let includes: Vec<_> = adapter
+                .supported_advertising_system_includes()
+                .await?
+                .into_iter()
+                .map(|i| i.to_string())
+                .collect();
+            print_if_some_20(4, "Supported includes", Some(includes.join(", ")), "");
+            if let Some(featues) = adapter.supported_advertising_features().await? {
+                let features: Vec<_> = featues.into_iter().map(|i| i.to_string()).collect();
+                print_if_some_20(4, "Supported features", Some(features.join(", ")), "");
+            }
+            if let Some(caps) = adapter.supported_advertising_capabilities().await? {
+                print_if_some_20(4, "Max. advertisement", Some(caps.max_advertisement_length), "bytes");
+                print_if_some_20(4, "Max. scan response", Some(caps.max_scan_response_length), "bytes");
+                print_if_some_20(4, "Min. TX power", Some(caps.min_tx_power), "dBm");
+                print_if_some_20(4, "Max. TX power", Some(caps.max_tx_power), "dBm");
+            }
+
+            println!();
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clap)]
@@ -232,36 +330,6 @@ fn char_flags_to_vec(f: &CharacteristicFlags) -> Vec<&'static str> {
     }
     if f.writable_auxiliaries {
         v.push("writable auxiliaries")
-    }
-    if f.authorize {
-        v.push("authorize");
-    }
-    v
-}
-
-#[allow(dead_code)]
-fn desc_flags_to_vec(f: &DescriptorFlags) -> Vec<&'static str> {
-    let mut v = Vec::new();
-    if f.read {
-        v.push("read");
-    };
-    if f.secure_read {
-        v.push("secure read");
-    };
-    if f.encrypt_read {
-        v.push("encrypt read");
-    }
-    if f.write {
-        v.push("write")
-    };
-    if f.secure_write {
-        v.push("secure write")
-    }
-    if f.encrypt_write {
-        v.push("encrypt write")
-    };
-    if f.encrypt_authenticated_write {
-        v.push("encrypt authenticated write");
     }
     if f.authorize {
         v.push("authorize");
@@ -341,27 +409,27 @@ impl DiscoverOpts {
     }
 
     async fn print_device_info(dev: &Device) -> Result<()> {
-        Self::print_if_some(2, "Name", dev.name().await?, "");
-        Self::print_if_some(2, "Icon", dev.icon().await?, "");
-        Self::print_if_some(2, "Class", dev.class().await?, "");
-        Self::print_if_some(2, "RSSI", dev.rssi().await?, "dBm");
-        Self::print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
+        print_if_some(2, "Name", dev.name().await?, "");
+        print_if_some(2, "Icon", dev.icon().await?, "");
+        print_if_some(2, "Class", dev.class().await?, "");
+        print_if_some(2, "RSSI", dev.rssi().await?, "dBm");
+        print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
         //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
-            let lines = iter::once(String::new()).chain(Self::to_hex(&data));
+            let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Service::try_from(uuid) {
                 Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
                 Err(_) => format!("{}", UuidOrShort(uuid)),
             };
-            Self::print_list(2, &format!("Service data {}", id), lines);
+            print_list(2, &format!("Service data {}", id), lines);
         }
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
-            let lines = iter::once(String::new()).chain(Self::to_hex(&data));
+            let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Manufacturer::try_from(id) {
                 Ok(name) => format!("{} ({:04x})", name, id),
                 Err(_) => format!("{:04x}", id),
             };
-            Self::print_list(2, &format!("Manufacturer data from {}", id), lines);
+            print_list(2, &format!("Manufacturer data from {}", id), lines);
         }
         Ok(())
     }
@@ -408,7 +476,7 @@ impl DiscoverOpts {
                 includes.push(service_id);
             }
             includes.sort();
-            Self::print_list(4, "Includes", includes);
+            print_list(4, "Includes", includes);
 
             let mut chars = Vec::new();
             for char in service.characteristics().await? {
@@ -425,17 +493,17 @@ impl DiscoverOpts {
                 println!("    Characteristic {}", char_id);
 
                 let flags = char.flags().await?;
-                Self::print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
+                print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
                 if flags.read {
                     if let Ok(value) = char.read().await {
-                        Self::print_list(6, "Read", Self::to_hex(&value));
+                        print_list(6, "Read", to_hex(&value));
                     }
                 }
                 if flags.notify || flags.indicate {
                     if let Ok(ns) = char.notify().await {
                         pin_mut!(ns);
                         if let Ok(Some(value)) = timeout(Duration::from_secs(5), ns.next()).await {
-                            Self::print_list(6, "Notify", Self::to_hex(&value));
+                            print_list(6, "Notify", to_hex(&value));
                         }
                     }
                 }
@@ -455,42 +523,12 @@ impl DiscoverOpts {
                     println!("      Descriptor {}", desc_id);
 
                     if let Ok(value) = desc.read().await {
-                        Self::print_list(8, "Read", Self::to_hex(&value));
+                        print_list(8, "Read", to_hex(&value));
                     }
                 }
             }
         }
         Ok(())
-    }
-
-    fn print_if_some<T: Display>(indent: usize, label: &str, value: Option<T>, unit: &str) {
-        if let Some(value) = value {
-            println!("{}{:10}{} {}", " ".repeat(indent), label, value, unit);
-        }
-    }
-
-    fn print_list<T: Display>(indent: usize, mut label: &str, values: impl IntoIterator<Item = T>) {
-        for value in values {
-            println!("{}{:10}{}", " ".repeat(indent), label, value);
-            label = "";
-        }
-    }
-
-    fn to_hex(v: &[u8]) -> Vec<String> {
-        let cfg = HexConfig { title: false, ascii: true, width: 10, group: 0, chunk: 1 };
-        let mut out = String::new();
-        hex_write(&mut out, &v, cfg).unwrap();
-
-        let mut lines = Vec::new();
-        for line in out.lines() {
-            let fields: Vec<_> = line.splitn(2, ':').collect();
-            if fields.len() == 1 {
-                lines.push(fields[0].to_string());
-            } else {
-                lines.push(fields[1].trim().to_string());
-            }
-        }
-        lines
     }
 }
 
@@ -524,7 +562,8 @@ struct DisconnectDeviceOpts {
     #[clap(long, short)]
     bind: Option<Address>,
     /// Public Bluetooth address of target device.
-    address: Address,
+    /// If unspecified, all devices are disconnected.
+    address: Option<Address>,
     /// UUID of profile to disconnect.
     /// If unspecified all profiles are disconnected.
     profile: Option<UuidOrShort>,
@@ -533,11 +572,22 @@ struct DisconnectDeviceOpts {
 impl DisconnectDeviceOpts {
     pub async fn perform(self) -> Result<()> {
         let (_session, adapter) = get_session_adapter(self.bind).await?;
-        let dev = find_device(&adapter, self.address).await?;
-        match self.profile {
-            Some(profile) => dev.disconnect_profile(&profile.into()).await?,
-            None => dev.disconnect().await?,
+        match self.address {
+            Some(address) => {
+                let dev = find_device(&adapter, address).await?;
+                match self.profile {
+                    Some(profile) => dev.disconnect_profile(&profile.into()).await?,
+                    None => dev.disconnect().await?,
+                }
+            }
+            None => {
+                for addr in adapter.device_addresses().await? {
+                    let dev = adapter.device(addr)?;
+                    let _ = dev.disconnect().await?;
+                }
+            }
         }
+
         Ok(())
     }
 }
@@ -746,6 +796,9 @@ struct ConnectOpts {
     /// Use together with --pty when serving.
     #[clap(long, short)]
     raw: bool,
+    /// Use Nordic UART service (NUS) service.
+    #[clap(long, short)]
+    nordic_uart: bool,
     /// Target GATT service.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: UuidOrShort,
@@ -762,12 +815,28 @@ impl ConnectOpts {
         let dev = find_device(&adapter, self.address).await?;
         connect(&dev).await?;
 
-        let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+        let (rh, wh) = if self.nordic_uart {
+            let rx_char = find_characteristic(
+                &dev,
+                id::Service::ComNordicsemiServiceUart.into(),
+                id::Characteristic::ComNordicsemiCharacteristicUartRx.into(),
+            )
             .await?
-            .ok_or("service or characteristic not found")?;
-
-        let rh = char.notify_io().await.ok();
-        let wh = char.write_io().await.ok();
+            .ok_or("TX service or characteristic not found")?;
+            let tx_char = find_characteristic(
+                &dev,
+                id::Service::ComNordicsemiServiceUart.into(),
+                id::Characteristic::ComNordicsemiCharacteristicUartTx.into(),
+            )
+            .await?
+            .ok_or("TX service or characteristic not found")?;
+            (tx_char.notify_io().await.ok(), rx_char.write_io().await.ok())
+        } else {
+            let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
+                .await?
+                .ok_or("service or characteristic not found")?;
+            (char.notify_io().await.ok(), char.write_io().await.ok())
+        };
 
         if rh.is_none() && wh.is_none() {
             return Err("neither writing nor notify are supported".into());
@@ -786,6 +855,8 @@ impl ConnectOpts {
         if in_raw {
             terminal::disable_raw_mode()?;
         }
+
+        let _ = dev.disconnect().await;
 
         Ok(())
     }
@@ -880,8 +951,11 @@ struct ListenOpts {
     #[clap(long)]
     raw: bool,
     /// Do not send LE advertisement packets.
-    #[clap(long, short)]
+    #[clap(long, short = 'a')]
     no_advertise: bool,
+    /// Provide Nordic UART service (NUS) service.
+    #[clap(long, short)]
+    nordic_uart: bool,
     /// GATT service to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: UuidOrShort,
@@ -893,8 +967,14 @@ struct ListenOpts {
 impl ListenOpts {
     pub async fn perform(self) -> Result<()> {
         let (_session, adapter) = get_session_adapter(self.bind).await?;
-        let (_adv, _app, mut control) =
-            make_app(&adapter, self.no_advertise, self.service.into(), self.characteristic.into()).await?;
+        let (_adv, _app, mut control) = make_app(
+            &adapter,
+            self.no_advertise,
+            self.nordic_uart,
+            self.service.into(),
+            self.characteristic.into(),
+        )
+        .await?;
 
         if self.verbose {
             println!("Serving on {}", adapter.address().await?);
@@ -928,7 +1008,7 @@ struct ServeOpts {
     #[clap(long, short)]
     verbose: bool,
     /// Do not send LE advertisement packets.
-    #[clap(long, short)]
+    #[clap(long, short = 'a')]
     no_advertise: bool,
     /// Exit after handling one connection.
     #[clap(long, short)]
@@ -937,6 +1017,9 @@ struct ServeOpts {
     /// Use together with --raw when connecting.
     #[clap(long, short)]
     pty: bool,
+    /// Provide Nordic UART service (NUS) service.
+    #[clap(long, short)]
+    nordic_uart: bool,
     /// GATT service to publish.
     #[clap(long, short, default_value = "02091984-ecf2-4b12-8135-59f4b1d1904b")]
     service: UuidOrShort,
@@ -975,8 +1058,14 @@ impl ServeOpts {
         });
 
         loop {
-            let (_adv, _app, mut control) =
-                make_app(&adapter, self.no_advertise, self.service.into(), self.characteristic.into()).await?;
+            let (_adv, _app, mut control) = make_app(
+                &adapter,
+                self.no_advertise,
+                self.nordic_uart,
+                self.service.into(),
+                self.characteristic.into(),
+            )
+            .await?;
 
             let mut rh = None;
             let mut wh = None;
@@ -1067,8 +1156,9 @@ impl ServeOpts {
 }
 
 async fn make_app(
-    adapter: &Adapter, no_advertise: bool, service: Uuid, characteristic: Uuid,
-) -> Result<(Option<AdvertisementHandle>, ApplicationHandle, CharacteristicControl)> {
+    adapter: &Adapter, no_advertise: bool, nordic_uart: bool, service: Uuid, characteristic: Uuid,
+) -> Result<(Option<AdvertisementHandle>, ApplicationHandle, impl Stream<Item = CharacteristicControlEvent>)> {
+    let service = if nordic_uart { id::Service::ComNordicsemiServiceUart.into() } else { service };
     let le_advertisement = Advertisement {
         service_uuids: vec![service].into_iter().collect(),
         discoverable: Some(true),
@@ -1076,36 +1166,73 @@ async fn make_app(
     };
     let adv = if !no_advertise { Some(adapter.advertise(le_advertisement).await?) } else { None };
 
-    let (control, control_handle) = characteristic_control();
-    let app = Application {
-        services: vec![Service {
-            uuid: service,
-            primary: true,
-            characteristics: vec![local::Characteristic {
-                uuid: characteristic,
-                write: Some(CharacteristicWrite {
-                    write_without_response: true,
-                    method: blez::gatt::local::CharacteristicWriteMethod::Io,
-                    ..Default::default()
-                }),
-                notify: Some(CharacteristicNotify {
-                    notify: true,
-                    method: blez::gatt::local::CharacteristicNotifyMethod::Io,
-                    ..Default::default()
-                }),
-                control_handle,
+    let (app, events) = if nordic_uart {
+        let (control_rx, control_rx_handle) = characteristic_control();
+        let (control_tx, control_tx_handle) = characteristic_control();
+        let app = Application {
+            services: vec![Service {
+                uuid: id::Service::ComNordicsemiServiceUart.into(),
+                primary: true,
+                characteristics: vec![
+                    local::Characteristic {
+                        uuid: id::Characteristic::ComNordicsemiCharacteristicUartRx.into(),
+                        write: Some(CharacteristicWrite {
+                            write: true,
+                            write_without_response: true,
+                            method: blez::gatt::local::CharacteristicWriteMethod::Io,
+                            ..Default::default()
+                        }),
+                        control_handle: control_rx_handle,
+                        ..Default::default()
+                    },
+                    local::Characteristic {
+                        uuid: id::Characteristic::ComNordicsemiCharacteristicUartTx.into(),
+                        notify: Some(CharacteristicNotify {
+                            notify: true,
+                            method: blez::gatt::local::CharacteristicNotifyMethod::Io,
+                            ..Default::default()
+                        }),
+                        control_handle: control_tx_handle,
+                        ..Default::default()
+                    },
+                ],
                 ..Default::default()
             }],
-            ..Default::default()
-        }],
+        };
+        let control = stream::select(control_tx, control_rx).boxed();
+        (adapter.serve_gatt_application(app).await?, control)
+    } else {
+        let (control, control_handle) = characteristic_control();
+        let app = Application {
+            services: vec![Service {
+                uuid: service,
+                primary: true,
+                characteristics: vec![local::Characteristic {
+                    uuid: characteristic,
+                    write: Some(CharacteristicWrite {
+                        write_without_response: true,
+                        method: blez::gatt::local::CharacteristicWriteMethod::Io,
+                        ..Default::default()
+                    }),
+                    notify: Some(CharacteristicNotify {
+                        notify: true,
+                        method: blez::gatt::local::CharacteristicNotifyMethod::Io,
+                        ..Default::default()
+                    }),
+                    control_handle,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        };
+        (adapter.serve_gatt_application(app).await?, control.boxed())
     };
-    let app = adapter.serve_gatt_application(app).await?;
 
-    Ok((adv, app, control))
+    Ok((adv, app, events))
 }
 
 async fn io_loop_serve(
-    control: &mut CharacteristicControl, mut rh: Option<CharacteristicReader>,
+    mut control: impl Stream<Item = CharacteristicControlEvent> + Unpin, mut rh: Option<CharacteristicReader>,
     mut wh: Option<CharacteristicWriter>, pin: impl AsyncRead + Unpin, pout: impl AsyncWrite + Unpin,
     is_std: bool, rh_required: bool, pin_required: bool,
 ) -> Result<()> {
@@ -1245,6 +1372,7 @@ async fn main() -> Result<()> {
     env_logger::init();
     let opts: Opts = Opts::parse();
     let result = match opts.cmd {
+        Cmd::Adapters(a) => a.perform().await,
         Cmd::Discover(d) => d.perform().await,
         Cmd::ConnectDevice(c) => c.perform().await,
         Cmd::DisconnectDevice(d) => d.perform().await,
