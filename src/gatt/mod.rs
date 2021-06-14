@@ -26,7 +26,7 @@ pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
 pub(crate) const CHARACTERISTIC_INTERFACE: &str = "org.bluez.GattCharacteristic1";
 pub(crate) const DESCRIPTOR_INTERFACE: &str = "org.bluez.GattDescriptor1";
 
-define_flags!(CharacteristicFlags, "Bluetooth GATT characteristic flags." => {
+define_flags!(pub CharacteristicFlags, "Bluetooth GATT characteristic flags." => {
     /// If set, permits broadcasts of the Characteristic Value using
     /// Server Characteristic Configuration Descriptor.
     broadcast ("broadcast"),

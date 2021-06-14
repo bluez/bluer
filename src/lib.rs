@@ -342,7 +342,7 @@ macro_rules! cr_property {
 
 #[cfg(feature = "bluetoothd")]
 macro_rules! define_flags {
-    ($name:ident, $doc:tt => {
+    ($vis:vis $name:ident, $doc:tt => {
         $(
             $(#[$field_outer:meta])*
             $field:ident ($dbus_name:expr),
@@ -350,7 +350,7 @@ macro_rules! define_flags {
     }) => {
         #[derive(Clone, Copy, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[doc=$doc]
-        pub struct $name {
+        $vis struct $name {
             $(
                 $(#[$field_outer])*
                 pub $field: bool,
