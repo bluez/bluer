@@ -104,7 +104,6 @@ async fn connect(device: &Device) -> Result<()> {
         loop {
             match device.connect().and_then(|_| device.services()).await {
                 Ok(_) => break,
-                _ if device.is_connected().await? => break,
                 Err(_) if retries > 0 => {
                     retries -= 1;
                 }
@@ -130,6 +129,10 @@ async fn find_characteristic(
     Ok(None)
 }
 
+/// gattcat
+///
+/// All UUIDs can be specified in full form or in 16-bit
+/// short form as hexadecimals.
 #[derive(Clap)]
 #[clap(
     name = "gattcat",
@@ -155,12 +158,15 @@ enum Cmd {
     Notify(NotifyOpts),
     /// Write the value of a GATT characteristic.
     Write(WriteOpts),
-    /// Connect to a GATT characteristic on a remote Bluetooth device.
+    /// Connect (via notify and write) to a GATT characteristic on a
+    /// remote Bluetooth device.
     Connect(ConnectOpts),
-    /// Serve a GATT characteristic that listens for connections from a remote Bluetooth device.
+    /// Serve (via notify and write) a GATT characteristic that listens
+    /// for connections from a remote Bluetooth device.
     Listen(ListenOpts),
-    /// Serve a GATT characteristic that listens for connections from a remote Bluetooth device
-    /// and serves a program once a connection is established.
+    /// Serve (via notify and write) a GATT characteristic that listens
+    /// for connections from a remote Bluetooth device and serves a program
+    /// once a connection is established.
     Serve(ServeOpts),
 }
 
@@ -233,6 +239,7 @@ fn char_flags_to_vec(f: &CharacteristicFlags) -> Vec<&'static str> {
     v
 }
 
+#[allow(dead_code)]
 fn desc_flags_to_vec(f: &DescriptorFlags) -> Vec<&'static str> {
     let mut v = Vec::new();
     if f.read {
@@ -351,10 +358,10 @@ impl DiscoverOpts {
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(Self::to_hex(&data));
             let id = match id::Manufacturer::try_from(id) {
-                Ok(name) => format!("{} (0x{:04x})", name, id),
-                Err(_) => format!("0x{:04x}", id),
+                Ok(name) => format!("{} ({:04x})", name, id),
+                Err(_) => format!("{:04x}", id),
             };
-            Self::print_list(2, &format!("Manufacturer data {}", id), lines);
+            Self::print_list(2, &format!("Manufacturer data from {}", id), lines);
         }
         Ok(())
     }
@@ -372,7 +379,13 @@ impl DiscoverOpts {
             }
         }
 
+        let mut services = Vec::new();
         for service in dev.services().await? {
+            services.push((service.uuid().await?, service));
+        }
+        services.sort_by_key(|(uuid, _)| uuid.clone());
+
+        for (_, service) in services {
             let uuid = service.uuid().await?;
             let service_id = match id::Service::try_from(uuid) {
                 Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
@@ -394,9 +407,16 @@ impl DiscoverOpts {
                 };
                 includes.push(service_id);
             }
+            includes.sort();
             Self::print_list(4, "Includes", includes);
 
+            let mut chars = Vec::new();
             for char in service.characteristics().await? {
+                chars.push((char.uuid().await?, char));
+            }
+            chars.sort_by_key(|(uuid, _)| uuid.clone());
+
+            for (_, char) in chars {
                 let uuid = char.uuid().await?;
                 let char_id = match id::Characteristic::try_from(uuid) {
                     Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
@@ -420,17 +440,20 @@ impl DiscoverOpts {
                     }
                 }
 
+                let mut descs = Vec::new();
                 for desc in char.descriptors().await? {
+                    descs.push((desc.uuid().await?, desc));
+                }
+                descs.sort_by_key(|(uuid, _)| uuid.clone());
+
+                for (_, desc) in descs {
                     let uuid = desc.uuid().await?;
-                    let desc_id = match id::Characteristic::try_from(uuid) {
+                    let desc_id = match id::Descriptor::try_from(uuid) {
                         Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
                         Err(_) => format!("{}", UuidOrShort(uuid)),
                     };
                     println!("      Descriptor {}", desc_id);
 
-                    if let Ok(flags) = desc.flags().await {
-                        Self::print_if_some(8, "Flags", Some(desc_flags_to_vec(&flags).join(", ")), "");
-                    }
                     if let Ok(value) = desc.read().await {
                         Self::print_list(8, "Read", Self::to_hex(&value));
                     }
