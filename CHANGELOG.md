@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.9.1 - 2021-06-14
 ### Added
 - database of assigned number
-- `gattcat` example functionality.
+- `gattcat` tool functionality.
+- Manufacturer info in `blemon` tool.
 ### Removed
 - `Descriptor::flags` because it is not provided by BlueZ.
 

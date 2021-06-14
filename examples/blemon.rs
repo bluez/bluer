@@ -1,6 +1,6 @@
 //! Scans for and monitors Bluetooth devices.
 
-use blez::{Adapter, AdapterEvent, Address};
+use blez::{id, Adapter, AdapterEvent, Address};
 use crossterm::{
     cursor, execute, queue,
     style::{self, Stylize},
@@ -9,7 +9,9 @@ use crossterm::{
 use futures::{pin_mut, stream::SelectAll, FutureExt, StreamExt};
 use std::{
     collections::HashMap,
+    convert::TryFrom,
     io::stdout,
+    iter,
     time::{Duration, Instant},
 };
 use tokio::time::sleep;
@@ -119,7 +121,7 @@ impl DeviceMonitor {
 
         const MIN_RSSI: i16 = -120;
         const MAX_RSSI: i16 = -30;
-        const MAX_BAR_LEN: i16 = 25;
+        const MAX_BAR_LEN: i16 = 15;
         let bar_len = if let Some(rssi) = device.rssi().await? {
             write!(&mut line, "{} dBm [", format!("{:4}", rssi).red())?;
             (rssi.clamp(MIN_RSSI, MAX_RSSI) - MIN_RSSI) * MAX_BAR_LEN / (MAX_RSSI - MIN_RSSI)
@@ -139,7 +141,21 @@ impl DeviceMonitor {
         write!(&mut line, "{}", " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _))?;
         write!(&mut line, "]")?;
 
-        write!(&mut line, "  {}   ", format!("{:30}", device.name().await?.unwrap_or_default()).blue())?;
+        let md = device.manufacturer_data().await?.unwrap_or_default();
+        let mut m_ids: Vec<u16> = md.keys().cloned().collect();
+        m_ids.sort();
+        let ms: Vec<_> = m_ids
+            .into_iter()
+            .filter_map(|id| {
+                id::Manufacturer::try_from(id)
+                    .ok()
+                    .map(|m| m.to_string().split(&[' ', ','][..]).next().unwrap().to_string())
+            })
+            .collect();
+        let ms: String = ms.join(" / ").chars().chain(iter::repeat(' ')).take(12).collect();
+        write!(&mut line, "  {}", ms.cyan())?;
+
+        write!(&mut line, " {}   ", format!("{:30}", device.name().await?.unwrap_or_default()).blue())?;
 
         Ok(line)
     }
