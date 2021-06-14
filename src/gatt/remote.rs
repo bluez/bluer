@@ -11,8 +11,8 @@ use tokio::net::UnixStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
-    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp, CHARACTERISTIC_INTERFACE,
+    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     all_dbus_objects, Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SessionInner,
@@ -693,12 +693,12 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
-        /// Defines how the descriptor value can be used.
-        property(
-            Flags, DescriptorFlags,
-            dbus: (DESCRIPTOR_INTERFACE, "Flags", Vec<String>, MANDATORY),
-            get: (flags, v => {DescriptorFlags::from_slice(v)}),
-        );
+        // /// Defines how the descriptor value can be used.
+        // property(
+        //     Flags, DescriptorFlags,
+        //     dbus: (DESCRIPTOR_INTERFACE, "Flags", Vec<String>, MANDATORY),
+        //     get: (flags, v => {DescriptorFlags::from_slice(v)}),
+        // );
 
         /// The cached value of the descriptor.
         ///
