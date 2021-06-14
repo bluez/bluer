@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: recursive
     - name: Install dependencies
       run: sudo apt-get install libdbus-1-dev libbluetooth-dev
     - name: Build
