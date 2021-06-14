@@ -42,6 +42,9 @@ The following functionality is provided:
     * sequential packet oriented
     * datagram oriented
     * async IO interface with `AsyncRead` and `AsyncWrite` support
+* database of assigned numbers
+    * manufacturer ids
+    * GATT services, characteristics and descriptors
 
 Classic Bluetooth is unsupported except for device discovery.
 
@@ -138,7 +141,7 @@ The following tools are included and also serve as examples.
 
   - **blemon**: Scans for and monitors Bluetooth LE devices similar to `top`.
 
-  - **gattcat**: `netcat`-like for GATT characteristics.
+  - **gattcat**: Swiss army knife for GATT services.
 
   - **l2cat**: `netcat`-like for L2CAP sockets.
 

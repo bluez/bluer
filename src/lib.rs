@@ -11,36 +11,39 @@
 //!
 //! The following functionality is provided.
 //!
-//! * Bluetooth adapters
-//!     * enumeration
+//! * [Bluetooth adapters](Adapter)
+//!     * [enumeration](Session::adapter_names)
 //!     * configuration of power, discoverability, name, etc.
 //!     * hot-plug support through change events stream
-//! * Bluetooth devices
-//!     * discovery
+//! * [Bluetooth devices](Device)
+//!     * [discovery](Adapter::discover_devices)
 //!     * querying of address, name, class, signal strength (RSSI), etc.
 //!     * Bluetooth Low Energy advertisements
-//!     * change events stream
+//!     * [change events stream](Adapter::events)
 //!     * connecting and pairing
-//! * consumption of remote GATT services
+//! * [consumption of remote GATT services](Device::services)
 //!     * GATT service discovery
 //!     * read, write and notify operations on characteristics
 //!     * read and write operations on characteristic descriptors
 //!     * optional use of low-overhead [AsyncRead] and [AsyncWrite] streams for notify and write operations
-//! * publishing local GATT services
+//! * [publishing local GATT services](Adapter::serve_gatt_application)
 //!     * read, write and notify operations on characteristics
 //!     * read and write operations on characteristic descriptors
 //!     * two programming models supported
 //!         * callback-based interface
 //!         * low-overhead [AsyncRead] and [AsyncWrite] streams
-//! * sending Bluetooth Low Energy advertisements
+//! * [sending Bluetooth Low Energy advertisements](Adapter::advertise)
 //! * efficient event dispatching
 //!     * not affected by D-Bus match rule count
 //!     * O(1) in number of subscriptions
-//! * L2CAP sockets
+//! * [L2CAP sockets](l2cap)
 //!     * stream oriented
 //!     * sequential packet oriented
 //!     * datagram oriented
 //!     * async IO interface with [AsyncRead] and [AsyncWrite] support
+//! * [database of assigned numbers](id)
+//!     * manufacturer ids
+//!     * GATT services, characteristics and descriptors
 //!
 //! Classic Bluetooth is unsupported except for device discovery.
 //!
@@ -415,6 +418,10 @@ mod session;
 pub use crate::{adapter::*, device::*, session::*};
 
 pub use uuid::Uuid;
+mod uuid_ext;
+pub use uuid_ext::UuidExt;
+
+pub mod id;
 
 /// Bluetooth error.
 #[cfg(feature = "bluetoothd")]
@@ -775,49 +782,5 @@ pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
         Path::new("/").unwrap()
     } else {
         Path::new(comps.join("/")).unwrap()
-    }
-}
-
-/// UUID extension trait to convert to and from Bluetooth short UUIDs.
-pub trait UuidExt {
-    /// 32-bit short form of Bluetooth UUID.
-    fn as_u32(&self) -> Option<u32>;
-    /// 16-bit short form of Bluetooth UUID.
-    fn as_u16(&self) -> Option<u16>;
-    /// Long form of 32-bit short form Bluetooth UUID.
-    fn from_u32(v: u32) -> Uuid;
-    /// Long form of 16-bit short form Bluetooth UUID.
-    fn from_u16(v: u16) -> Uuid;
-}
-
-const BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
-const BASE_MASK_32: u128 = 0x00000000_ffff_ffff_ffff_ffffffffffff;
-const BASE_MASK_16: u128 = 0xffff0000_ffff_ffff_ffff_ffffffffffff;
-
-impl UuidExt for Uuid {
-    fn as_u32(&self) -> Option<u32> {
-        let value = self.as_u128();
-        if value & BASE_MASK_32 == BASE_UUID {
-            Some((value >> 96) as u32)
-        } else {
-            None
-        }
-    }
-
-    fn as_u16(&self) -> Option<u16> {
-        let value = self.as_u128();
-        if value & BASE_MASK_16 == BASE_UUID {
-            Some((value >> 96) as u16)
-        } else {
-            None
-        }
-    }
-
-    fn from_u32(v: u32) -> Uuid {
-        Uuid::from_u128(BASE_UUID | ((v as u128) << 96))
-    }
-
-    fn from_u16(v: u16) -> Uuid {
-        Uuid::from_u128(BASE_UUID | ((v as u128) << 96))
     }
 }
