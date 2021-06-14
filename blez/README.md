@@ -137,4 +137,4 @@ Use `cargo run --example <name>` to run a particular example application.
 Tools
 -----
 
-See the [blez-tools crate](https://crates.io/crates/blez-tools) for tools that build on this library.
+See the [BLEZ tools](https://crates.io/crates/blez-tools) crate for tools that build on this library.
