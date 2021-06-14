@@ -19,7 +19,7 @@ The following command line tools are included.
     - serves (via notify and write) a local program over a GATT service
     - implements the [Nordic UART service (NUS)](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/include/bluetooth/services/nus.html) as client and server
 
-  - **l2cat**: `netcat`-like for Bluetooth LE L2CAP sockets.
+  - **l2cat**: [netcat](https://sectools.org/tool/netcat/)-like for Bluetooth LE L2CAP sockets.
     - connects to remote L2CAP PSMs
     - listens on local L2CAP PSMs and accepts connections
     - serves a local program on an L2CAP PSM
