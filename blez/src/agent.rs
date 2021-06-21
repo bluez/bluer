@@ -293,7 +293,7 @@ impl RegisteredAgent {
     where
         F: Future<Output = ReqResult<R>> + Send + 'static,
     {
-        let cancel_rx = self.get_cancel();
+        let cancel_rx = self.get_cancel().await;
         match f {
             Some(f) => {
                 let fut = f(arg);
