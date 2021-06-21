@@ -11,7 +11,7 @@ use std::{
     fmt,
     sync::Arc,
 };
-use tokio::time::sleep;
+use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
 
 use crate::{
@@ -251,14 +251,23 @@ impl Device {
     ///
     /// In case there is no application agent and also
     /// no default agent present, this method will fail.
+    ///
+    /// Drop the returned future to cancel pairing.
     pub async fn pair(&self) -> Result<()> {
-        self.call_method("Pair", ()).await
-    }
+        let (done_tx, done_rx) = oneshot::channel();
+        let dbus_path = self.dbus_path.clone();
+        let connection = self.inner.connection.clone();
+        tokio::spawn(async move {
+            if let Err(_) = done_rx.await {
+                let proxy = Proxy::new(SERVICE_NAME, dbus_path, TIMEOUT, &*connection);
+                let _: std::result::Result<(), dbus::Error> =
+                    proxy.method_call(INTERFACE, "CancelPairing", ()).await;
+            }
+        });
 
-    /// This method can be used to cancel a pairing
-    /// operation initiated by the Pair method.
-    pub async fn cancel_pairing(&self) -> Result<()> {
-        self.call_method("CancelPairing", ()).await
+        let result = self.call_method("Pair", ()).await;
+        let _ = done_tx.send(());
+        result
     }
 }
 
