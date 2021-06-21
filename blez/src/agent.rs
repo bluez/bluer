@@ -240,6 +240,8 @@ pub struct Agent {
     /// This method gets called when the service daemon
     /// needs to authorize a connection/service request.
     pub authorize_service: Option<AuthorizeServiceFn>,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Agent {

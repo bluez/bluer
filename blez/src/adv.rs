@@ -219,6 +219,8 @@ pub struct Advertisement {
     /// provided value must be in range [-127 to +20], where
     /// units are in dBm.
     pub tx_power: Option<i16>,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Advertisement {
