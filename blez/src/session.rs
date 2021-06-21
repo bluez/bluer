@@ -103,6 +103,7 @@ impl Drop for SingleSessionToken {
 ///
 /// Encapsulates a connection to the system Bluetooth daemon.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+#[derive(Clone)]
 pub struct Session {
     inner: Arc<SessionInner>,
 }
