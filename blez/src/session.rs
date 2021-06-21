@@ -28,8 +28,10 @@ use std::{
 use tokio::{select, task::spawn_blocking};
 
 use crate::{
-    adapter, adv::Advertisement, all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind,
-    InternalErrorKind, Result, SERVICE_NAME,
+    adapter,
+    adv::Advertisement,
+    agent::{Agent, AgentHandle, RegisteredAgent},
+    all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 /// Shared state of all objects in a Bluetooth session.
@@ -41,6 +43,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_token: IfaceToken<Arc<gatt::local::RegisteredCharacteristic>>,
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
+    pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
 }
@@ -144,6 +147,7 @@ impl Session {
         let gatt_characteristic_descriptor_token =
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
+        let agent_token = RegisteredAgent::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
         Event::handle_connection(connection.clone(), event_sub_rx).await?;
@@ -156,6 +160,7 @@ impl Session {
             gatt_reg_characteristic_token,
             gatt_reg_characteristic_descriptor_token: gatt_characteristic_descriptor_token,
             gatt_profile_token,
+            agent_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
         });
@@ -190,6 +195,28 @@ impl Session {
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
         Adapter::new(self.inner.clone(), adapter_name)
+    }
+
+    /// This registers an agent handler.
+    ///
+    /// Every application can register its own agent and
+    /// for all actions triggered by that application its
+    /// agent is used.
+    ///
+    /// It is not required by an application to register
+    /// an agent. If an application does chooses to not
+    /// register an agent, the default agent is used. This
+    /// is on most cases a good idea. Only application
+    /// like a pairing wizard should register their own
+    /// agent.
+    ///
+    /// An application can only register one agent. Multiple
+    /// agents per application is not supported.
+    ///
+    /// Drop the returned [AgentHandle] to unregister the agent.
+    pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
+        let reg_agent = RegisteredAgent::new(agent);
+        reg_agent.register(self.inner.clone()).await
     }
 
     /// Stream adapter added and removed events.

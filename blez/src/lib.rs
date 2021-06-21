@@ -33,6 +33,7 @@
 //!         * callback-based interface
 //!         * low-overhead [AsyncRead] and [AsyncWrite] streams
 //! * [sending Bluetooth Low Energy advertisements](Adapter::advertise)
+//! * [Bluetooth authorization agent](agent::Agent)
 //! * efficient event dispatching
 //!     * not affected by D-Bus match rule count
 //!     * O(1) in number of subscriptions
@@ -408,7 +409,7 @@ mod adapter;
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod adv;
 #[cfg(feature = "bluetoothd")]
-mod agent;
+pub mod agent;
 #[cfg(feature = "bluetoothd")]
 mod device;
 #[cfg(feature = "bluetoothd")]

@@ -34,6 +34,7 @@ The following functionality is provided:
         * callback-based interface
         * low-overhead `AsyncRead` and `AsyncWrite` streams
 * sending Bluetooth Low Energy advertisements
+* Bluetooth authorization agent
 * efficient event dispatching
     * not affected by D-Bus match rule count
     * O(1) in number of subscriptions
