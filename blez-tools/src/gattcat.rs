@@ -38,8 +38,9 @@ use std::{
 };
 use tab_pty_process::AsyncPtyMaster;
 use tokio::{
-    io::{stdin, stdout, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{stdin, stdout, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     select,
+    sync::oneshot,
     time::{sleep, timeout},
 };
 use tokio_compat_02::IoCompat;
@@ -173,15 +174,27 @@ fn to_hex(v: &[u8]) -> Vec<String> {
     lines
 }
 
-fn get_line() -> String {
+async fn get_line() -> String {
+    let (done_tx, done_rx) = oneshot::channel();
+    tokio::spawn(async move {
+        if let Err(_) = done_rx.await {
+            println!();
+            println!("Never mind! Request was cancelled. But you must press enter now.");
+        }
+    });
+
     let mut line = String::new();
-    std::io::stdin().read_line(&mut line).unwrap();
+    let mut buf = tokio::io::BufReader::new(tokio::io::stdin());
+    buf.read_line(&mut line).await.expect("cannot read stdin");
+    let _ = done_tx.send(());
+    println!("Thanks for your response!");
+
     line.trim().to_string()
 }
 
-fn get_yes_no() -> ReqResult<()> {
+async fn get_yes_no() -> ReqResult<()> {
     loop {
-        let line = get_line();
+        let line = get_line().await;
         if line == "y" {
             return Ok(());
         } else if line == "n" {
@@ -194,7 +207,7 @@ fn get_yes_no() -> ReqResult<()> {
 
 async fn request_pin_code(req: RequestPinCode) -> ReqResult<String> {
     println!("Enter PIN code for device {} on {}:", &req.device, &req.adapter);
-    Ok(get_line())
+    Ok(get_line().await)
 }
 
 async fn display_pin_code(req: DisplayPinCode) -> ReqResult<()> {
@@ -205,7 +218,7 @@ async fn display_pin_code(req: DisplayPinCode) -> ReqResult<()> {
 async fn request_passkey(req: RequestPasskey) -> ReqResult<u32> {
     println!("Enter 6-digit passkey for device {} on {}:", &req.device, &req.adapter);
     loop {
-        let line = get_line();
+        let line = get_line().await;
         let passkey: u32 = if let Ok(v) = line.parse() {
             v
         } else {
@@ -225,14 +238,32 @@ async fn display_passkey(req: DisplayPasskey) -> ReqResult<()> {
     Ok(())
 }
 
-async fn request_confirmation(req: RequestConfirmation) -> ReqResult<()> {
+async fn request_confirmation(req: RequestConfirmation, session: Session, set_trust: bool) -> ReqResult<()> {
     println!("Is passkey \"{:06}\" correct for device {} on {}? (y/n)", req.passkey, &req.device, &req.adapter);
-    get_yes_no()
+    get_yes_no().await?;
+    if set_trust {
+        println!("Trusting device {}", &req.device);
+        let adapter = session.adapter(&req.adapter).unwrap();
+        let device = adapter.device(req.device).unwrap();
+        if let Err(err) = device.set_trusted(true).await {
+            println!("Cannot trust device: {}", &err);
+        }
+    }
+    Ok(())
 }
 
-async fn request_authorization(req: RequestAuthorization) -> ReqResult<()> {
+async fn request_authorization(req: RequestAuthorization, session: Session, set_trust: bool) -> ReqResult<()> {
     println!("Is device {} on {} allowed to pair? (y/n)", &req.device, &req.adapter);
-    get_yes_no()
+    get_yes_no().await?;
+    if set_trust {
+        println!("Trusting device {}", &req.device);
+        let adapter = session.adapter(&req.adapter).unwrap();
+        let device = adapter.device(req.device).unwrap();
+        if let Err(err) = device.set_trusted(true).await {
+            println!("Cannot trust device: {}", &err);
+        }
+    }
+    Ok(())
 }
 
 async fn authorize_service(req: AuthorizeService) -> ReqResult<()> {
@@ -241,18 +272,24 @@ async fn authorize_service(req: AuthorizeService) -> ReqResult<()> {
         Err(_) => format!("{}", UuidOrShort(req.service)),
     };
     println!("Is device {} on {} allowed to use service {}? (y/n)", &req.device, &req.adapter, service_id);
-    get_yes_no()
+    get_yes_no().await
 }
 
-async fn register_agent(session: &Session, request_default: bool) -> Result<AgentHandle> {
+async fn register_agent(session: &Session, request_default: bool, set_trust: bool) -> Result<AgentHandle> {
+    let session1 = session.clone();
+    let session2 = session.clone();
     let agent = Agent {
         request_default,
         request_pin_code: Some(Box::new(|req| request_pin_code(req).boxed())),
         display_pin_code: Some(Box::new(|req| display_pin_code(req).boxed())),
         request_passkey: Some(Box::new(|req| request_passkey(req).boxed())),
         display_passkey: Some(Box::new(|req| display_passkey(req).boxed())),
-        request_confirmation: Some(Box::new(|req| request_confirmation(req).boxed())),
-        request_authorization: Some(Box::new(|req| request_authorization(req).boxed())),
+        request_confirmation: Some(Box::new(move |req| {
+            request_confirmation(req, session1.clone(), set_trust).boxed()
+        })),
+        request_authorization: Some(Box::new(move |req| {
+            request_authorization(req, session2.clone(), set_trust).boxed()
+        })),
         authorize_service: Some(Box::new(|req| authorize_service(req).boxed())),
         ..Default::default()
     };
@@ -512,6 +549,8 @@ impl DiscoverOpts {
         print_if_some(2, "Class", dev.class().await?, "");
         print_if_some(2, "RSSI", dev.rssi().await?, "dBm");
         print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
+        print_if_some(2, "Paired", Some(if dev.is_paired().await? { "yes" } else { "no" }), "");
+        print_if_some(2, "Trusted", Some(if dev.is_trusted().await? { "yes" } else { "no" }), "");
         //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(to_hex(&data));
@@ -709,12 +748,14 @@ impl PairDeviceOpts {
     pub async fn perform(self) -> Result<()> {
         let (session, adapter) = get_session_adapter(self.bind).await?;
 
-        let _agent = if !self.default_agent { Some(register_agent(&session, false).await?) } else { None };
+        let _agent = if !self.default_agent { Some(register_agent(&session, false, false).await?) } else { None };
 
         let dev = find_device(&adapter, self.address).await?;
         if !dev.is_paired().await? {
             println!("Pairing {}", self.address);
             dev.pair().await?;
+        } else {
+            println!("Device {} is already paired", self.address);
         }
         dev.set_trusted(self.trust).await?;
 
@@ -752,23 +793,33 @@ struct PairableOpts {
     /// This may require special permissions.
     #[clap(long, short)]
     request_default: bool,
+    /// Trust devices after successful pairing.
+    #[clap(long, short)]
+    trust: bool,
 }
 
 impl PairableOpts {
     pub async fn perform(self) -> Result<()> {
         let (session, adapter) = get_session_adapter(self.bind).await?;
 
-        let _agent =
-            if !self.default_agent { Some(register_agent(&session, self.request_default).await?) } else { None };
+        let _agent = if !self.default_agent {
+            Some(register_agent(&session, self.request_default, self.trust).await?)
+        } else {
+            None
+        };
 
-        adapter.set_discoverable_timeout(0).await?;
+        let timeout = 300;
+        adapter.set_discoverable_timeout(timeout).await?;
         adapter.set_discoverable(true).await?;
-        adapter.set_pairable_timeout(0).await?;
+        adapter.set_pairable_timeout(timeout).await?;
         adapter.set_pairable(true).await?;
 
-        println!("Adapter {} is discoverable and pairable", adapter.name());
-        println!("Press enter to quit");
-        get_line();
+        println!(
+            "Adapter {} ({}) is discoverable and pairable for 5 minutes",
+            adapter.name(),
+            adapter.address().await?
+        );
+        sleep(Duration::from_secs(timeout.into())).await;
 
         adapter.set_pairable(false).await?;
         adapter.set_discoverable(false).await?;
