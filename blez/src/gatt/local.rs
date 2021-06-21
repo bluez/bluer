@@ -1,19 +1,18 @@
 //! Publish local GATT services to remove devices.
 
 use dbus::{
-    arg::{AppendAll, OwnedFd, PropMap, Variant},
+    arg::{OwnedFd, PropMap, Variant},
     channel::Sender,
     message::SignalArgs,
     nonblock::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
     MethodErr, Path,
 };
-use dbus_crossroads::{Context, Crossroads, IfaceBuilder, IfaceToken};
+use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
 use pin_project::pin_project;
 use std::{
     collections::HashSet,
     fmt,
-    marker::PhantomData,
     mem::take,
     num::NonZeroU16,
     pin::Pin,
