@@ -69,15 +69,19 @@
 
 #[cfg(feature = "bluetoothd")]
 use dbus::{
-    arg::{prop_cast, PropMap, RefArg, Variant},
+    arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
     nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
     Path,
 };
 #[cfg(feature = "bluetoothd")]
+use dbus_crossroads::{Context, Crossroads};
+#[cfg(feature = "bluetoothd")]
+use futures::Future;
+#[cfg(feature = "bluetoothd")]
 use hex::FromHex;
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 use std::{
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
@@ -403,6 +407,8 @@ mod adapter;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod adv;
+#[cfg(feature = "bluetoothd")]
+mod agent;
 #[cfg(feature = "bluetoothd")]
 mod device;
 #[cfg(feature = "bluetoothd")]
@@ -782,5 +788,48 @@ pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
         Path::new("/").unwrap()
     } else {
         Path::new(comps.join("/")).unwrap()
+    }
+}
+
+/// Result of calling one of our D-Bus methods.
+#[cfg(feature = "bluetoothd")]
+type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
+
+/// Call method on Arc D-Bus object we are serving.
+#[cfg(feature = "bluetoothd")]
+fn method_call<
+    T: Send + Sync + 'static,
+    R: AppendAll + fmt::Debug,
+    F: Future<Output = DbusResult<R>> + Send + 'static,
+>(
+    mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
+) -> impl Future<Output = PhantomData<R>> {
+    let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
+    let data: Arc<T> = data_ref.clone();
+    async move {
+        if log::log_enabled!(log::Level::Trace) {
+            let mut args = Vec::new();
+            let mut arg_iter = ctx.message().iter_init();
+            while let Some(value) = arg_iter.get_refarg() {
+                args.push(format!("{:?}", value));
+                arg_iter.next();
+            }
+            log::trace!(
+                "{}: {}.{} ({})",
+                ctx.path(),
+                ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+                ctx.method(),
+                args.join(", ")
+            );
+        }
+        let result = f(data).await;
+        log::trace!(
+            "{}: {}.{} (...) -> {:?}",
+            ctx.path(),
+            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+            ctx.method(),
+            &result
+        );
+        ctx.reply(result)
     }
 }

@@ -29,47 +29,12 @@ use super::{
     make_socket_pair, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
-use crate::{parent_path, Adapter, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
+use crate::{
+    method_call, parent_path, Adapter, DbusResult, Error, ErrorKind, Result, SessionInner, ERR_PREFIX,
+    SERVICE_NAME, TIMEOUT,
+};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
-
-/// Call method on Arc D-Bus object we are serving.
-fn method_call<
-    T: Send + Sync + 'static,
-    R: AppendAll + fmt::Debug,
-    F: Future<Output = DbusResult<R>> + Send + 'static,
->(
-    mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
-) -> impl Future<Output = PhantomData<R>> {
-    let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
-    let data: Arc<T> = data_ref.clone();
-    async move {
-        if log::log_enabled!(log::Level::Trace) {
-            let mut args = Vec::new();
-            let mut arg_iter = ctx.message().iter_init();
-            while let Some(value) = arg_iter.get_refarg() {
-                args.push(format!("{:?}", value));
-                arg_iter.next();
-            }
-            log::trace!(
-                "{}: {}.{} ({})",
-                ctx.path(),
-                ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
-                ctx.method(),
-                args.join(", ")
-            );
-        }
-        let result = f(data).await;
-        log::trace!(
-            "{}: {}.{} (...) -> {:?}",
-            ctx.path(),
-            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
-            ctx.method(),
-            &result
-        );
-        ctx.reply(result)
-    }
-}
 
 /// Link type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
@@ -123,9 +88,6 @@ impl From<ReqError> for dbus::MethodErr {
 
 /// Result of a Bluetooth request to us.
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
-
-/// Result of calling one of our D-Bus methods.
-type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
 
 // ===========================================================================================
 // Service
