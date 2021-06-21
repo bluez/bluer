@@ -22,7 +22,7 @@ pub(crate) const AGENT_PREFIX: &str = publish_path!("agent/");
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
 #[non_exhaustive]
 pub enum ReqError {
-    /// Request for rejected.
+    /// Request was rejected.
     Rejected,
     /// Request was canceled.
     Canceled,
@@ -153,10 +153,12 @@ pub struct AuthorizeService {
 pub type AuthorizeServiceFn =
     Box<dyn (Fn(AuthorizeService) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
-/// An agent handler.
+/// Bluetooth authorization agent handler.
 ///
 /// Each handler that is set to [None] will reject the request.
 /// The future of a particular request is dropped when BlueZ cancels that request.
+///
+/// Use [Session::register_agent](crate::session::Session::register_agent) to register the handler.
 #[derive(Default)]
 pub struct Agent {
     /// This requests is to make the application agent

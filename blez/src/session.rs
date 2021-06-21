@@ -197,7 +197,7 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    /// This registers an agent handler.
+    /// This registers a Bluetooth authorization agent handler.
     ///
     /// Every application can register its own agent and
     /// for all actions triggered by that application its
