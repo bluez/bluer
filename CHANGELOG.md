@@ -6,7 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.9.5 - 2021-06-21
 ### Added
-- Agent API
+- Bluetooth Authorization Agent API
+- gattcat: pair-device, remove-device and pairable commands
+### Removed
+- Device::cancel_pairing was replaced by automatic cancellation.
 
 ## 0.9.4 - 2021-06-14
 ### Changed

@@ -2,6 +2,10 @@
 
 use blez::{
     adv::{Advertisement, AdvertisementHandle},
+    agent::{
+        Agent, AgentHandle, AuthorizeService, DisplayPasskey, DisplayPinCode, ReqError, ReqResult,
+        RequestAuthorization, RequestConfirmation, RequestPasskey, RequestPinCode,
+    },
     gatt::{
         local::{
             self, characteristic_control, Application, ApplicationHandle, CharacteristicControlEvent,
@@ -169,6 +173,93 @@ fn to_hex(v: &[u8]) -> Vec<String> {
     lines
 }
 
+fn get_line() -> String {
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.trim().to_string()
+}
+
+fn get_yes_no() -> ReqResult<()> {
+    loop {
+        let line = get_line();
+        if line == "y" {
+            return Ok(());
+        } else if line == "n" {
+            return Err(ReqError::Rejected);
+        } else {
+            println!("Invalid response!");
+        }
+    }
+}
+
+async fn request_pin_code(req: RequestPinCode) -> ReqResult<String> {
+    println!("Enter PIN code for device {} on {}:", &req.device, &req.adapter);
+    Ok(get_line())
+}
+
+async fn display_pin_code(req: DisplayPinCode) -> ReqResult<()> {
+    println!("PIN code for device {} on {} is \"{}\"", &req.device, &req.adapter, req.pincode);
+    Ok(())
+}
+
+async fn request_passkey(req: RequestPasskey) -> ReqResult<u32> {
+    println!("Enter 6-digit passkey for device {} on {}:", &req.device, &req.adapter);
+    loop {
+        let line = get_line();
+        let passkey: u32 = if let Ok(v) = line.parse() {
+            v
+        } else {
+            println!("Invalid passkey!");
+            continue;
+        };
+        if passkey > 999999 {
+            println!("Passkey must be 6 digits");
+            continue;
+        }
+        return Ok(passkey);
+    }
+}
+
+async fn display_passkey(req: DisplayPasskey) -> ReqResult<()> {
+    println!("Passkey for device {} on {} is \"{:06}\"", &req.device, &req.adapter, req.passkey);
+    Ok(())
+}
+
+async fn request_confirmation(req: RequestConfirmation) -> ReqResult<()> {
+    println!("Is passkey \"{:06}\" correct for device {} on {}? (y/n)", req.passkey, &req.device, &req.adapter);
+    get_yes_no()
+}
+
+async fn request_authorization(req: RequestAuthorization) -> ReqResult<()> {
+    println!("Is device {} on {} allowed to pair? (y/n)", &req.device, &req.adapter);
+    get_yes_no()
+}
+
+async fn authorize_service(req: AuthorizeService) -> ReqResult<()> {
+    let service_id = match id::Service::try_from(req.service) {
+        Ok(name) => format!("{} ({})", name, UuidOrShort(req.service)),
+        Err(_) => format!("{}", UuidOrShort(req.service)),
+    };
+    println!("Is device {} on {} allowed to use service {}? (y/n)", &req.device, &req.adapter, service_id);
+    get_yes_no()
+}
+
+async fn register_agent(session: &Session, request_default: bool) -> Result<AgentHandle> {
+    let agent = Agent {
+        request_default,
+        request_pin_code: Some(Box::new(|req| request_pin_code(req).boxed())),
+        display_pin_code: Some(Box::new(|req| display_pin_code(req).boxed())),
+        request_passkey: Some(Box::new(|req| request_passkey(req).boxed())),
+        display_passkey: Some(Box::new(|req| display_passkey(req).boxed())),
+        request_confirmation: Some(Box::new(|req| request_confirmation(req).boxed())),
+        request_authorization: Some(Box::new(|req| request_authorization(req).boxed())),
+        authorize_service: Some(Box::new(|req| authorize_service(req).boxed())),
+        ..Default::default()
+    };
+    let handle = session.register_agent(agent).await?;
+    Ok(handle)
+}
+
 /// gattcat
 ///
 /// All UUIDs can be specified in full form or in 16-bit
@@ -194,6 +285,13 @@ enum Cmd {
     ConnectDevice(ConnectDeviceOpts),
     /// Disconnect from a remote Bluetooth device.
     DisconnectDevice(DisconnectDeviceOpts),
+    /// Pairs a remote Bluetooth device.
+    /// If already paired, sets the device trust.
+    PairDevice(PairDeviceOpts),
+    /// Removes a remote Bluetooth device and its pairing information.
+    RemoveDevice(RemoveDeviceOpts),
+    /// Make adapter discoverable and accept pairing requests.
+    Pairable(PairableOpts),
     /// Read the value of a GATT characteristic.
     Read(ReadOpts),
     /// Subscribe to notifications from a GATT characteristic.
@@ -587,6 +685,93 @@ impl DisconnectDeviceOpts {
                 }
             }
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct PairDeviceOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Trust device after successful pairing.
+    #[clap(long, short)]
+    trust: bool,
+    /// Use default agent.
+    #[clap(long, short)]
+    default_agent: bool,
+    /// Bluetooth address of target device.
+    address: Address,
+}
+
+impl PairDeviceOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (session, adapter) = get_session_adapter(self.bind).await?;
+
+        let _agent = if !self.default_agent { Some(register_agent(&session, false).await?) } else { None };
+
+        let dev = find_device(&adapter, self.address).await?;
+        if !dev.is_paired().await? {
+            println!("Pairing {}", self.address);
+            dev.pair().await?;
+        }
+        dev.set_trusted(self.trust).await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct RemoveDeviceOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Bluetooth address of target device.
+    address: Address,
+}
+
+impl RemoveDeviceOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (_session, adapter) = get_session_adapter(self.bind).await?;
+        println!("Removing {}", self.address);
+        adapter.remove_device(self.address).await?;
+        Ok(())
+    }
+}
+
+#[derive(Clap)]
+struct PairableOpts {
+    /// Address of local Bluetooth adapter to use.
+    #[clap(long, short)]
+    bind: Option<Address>,
+    /// Use default agent.
+    #[clap(long, short)]
+    default_agent: bool,
+    /// Make own agent system default agent.
+    /// This may require special permissions.
+    #[clap(long, short)]
+    request_default: bool,
+}
+
+impl PairableOpts {
+    pub async fn perform(self) -> Result<()> {
+        let (session, adapter) = get_session_adapter(self.bind).await?;
+
+        let _agent =
+            if !self.default_agent { Some(register_agent(&session, self.request_default).await?) } else { None };
+
+        adapter.set_discoverable_timeout(0).await?;
+        adapter.set_discoverable(true).await?;
+        adapter.set_pairable_timeout(0).await?;
+        adapter.set_pairable(true).await?;
+
+        println!("Adapter {} is discoverable and pairable", adapter.name());
+        println!("Press enter to quit");
+        get_line();
+
+        adapter.set_pairable(false).await?;
+        adapter.set_discoverable(false).await?;
 
         Ok(())
     }
@@ -1376,6 +1561,9 @@ async fn main() -> Result<()> {
         Cmd::Discover(d) => d.perform().await,
         Cmd::ConnectDevice(c) => c.perform().await,
         Cmd::DisconnectDevice(d) => d.perform().await,
+        Cmd::PairDevice(p) => p.perform().await,
+        Cmd::RemoveDevice(r) => r.perform().await,
+        Cmd::Pairable(p) => p.perform().await,
         Cmd::Read(r) => r.perform().await,
         Cmd::Notify(n) => n.perform().await,
         Cmd::Write(w) => w.perform().await,
