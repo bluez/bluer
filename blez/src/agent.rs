@@ -156,6 +156,8 @@ pub type AuthorizeServiceFn =
 /// Bluetooth authorization agent handler.
 ///
 /// Each handler that is set to [None] will reject the request.
+/// The capabilities of the agent are published accordingly.
+///
 /// The future of a particular request is dropped when BlueZ cancels that request.
 ///
 /// Use [Session::register_agent](crate::session::Session::register_agent) to register the handler.
