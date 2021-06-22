@@ -70,7 +70,7 @@ All crate features are enabled by default.
 Requirements
 ------------
 
-This library has been tested with BlueZ version 5.58 with [additional patches](https://github.com/surban/bluez/tree/all-fixes) applied.
+This library has been tested with BlueZ version 5.59 with [additional patches from the master branch](https://git.kernel.org/pub/scm/bluetooth/bluez.git/) applied.
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
 
