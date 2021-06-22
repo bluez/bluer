@@ -13,6 +13,7 @@ The following command line tools are included.
 
   - **gattcat**: Swiss army knife for Bluetooth LE GATT services.
     - discovers Bluetooth LE devices and their services
+    - pairing
     - resolves all well-known UUIDs and manufacturer ids
     - performs all possible operations on GATT services
     - connects (via notify and write) to a remote GATT service
