@@ -1,4 +1,4 @@
-//! Agent.
+//! Bluetooth authorization agent.
 
 use dbus::nonblock::Proxy;
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
