@@ -157,6 +157,8 @@ pub type AuthorizeServiceFn =
 ///
 /// Each handler that is set to [None] will reject the request.
 /// The capabilities of the agent are published accordingly.
+/// Setting all handlers to [None] (the default) will result in a `NoInputNoOutput` handler
+/// that accepts all requests.
 ///
 /// The future of a particular request is dropped when BlueZ cancels that request.
 ///
