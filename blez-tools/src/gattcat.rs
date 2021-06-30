@@ -808,21 +808,22 @@ impl PairableOpts {
             None
         };
 
+        let le_advertisement = Advertisement { discoverable: Some(true), ..Default::default() };
+        let _adv = adapter.advertise(le_advertisement).await?;
+
         let timeout = 300;
-        adapter.set_discoverable_timeout(timeout).await?;
-        adapter.set_discoverable(true).await?;
         adapter.set_pairable_timeout(timeout).await?;
         adapter.set_pairable(true).await?;
 
         println!(
-            "Adapter {} ({}) is discoverable and pairable for 5 minutes",
+            "Adapter {} ({}) is LE discoverable and pairable for {} seconds",
             adapter.name(),
-            adapter.address().await?
+            adapter.address().await?,
+            timeout
         );
         sleep(Duration::from_secs(timeout.into())).await;
 
         adapter.set_pairable(false).await?;
-        adapter.set_discoverable(false).await?;
 
         Ok(())
     }
