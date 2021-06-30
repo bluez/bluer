@@ -4,6 +4,12 @@ All notable changes to blez will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.6 - 2021-06-30
+### Changed
+- clarify use of `advertise` method for LE advertisements
+- gattcat: send LE advertisements for pairing
+- update `dbus-crossroads` crate to 0.4
+
 ## 0.9.5 - 2021-06-21
 ### Added
 - Bluetooth Authorization Agent API
