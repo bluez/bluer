@@ -201,7 +201,7 @@ impl Adapter {
     /// an AlreadyExists error.
     ///
     /// If the maximum number of advertisement instances is
-    /// reached it will result in NotPermitted error.    
+    /// reached it will result in NotPermitted error.
     ///
     /// Drop the returned [AdvertisementHandle] to unregister the advertisement.
     pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
@@ -220,7 +220,7 @@ impl Adapter {
         gatt_application.register(self.inner.clone(), self.name.clone()).await
     }
 
-    /// Registers local GATT profiles (GATT Client).    
+    /// Registers local GATT profiles (GATT Client).
     ///
     /// By registering this type of object
     /// an application effectively indicates support for a specific GATT profile
@@ -262,7 +262,7 @@ impl Adapter {
     /// device object.
     ///
     /// Parameters that may be set in the filter dictionary
-    /// include the following:    
+    /// include the following:
     ///
     /// * `address` -
     ///     The Bluetooth device address of the remote
@@ -271,7 +271,7 @@ impl Adapter {
     ///     The Bluetooth device Address Type. This is
     ///     address type that should be used for initial
     ///     connection. If this parameter is not present
-    ///     BR/EDR device is created.    
+    ///     BR/EDR device is created.
     ///
     /// This method is experimental.
     pub async fn connect_device(&self, address: Address, address_type: Option<AddressType>) -> Result<Device> {
@@ -393,6 +393,9 @@ define_properties!(
         /// signal.
         ///
         /// For any new adapter this settings defaults to false.
+        ///
+        /// To send Bluetooth LE advertisements use the
+        /// [advertise](Adapter::advertise) method instead.
         property(
             Discoverable, bool,
             dbus: (INTERFACE, "Discoverable", bool, MANDATORY),
@@ -588,7 +591,7 @@ pub(crate) struct DiscoveryFilter {
     ///    TX power, and computed pathloss is less than
     ///    pathloss param.
     ///  - only RSSI param is set, and received RSSI is
-    ///    higher than RSSI param.    
+    ///    higher than RSSI param.
     pub uuids: HashSet<Uuid>,
     /// RSSI threshold value.
     ///
