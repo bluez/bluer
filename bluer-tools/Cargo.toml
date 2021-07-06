@@ -1,6 +1,6 @@
 [package]
 name = "bluer-tools"
-version = "0.10.1"
+version = "0.10.2"
 description = "BlueR tools: swiss army knife for GATT services and L2CAP sockets on Linux"
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>"]
@@ -23,7 +23,7 @@ name = "l2cat"
 path = "src/l2cat.rs"
 
 [dependencies]
-bluer = { version = "0.10.1", path = "../bluer" }
+bluer = { version = "0.10.2", path = "../bluer" }
 futures = "0.3"
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt-multi-thread"] }
 clap = "3.0.0-beta.2"
