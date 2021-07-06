@@ -9,8 +9,8 @@
     ],
     "cSpell.words": [
         "ACPI",
-        "BLEZ",
         "BREDR",
+        "BlueR",
         "EATT",
         "FIPS",
         "PSMs",
@@ -20,6 +20,7 @@
         "TIOCINQ",
         "TIOCOUTQ",
         "blemon",
+        "blez",
         "bluetoothd",
         "bluez",
         "blurz",

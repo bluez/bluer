@@ -1,10 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-//! # BLEZ - Asynchronous Bluetooth Low Energy on Linux
+//! # BlueR - Official BlueZ Bindings for Rust
 //!
-//! This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
-//! APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/).
-//! Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
+//! This library provides the official Rust interface to the [Linux Bluetooth protocol stack (BlueZ)].
+//! Both publishing local and consuming remote [GATT services] using *idiomatic* Rust code is supported.
 //! L2CAP sockets are presented using an API similar to Tokio networking.
 //!
 //! This library depends on the [tokio] asynchronous runtime.
@@ -46,7 +45,8 @@
 //!     * manufacturer ids
 //!     * GATT services, characteristics and descriptors
 //!
-//! Classic Bluetooth is unsupported except for device discovery.
+//! Currently, classic Bluetooth functionality is mostly unimplemented except for device discovery.
+//! However, pull requests and contributions are welcome!
 //!
 //! ## Crate features
 //! All crate features are enabled by default.
@@ -63,6 +63,8 @@
 //! Refer to the [l2cap] module.
 //! No [Session] and therefore no running Bluetooth daemon is required.
 //!
+//! [Linux Bluetooth protocol stack (BlueZ)]: http://www.bluez.org/
+//! [GATT services]: https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html
 //! [AsyncRead]: tokio::io::AsyncRead
 //! [AsyncWrite]: tokio::io::AsyncWrite
 

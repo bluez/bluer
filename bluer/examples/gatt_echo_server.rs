@@ -1,6 +1,6 @@
 //! Serves a Bluetooth GATT echo server.
 
-use blez::{
+use bluer::{
     adv::Advertisement,
     gatt::{
         local::{
@@ -21,9 +21,9 @@ use tokio::{
 include!("gatt_echo.inc");
 
 #[tokio::main]
-async fn main() -> blez::Result<()> {
+async fn main() -> bluer::Result<()> {
     env_logger::init();
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;

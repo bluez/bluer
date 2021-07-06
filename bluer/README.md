@@ -1,14 +1,13 @@
-BLEZ - Asynchronous Bluetooth Low Energy on Linux for Rust
-==========================================================
+BlueR - Official BlueZ Bindings for Rust
+========================================
 
-[![crates.io page](https://img.shields.io/crates/v/blez)](https://crates.io/crates/blez)
-[![docs.rs page](https://docs.rs/blez/badge.svg)](https://docs.rs/blez)
-[![BSD-2-Clause license](https://img.shields.io/crates/l/blez)](https://github.com/surban/blez/blob/master/LICENSE)
+[![crates.io page](https://img.shields.io/crates/v/bluer)](https://crates.io/crates/bluer)
+[![docs.rs page](https://docs.rs/bluer/badge.svg)](https://docs.rs/bluer)
+[![BSD-2-Clause license](https://img.shields.io/crates/l/bluer)](https://raw.githubusercontent.com/bluez/bluer/master/LICENSE)
 
-This library provides an asynchronous, fully featured interface to the [Bluetooth Low Energy (BLE)](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy)
-APIs of the [official Linux Bluetooth protocol stack (BlueZ)](http://www.bluez.org/) for [Rust](https://www.rust-lang.org/).
-Both publishing local and consuming remote [GATT services](https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html) using *idiomatic* Rust code is supported.
-L2CAP sockets are presented using an API similar to [Tokio](https://tokio.rs/) networking.
+This library provides the official [Rust] interface to the [Linux Bluetooth protocol stack (BlueZ)].
+Both publishing local and consuming remote [GATT services] using *idiomatic* Rust code is supported.
+L2CAP sockets are presented using an API similar to [Tokio] networking.
 
 The following functionality is provided:
 
@@ -47,16 +46,25 @@ The following functionality is provided:
     * manufacturer ids
     * GATT services, characteristics and descriptors
 
-Classic Bluetooth is unsupported except for device discovery.
+Currently, classic Bluetooth functionality is mostly unimplemented except for device discovery.
+However, pull requests and contributions are welcome!
+
+[Rust]: https://www.rust-lang.org/
+[Linux Bluetooth protocol stack (BlueZ)]: http://www.bluez.org/
+[GATT services]: https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html
+[Tokio]: https://tokio.rs/
 
 History
 -------
 
-This project started as a fork of [blurz](https://github.com/szeged/blurz) but has
-since then become a full rewrite.
-Documentation has been mostly copied from the
-[BlueZ API specification](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/), but
+This project started as a fork of [blurz] but has since then become a full rewrite.
+It was published under the name `blez` before it was designated the official Rust
+interface to BlueZ and renamed to BlueR.
+Documentation has been mostly copied from the [BlueZ API specification], but
 also adapted where it makes sense.
+
+[blurz]: https://github.com/szeged/blurz
+[BlueZ API specification]: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/
 
 Crate features
 --------------
@@ -70,17 +78,20 @@ All crate features are enabled by default.
 Requirements
 ------------
 
-This library has been tested with BlueZ version 5.59 with [additional patches from the master branch](https://git.kernel.org/pub/scm/bluetooth/bluez.git/) applied.
+This library has been tested with BlueZ version 5.59 with [additional patches from the master branch] applied.
 Older versions might work, but be aware that many bugs related to GATT handling exist.
-Refer to the [official changelog](https://github.com/bluez/bluez/blob/master/ChangeLog) for details.
+Refer to the [official changelog] for details.
 
 If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
+[additional patches from the master branch]: https://git.kernel.org/pub/scm/bluetooth/bluez.git/
+[official changelog]: https://github.com/bluez/bluez/blob/master/ChangeLog
+
 Configuration
 -------------
 
-The following options in `/etc/bluetooth/main.conf` are helpful.
+The following options in `/etc/bluetooth/main.conf` are helpful when working with GATT services.
 
     [GATT]
     Cache = no
@@ -104,12 +115,11 @@ On Debian-based systems it can be displayed by executing `journalctl -u bluetoot
 Check the `bluetoothd` man page for increasing the log level.
 
 Sometimes deleting the system Bluetooth cache at `/var/lib/bluetooth` and restarting
-`bluetoothd` is helpful.
+`bluetoothd` fixes persistent issues with device connectivity.
 
 Examples
 --------
-Refer to the [API documentation](https://docs.rs/blez) and
-[examples folder](https://github.com/surban/blez/tree/master/blez/examples) for examples.
+Refer to the [API documentation] and [examples folder] for examples.
 
 The following example applications are provided.
 
@@ -135,7 +145,12 @@ The following example applications are provided.
 
 Use `cargo run --example <name>` to run a particular example application.
 
+[API documentation]: https://docs.rs/bluer
+[examples folder]: https://github.com/bluez/bluer/tree/master/bluer/examples
+
 Tools
 -----
 
-See the [BLEZ tools](https://crates.io/crates/blez-tools) crate for tools that build on this library.
+See the [BlueR tools] crate for tools that build on this library.
+
+[BlueR tools]: https://crates.io/crates/bluer-tools

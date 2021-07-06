@@ -1,6 +1,6 @@
 //! Swiss army knife for GATT services.
 
-use blez::{
+use bluer::{
     adv::{Advertisement, AdvertisementHandle},
     agent::{
         Agent, AgentHandle, AuthorizeService, DisplayPasskey, DisplayPinCode, ReqError, ReqResult,
@@ -1416,7 +1416,7 @@ async fn make_app(
                         write: Some(CharacteristicWrite {
                             write: true,
                             write_without_response: true,
-                            method: blez::gatt::local::CharacteristicWriteMethod::Io,
+                            method: bluer::gatt::local::CharacteristicWriteMethod::Io,
                             ..Default::default()
                         }),
                         control_handle: control_rx_handle,
@@ -1426,7 +1426,7 @@ async fn make_app(
                         uuid: id::Characteristic::ComNordicsemiCharacteristicUartTx.into(),
                         notify: Some(CharacteristicNotify {
                             notify: true,
-                            method: blez::gatt::local::CharacteristicNotifyMethod::Io,
+                            method: bluer::gatt::local::CharacteristicNotifyMethod::Io,
                             ..Default::default()
                         }),
                         control_handle: control_tx_handle,
@@ -1448,12 +1448,12 @@ async fn make_app(
                     uuid: characteristic,
                     write: Some(CharacteristicWrite {
                         write_without_response: true,
-                        method: blez::gatt::local::CharacteristicWriteMethod::Io,
+                        method: bluer::gatt::local::CharacteristicWriteMethod::Io,
                         ..Default::default()
                     }),
                     notify: Some(CharacteristicNotify {
                         notify: true,
-                        method: blez::gatt::local::CharacteristicNotifyMethod::Io,
+                        method: bluer::gatt::local::CharacteristicNotifyMethod::Io,
                         ..Default::default()
                     }),
                     control_handle,
@@ -1579,7 +1579,7 @@ async fn io_loop_serve(
 }
 
 async fn get_session_adapter(addr: Option<Address>) -> Result<(Session, Adapter)> {
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
 
     match addr {

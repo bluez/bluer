@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "blez",
-    "blez-tools",
+    "bluer",
+    "bluer-tools",
 ]

@@ -1,6 +1,6 @@
 //! Arbitrary L2CAP connections and listens.
 
-use blez::{
+use bluer::{
     adv::{Advertisement, AdvertisementHandle},
     l2cap::{Socket, SocketAddr, Stream, StreamListener},
     Address, AddressType, Uuid,
@@ -337,7 +337,7 @@ async fn io_loop(
 }
 
 async fn advertise() -> Result<AdvertisementHandle> {
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
     let adapter = session.adapter(&adapter_name)?;

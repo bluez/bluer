@@ -1,10 +1,10 @@
 //! Discover Bluetooth devices and list them.
 
-use blez::{Adapter, AdapterEvent, Address, DeviceEvent};
+use bluer::{Adapter, AdapterEvent, Address, DeviceEvent};
 use futures::{pin_mut, stream::SelectAll, StreamExt};
 use std::env;
 
-async fn query_device(adapter: &Adapter, addr: Address) -> blez::Result<()> {
+async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
     let device = adapter.device(addr)?;
     println!("    Address type:       {}", device.address_type().await?);
     println!("    Name:               {:?}", device.name().await?);
@@ -23,11 +23,11 @@ async fn query_device(adapter: &Adapter, addr: Address) -> blez::Result<()> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blez::Result<()> {
+async fn main() -> bluer::Result<()> {
     let with_changes = env::args().any(|arg| arg == "--changes");
 
     env_logger::init();
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     println!("Discovering devices using Bluetooth adapater {}\n", &adapter_name);

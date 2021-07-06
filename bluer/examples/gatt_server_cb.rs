@@ -1,6 +1,6 @@
 //! Serves a Bluetooth GATT application using the callback programming model.
 
-use blez::{
+use bluer::{
     adv::Advertisement,
     gatt::local::{
         Application, Characteristic, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead,
@@ -18,9 +18,9 @@ use tokio::{
 include!("gatt.inc");
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blez::Result<()> {
+async fn main() -> bluer::Result<()> {
     env_logger::init();
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;

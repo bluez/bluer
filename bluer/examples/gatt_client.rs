@@ -1,6 +1,6 @@
 //! Connects to our Bluetooth GATT service and exercises the characteristic.
 
-use blez::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
+use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
 use tokio::{
@@ -141,9 +141,9 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blez::Result<()> {
+async fn main() -> bluer::Result<()> {
     env_logger::init();
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;

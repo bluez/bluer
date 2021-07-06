@@ -1,6 +1,6 @@
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> blez::Result<()> {
-    let session = blez::Session::new().await?;
+async fn main() -> bluer::Result<()> {
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     for adapter_name in adapter_names {
         println!("Bluetooth adapater {}:", &adapter_name);

@@ -1,10 +1,10 @@
 [package]
-name = "blez-tools"
-version = "0.9.6"
-description = "Bluetooth LE tools: swiss army knife for GATT services and L2CAP sockets on Linux."
+name = "bluer-tools"
+version = "0.10.0"
+description = "BlueR tools: swiss army knife for GATT services and L2CAP sockets on Linux"
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>"]
-repository = "https://github.com/surban/blez"
+repository = "https://github.com/bluez/bluer"
 keywords = ["bluetooth", "bluez", "ble", "gatt", "l2cap"]
 categories = ["hardware-support", "command-line-utilities"]
 license = "BSD-2-Clause"
@@ -23,7 +23,7 @@ name = "l2cat"
 path = "src/l2cat.rs"
 
 [dependencies]
-blez = { version = "0.9.5", path = "../blez" }
+bluer = { version = "0.10.0", path = "../bluer" }
 futures = "0.3"
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt-multi-thread"] }
 clap = "3.0.0-beta.2"

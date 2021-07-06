@@ -1,6 +1,6 @@
 //! Connects to l2cap_server and sends and receives test data.
 
-use blez::{
+use bluer::{
     l2cap::{SocketAddr, Stream, PSM_DYN_START},
     Address, AddressType,
 };
@@ -11,9 +11,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 include!("l2cap.inc");
 
 #[tokio::main]
-async fn main() -> blez::Result<()> {
+async fn main() -> bluer::Result<()> {
     env_logger::init();
-    let session = blez::Session::new().await?;
+    let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
     let adapter = session.adapter(&adapter_name)?;
