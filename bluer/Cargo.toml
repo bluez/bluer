@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.10.0"
+version = "0.10.1"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
@@ -22,10 +22,11 @@ exclude = [
 ]
 
 [features]
-default = ["bluetoothd", "l2cap"]
-bluetoothd = ["dbus", "dbus-tokio", "dbus-crossroads", "pin-project", 
+default = ["bluetoothd", "id", "l2cap"]
+bluetoothd = ["dbus", "dbus-tokio", "dbus-crossroads", "pin-project",
               "tokio/rt", "tokio/sync", "tokio/macros", "tokio-stream",
               "lazy_static", "custom_debug", "displaydoc"]
+id = []
 l2cap = ["libbluetooth"]
 
 [dependencies]

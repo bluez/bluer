@@ -72,6 +72,7 @@ All crate features are enabled by default.
 
 * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
   For building, D-Bus library headers, provided by `libdbus-1-dev` on Debian, must be installed.
+* `id`: Enables database of assigned numbers.
 * `l2cap`: Enables L2CAP sockets.
   For building, Bluetooth library headers, provided by `libbluetooth-dev` on Debian, must be installed.
 

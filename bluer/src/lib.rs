@@ -52,6 +52,7 @@
 //! All crate features are enabled by default.
 //!
 //! * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
+//! * `id`: Enables database of assigned numbers.
 //! * `l2cap`: Enables L2CAP sockets.
 //!
 //! ## Basic usage
@@ -431,6 +432,8 @@ pub use uuid::Uuid;
 mod uuid_ext;
 pub use uuid_ext::UuidExt;
 
+#[cfg(feature = "id")]
+#[cfg_attr(docsrs, doc(cfg(feature = "id")))]
 pub mod id;
 
 /// Bluetooth error.

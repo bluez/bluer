@@ -202,7 +202,7 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn build_ids() -> Result<(), Box<dyn Error>> {
     convert_uuids(
         "bluetooth-numbers-database/v1/service_uuids.json",
         "service.inc",
@@ -232,6 +232,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     convert_ids("bluetooth-numbers-database/v1/company_ids.json", "company.inc", "Manufacturer", "manufacturers")
         .expect("companys");
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    if env::var_os("CARGO_FEATURE_ID").is_some() {
+        build_ids()?;
+    }
 
     Ok(())
 }
