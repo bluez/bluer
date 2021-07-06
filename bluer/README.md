@@ -104,6 +104,16 @@ By only allowing one channel the extended attribute protocol (EATT) is disabled.
 If EATT is enabled, all GATT commands and notifications are sent over multiple L2CAP channels and can be reordered arbitrarily by lower layers of the protocol stack.
 This makes sequential data transmission over GATT characteristics more difficult.
 
+Building
+--------
+
+When cloning this repository make sure to use the following command.
+Otherwise the build will fail with file not found errors.
+
+    git clone --recursive https://github.com/bluez/bluer.git
+
+D-Bus development headers are required for building.
+
 Troubleshooting
 ---------------
 
