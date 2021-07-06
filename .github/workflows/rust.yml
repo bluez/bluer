@@ -20,9 +20,13 @@ jobs:
         submodules: recursive
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install libdbus-1-dev libbluetooth-dev
+    - name: Check code formatting
+      run: cargo fmt -- --check
     - name: Build
-      run: cargo build --examples --bins --verbose
+      run: cargo build --examples --bins --quiet
     - name: Build documentation
-      run: cargo doc --no-deps --verbose
+      run: cargo doc --no-deps --quiet
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --quiet
+    - name: Code analysis
+      run: cargo clippy --quiet
