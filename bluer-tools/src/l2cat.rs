@@ -65,7 +65,7 @@ struct ConnectOpts {
 impl ConnectOpts {
     pub async fn perform(self) -> Result<()> {
         let socket = Socket::new_stream()?;
-        let local_sa = SocketAddr::new(self.bind.unwrap_or(Address::any()), AddressType::Public, 0);
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, 0);
         socket.bind(local_sa)?;
 
         let peer_sa = SocketAddr::new(self.address, AddressType::Public, self.psm);
@@ -113,7 +113,7 @@ impl ListenOpts {
     pub async fn perform(self) -> Result<()> {
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let local_sa = SocketAddr::new(self.bind.unwrap_or(Address::any()), AddressType::Public, self.psm);
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
         if self.verbose && self.psm == 0 {
@@ -177,7 +177,7 @@ impl ServeOpts {
 
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let local_sa = SocketAddr::new(self.bind.unwrap_or(Address::any()), AddressType::Public, self.psm);
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), AddressType::Public, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
         if !self.verbose && self.psm == 0 {

@@ -159,7 +159,7 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
         if *s > 0 {
             entry.name = format!("{} ({})", &entry.name, s);
         }
-        *s = *s + 1;
+        *s += 1;
     }
 
     writeln!(out, "/// Assigned identifiers for {}.", doc_name)?;

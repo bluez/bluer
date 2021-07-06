@@ -177,7 +177,7 @@ fn to_hex(v: &[u8]) -> Vec<String> {
 async fn get_line() -> String {
     let (done_tx, done_rx) = oneshot::channel();
     tokio::spawn(async move {
-        if let Err(_) = done_rx.await {
+        if done_rx.await.is_err() {
             println!();
             println!("Never mind! Request was cancelled. But you must press enter now.");
         }
@@ -588,7 +588,7 @@ impl DiscoverOpts {
         for service in dev.services().await? {
             services.push((service.uuid().await?, service));
         }
-        services.sort_by_key(|(uuid, _)| uuid.clone());
+        services.sort_by_key(|(uuid, _)| *uuid);
 
         for (_, service) in services {
             let uuid = service.uuid().await?;
@@ -619,7 +619,7 @@ impl DiscoverOpts {
             for char in service.characteristics().await? {
                 chars.push((char.uuid().await?, char));
             }
-            chars.sort_by_key(|(uuid, _)| uuid.clone());
+            chars.sort_by_key(|(uuid, _)| *uuid);
 
             for (_, char) in chars {
                 let uuid = char.uuid().await?;
@@ -649,7 +649,7 @@ impl DiscoverOpts {
                 for desc in char.descriptors().await? {
                     descs.push((desc.uuid().await?, desc));
                 }
-                descs.sort_by_key(|(uuid, _)| uuid.clone());
+                descs.sort_by_key(|(uuid, _)| *uuid);
 
                 for (_, desc) in descs {
                     let uuid = desc.uuid().await?;
@@ -917,7 +917,7 @@ impl NotifyOpts {
         loop {
             match &mut count {
                 Some(0) => break,
-                Some(n) => *n = *n - 1,
+                Some(n) => *n -= 1,
                 None => (),
             }
 
@@ -1052,7 +1052,9 @@ impl ConnectOpts {
         let dev = find_device(&adapter, self.address).await?;
         connect(&dev).await?;
 
-        let (rh, wh) = if self.nordic_uart {
+        let rh;
+        let wh;
+        if self.nordic_uart {
             let rx_char = find_characteristic(
                 &dev,
                 id::Service::ComNordicsemiServiceUart.into(),
@@ -1067,12 +1069,14 @@ impl ConnectOpts {
             )
             .await?
             .ok_or("TX service or characteristic not found")?;
-            (tx_char.notify_io().await.ok(), rx_char.write_io().await.ok())
+            rh = tx_char.notify_io().await.ok();
+            wh = rx_char.write_io().await.ok();
         } else {
             let char = find_characteristic(&dev, self.service.into(), self.characteristic.into())
                 .await?
                 .ok_or("service or characteristic not found")?;
-            (char.notify_io().await.ok(), char.write_io().await.ok())
+            rh = char.notify_io().await.ok();
+            wh = char.write_io().await.ok();
         };
 
         if rh.is_none() && wh.is_none() {
@@ -1403,6 +1407,7 @@ async fn make_app(
     };
     let adv = if !no_advertise { Some(adapter.advertise(le_advertisement).await?) } else { None };
 
+    #[allow(clippy::branches_sharing_code)]
     let (app, events) = if nordic_uart {
         let (control_rx, control_rx_handle) = characteristic_control();
         let (control_tx, control_tx_handle) = characteristic_control();
@@ -1468,6 +1473,7 @@ async fn make_app(
     Ok((adv, app, events))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn io_loop_serve(
     mut control: impl Stream<Item = CharacteristicControlEvent> + Unpin, mut rh: Option<CharacteristicReader>,
     mut wh: Option<CharacteristicWriter>, pin: impl AsyncRead + Unpin, pout: impl AsyncWrite + Unpin,

@@ -80,7 +80,7 @@ impl Default for ReqError {
 
 impl From<ReqError> for dbus::MethodErr {
     fn from(err: ReqError) -> Self {
-        let name: &'static str = err.clone().into();
+        let name: &'static str = err.into();
         Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
     }
 }
@@ -504,7 +504,8 @@ impl CharacteristicNotifier {
     ///
     /// This fails when the notification session has been stopped by the receiving device.
     pub async fn notify(&mut self, value: Vec<u8>) -> Result<()> {
-        let connection = self.connection.upgrade().ok_or(Error::new(ErrorKind::NotificationSessionStopped))?;
+        let connection =
+            self.connection.upgrade().ok_or_else(|| Error::new(ErrorKind::NotificationSessionStopped))?;
         if self.is_stopped() {
             return Err(Error::new(ErrorKind::NotificationSessionStopped));
         }
@@ -732,7 +733,7 @@ impl RegisteredCharacteristic {
                 if let Some(notify) = &reg.c.notify {
                     notify.set_characteristic_flags(&mut flags);
                 }
-                Some(flags.to_vec())
+                Some(flags.as_vec())
             });
             ib.property("Service").get(|ctx, _| Ok(parent_path(ctx.path())));
             ib.property("Handle").get(|_ctx, reg| Ok(reg.c.handle.map(|h| h.get()).unwrap_or_default())).set(
@@ -1141,7 +1142,7 @@ impl RegisteredDescriptor {
                 if let Some(write) = &reg.d.write {
                     write.set_descriptor_flags(&mut flags);
                 }
-                Some(flags.to_vec())
+                Some(flags.as_vec())
             });
             ib.property("Characteristic").get(|ctx, _| Ok(parent_path(ctx.path())));
             ib.property("Handle").get(|_ctx, reg| Ok(reg.d.handle.map(|h| h.get()).unwrap_or_default())).set(

@@ -218,6 +218,7 @@ macro_rules! define_properties {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
             let dbus_opt_value: Option<$dbus_type> = self.get_opt_property_with_interface($dbus_name, $dbus_interface).await?;
+            #[allow(clippy::manual_map)]
             let value: Option<$type> = match dbus_opt_value.as_ref() {
                 Some($dbus_value) => Some($getter_transform),
                 None => None
@@ -363,7 +364,7 @@ macro_rules! define_flags {
 
         impl $name {
             #[allow(dead_code)]
-            pub(crate) fn to_vec(&self) -> Vec<String> {
+            pub(crate) fn as_vec(&self) -> Vec<String> {
                 let mut v = Vec::new();
                 $(
                     if self.$field {
@@ -781,7 +782,8 @@ async fn all_dbus_objects(
 pub(crate) fn read_dict<'a, T: 'static>(
     dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
 ) -> Result<&'a T> {
-    prop_cast(dict, key).ok_or(Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))
+    prop_cast(dict, key)
+        .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))
 }
 
 /// Returns the parent path of the specified D-Bus path.

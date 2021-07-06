@@ -121,7 +121,7 @@ impl Adapter {
         });
 
         let known = self.device_addresses().await?;
-        let known_events = stream::iter(known).map(|addr| AdapterEvent::DeviceAdded(addr));
+        let known_events = stream::iter(known).map(AdapterEvent::DeviceAdded);
 
         let all_events = known_events.chain(change_events);
 
@@ -140,7 +140,7 @@ impl Adapter {
                         transport: DiscoveryTransport::Auto,
                         ..Default::default()
                     };
-                    self.call_method("SetDiscoveryFilter", (filter.to_dict(),)).await?;
+                    self.call_method("SetDiscoveryFilter", (filter.into_dict(),)).await?;
                     self.call_method("StartDiscovery", ()).await?;
                     Ok(())
                 },
@@ -464,7 +464,7 @@ define_properties!(
             dbus: (INTERFACE, "UUIDs", Vec<String>, OPTIONAL),
             get: (uuids, v => {
                 v
-                .into_iter()
+                .iter()
                 .map(|uuid| {
                     uuid.parse()
                         .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(uuid.to_string()))))
@@ -612,9 +612,9 @@ pub(crate) struct DiscoveryFilter {
     /// scan.
     ///
     /// Possible values:
-    ///     "auto"	- interleaved scan
-    ///     "bredr"	- BR/EDR inquiry
-    ///     "le"	- LE scan only
+    ///     "auto"  - interleaved scan
+    ///     "bredr" - BR/EDR inquiry
+    ///     "le"    - LE scan only
     ///
     /// If "le" or "bredr" Transport is requested,
     /// and the controller doesn't support it,
@@ -641,7 +641,7 @@ pub(crate) struct DiscoveryFilter {
     /// the number of device objects created during a
     /// discovery.
     ///
-    ///	When set disregards device discoverable flags.
+    /// When set disregards device discoverable flags.
     ///
     /// Note: The pattern matching is ignored if there
     /// are other client that don't set any pattern as
@@ -665,7 +665,7 @@ impl Default for DiscoveryFilter {
 }
 
 impl DiscoveryFilter {
-    fn to_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
+    fn into_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
         let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
         let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern } = self;
         hm.insert("UUIDs", Variant(Box::new(uuids.into_iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())));

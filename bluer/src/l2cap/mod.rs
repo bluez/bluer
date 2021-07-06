@@ -137,7 +137,7 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
         Ok(Self {
             addr: Address::from(saddr.l2_bdaddr),
             addr_type: AddressType::from_u8(saddr.l2_bdaddr_type)
-                .ok_or(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
             psm: u16::from_le(saddr.l2_psm)
                 .try_into()
                 .map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_psm"))?,
@@ -418,7 +418,7 @@ impl TryFrom<bt_security> for Security {
     fn try_from(value: bt_security) -> Result<Self> {
         Ok(Self {
             level: SecurityLevel::from_u8(value.level)
-                .ok_or(Error::new(ErrorKind::InvalidInput, "invalid bt_security::level"))?,
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid bt_security::level"))?,
             key_size: value.key_size,
         })
     }
@@ -529,7 +529,8 @@ impl<Type> Socket<Type> {
     /// This corresponds to the `BT_MODE` socket option.
     pub fn flow_control(&self) -> Result<FlowControl> {
         let value: u8 = getsockopt(self.fd.get_ref(), BT_MODE)?;
-        FlowControl::from_u8(value).ok_or(Error::new(ErrorKind::InvalidInput, "invalid flow control mode"))
+        FlowControl::from_u8(value)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid flow control mode"))
     }
 
     /// Set flow control mode.
@@ -562,6 +563,9 @@ impl<Type> Socket<Type> {
     ///
     /// This function *consumes ownership* of the specified file descriptor.
     /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
         Ok(Self { fd: AsyncFd::new(OwnedFd::new(fd))?, _type: PhantomData })
     }
@@ -916,6 +920,7 @@ impl Stream {
 
     /// Splits the stream into a borrowed read half and a borrowed write half, which can be used
     /// to read and write the stream concurrently.
+    #[allow(clippy::needless_lifetimes)]
     pub fn split<'a>(&'a mut self) -> (stream::ReadHalf<'a>, stream::WriteHalf<'a>) {
         (stream::ReadHalf(self), stream::WriteHalf(self))
     }

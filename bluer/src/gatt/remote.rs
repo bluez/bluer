@@ -165,10 +165,7 @@ define_properties!(
             Includes, Vec<u16>,
             dbus: (SERVICE_INTERFACE, "Includes", Vec<Path>, MANDATORY),
             get: (includes, v => {
-                v.into_iter().filter_map(|path| match Service::parse_dbus_path(path) {
-                    Some((_, _, service_id)) => Some(service_id),
-                    None => None
-                }).collect()
+                v.iter().filter_map(|path| Service::parse_dbus_path(path).map(|(_, _, service_id)| service_id)).collect()
             }),
         );
     }
@@ -227,6 +224,7 @@ impl Characteristic {
         Ok(Path::new(format!("{}/char{:04x}", service_path, id)).unwrap())
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16, u16), &'a str)> {
         match Service::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("/char") {
@@ -344,10 +342,10 @@ impl Characteristic {
     /// To release the lock the client shall drop the writer.
     ///
     /// Note: the MTU can only be negotiated once and is
-    ///	symmetric therefore this method may be delayed in
-    ///	order to have the exchange MTU completed, because of
-    ///	that the file descriptor is closed during
-    ///	reconnections as the MTU has to be renegotiated.
+    /// symmetric therefore this method may be delayed in
+    /// order to have the exchange MTU completed, because of
+    /// that the file descriptor is closed during
+    /// reconnections as the MTU has to be renegotiated.
     pub async fn write_io(&self) -> Result<CharacteristicWriter> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
@@ -413,17 +411,17 @@ impl Characteristic {
     /// [notify](Self::notify) shall not be called, any notification
     /// will be dispatched via file descriptor therefore the
     /// Value property is not affected during the time where
-    ///	notify has been acquired.
+    /// notify has been acquired.
     ///
     /// Usage of [notify](Self::notify) will be
     /// locked causing it to return NotPermitted error.
     /// To release the lock the client shall drop the writer.
     ///
     /// Note: the MTU can only be negotiated once and is
-    ///	symmetric therefore this method may be delayed in
-    ///	order to have the exchange MTU completed, because of
-    ///	that the file descriptor is closed during
-    ///	reconnections as the MTU has to be renegotiated.
+    /// symmetric therefore this method may be delayed in
+    /// order to have the exchange MTU completed, because of
+    /// that the file descriptor is closed during
+    /// reconnections as the MTU has to be renegotiated.
     pub async fn notify_io(&self) -> Result<CharacteristicReader> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
@@ -565,6 +563,7 @@ impl Descriptor {
         Ok(Path::new(format!("{}/desc{:04x}", char_path, id)).unwrap())
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn parse_dbus_path_prefix<'a>(
         path: &'a Path,
     ) -> Option<((&'a str, Address, u16, u16, u16), &'a str)> {

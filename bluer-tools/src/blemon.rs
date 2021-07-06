@@ -143,7 +143,7 @@ impl DeviceMonitor {
 
         let md = device.manufacturer_data().await?.unwrap_or_default();
         let mut m_ids: Vec<u16> = md.keys().cloned().collect();
-        m_ids.sort();
+        m_ids.sort_unstable();
         let ms: Vec<_> = m_ids
             .into_iter()
             .filter_map(|id| {

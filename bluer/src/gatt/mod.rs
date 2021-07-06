@@ -172,28 +172,26 @@ impl AsyncRead for CharacteristicReader {
             buf.put_slice(&self.buf);
             self.buf = remaining;
             Poll::Ready(Ok(()))
+        } else if buf_space < self.mtu {
+            let this = self.project();
+
+            // If provided buffer is too small, read into temporary buffer.
+            let mut mtu_buf: Vec<MaybeUninit<u8>> = vec![MaybeUninit::uninit(); *this.mtu];
+            let mut mtu_read_buf = ReadBuf::uninit(&mut mtu_buf);
+            ready!(this.stream.poll_read(cx, &mut mtu_read_buf))?;
+            let n = mtu_read_buf.filled().len();
+            drop(mtu_read_buf);
+            mtu_buf.truncate(n);
+            let mut mtu_buf: Vec<u8> = mtu_buf.into_iter().map(|v| unsafe { v.assume_init() }).collect();
+
+            // Then fill provided buffer appropriately and keep the rest in
+            // our internal buffer.
+            *this.buf = mtu_buf.split_off(buf_space.min(n));
+            buf.put_slice(&mtu_buf);
+
+            Poll::Ready(Ok(()))
         } else {
-            if buf_space < self.mtu {
-                let this = self.project();
-
-                // If provided buffer is too small, read into temporary buffer.
-                let mut mtu_buf: Vec<MaybeUninit<u8>> = vec![MaybeUninit::uninit(); *this.mtu];
-                let mut mtu_read_buf = ReadBuf::uninit(&mut mtu_buf);
-                ready!(this.stream.poll_read(cx, &mut mtu_read_buf))?;
-                let n = mtu_read_buf.filled().len();
-                drop(mtu_read_buf);
-                mtu_buf.truncate(n);
-                let mut mtu_buf: Vec<u8> = mtu_buf.into_iter().map(|v| unsafe { v.assume_init() }).collect();
-
-                // Then fill provided buffer appropriately and keep the rest in
-                // our internal buffer.
-                *this.buf = mtu_buf.split_off(buf_space.min(n));
-                buf.put_slice(&mtu_buf);
-
-                Poll::Ready(Ok(()))
-            } else {
-                self.project().stream.poll_read(cx, buf)
-            }
+            self.project().stream.poll_read(cx, buf)
         }
     }
 }

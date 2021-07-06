@@ -258,7 +258,7 @@ impl Device {
         let dbus_path = self.dbus_path.clone();
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
-            if let Err(_) = done_rx.await {
+            if done_rx.await.is_err() {
                 let proxy = Proxy::new(SERVICE_NAME, dbus_path, TIMEOUT, &*connection);
                 let _: std::result::Result<(), dbus::Error> =
                     proxy.method_call(INTERFACE, "CancelPairing", ()).await;
@@ -335,7 +335,7 @@ define_properties!(
             dbus: (INTERFACE, "UUIDs", Vec<String>, OPTIONAL),
             get: (uuids, v => {
                 v
-                .into_iter()
+                .iter()
                 .map(|uuid| {
                     uuid.parse()
                         .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(uuid.to_string()))))
@@ -458,12 +458,9 @@ define_properties!(
             dbus: (INTERFACE, "ManufacturerData", HashMap<u16, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (manufacturer_data, m => {
                 let mut mt: HashMap<u16, Vec<u8>> = HashMap::new();
-                for (k,v) in m {
-                    match dbus::arg::cast(&v.0).cloned() {
-                        Some(v) => {
-                            mt.insert(*k, v);
-                        }
-                        None => (),
+                for (k, v) in m {
+                    if let Some(v) = dbus::arg::cast(&v.0).cloned() {
+                        mt.insert(*k, v);
                     }
                 }
                 mt
@@ -478,12 +475,9 @@ define_properties!(
             dbus: (INTERFACE, "ServiceData", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
             get: (service_data, m => {
                 let mut mt: HashMap<Uuid, Vec<u8>> = HashMap::new();
-                for (k,v) in m {
-                    match (k.parse(), dbus::arg::cast(&v.0).cloned()) {
-                        (Ok(k), Some(v)) => {
-                            mt.insert(k, v);
-                        }
-                        _ => (),
+                for (k, v) in m {
+                    if let (Ok(k), Some(v)) = (k.parse(), dbus::arg::cast(&v.0).cloned()) {
+                        mt.insert(k, v);
                     }
                 }
                 mt

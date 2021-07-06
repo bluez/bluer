@@ -34,6 +34,9 @@ use crate::{
     all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
+/// Terminate TX and terminated RX for single session.
+type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
+
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
     pub connection: Arc<SyncConnection>,
@@ -44,7 +47,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
-    pub single_sessions: Mutex<HashMap<dbus::Path<'static>, (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>)>>,
+    pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
 }
 
@@ -129,7 +132,7 @@ impl Session {
     ///
     /// This establishes a connection to the system Bluetooth daemon over D-Bus.
     pub async fn new() -> Result<Self> {
-        let (resource, connection) = spawn_blocking(|| connection::new_system_sync()).await??;
+        let (resource, connection) = spawn_blocking(connection::new_system_sync).await??;
         tokio::spawn(resource);
         log::trace!("Connected to D-Bus with unique name {}", &connection.unique_name());
 
@@ -228,18 +231,12 @@ impl Session {
                 Event::ObjectAdded { object, interfaces }
                     if interfaces.iter().any(|i| i == adapter::INTERFACE) =>
                 {
-                    match Adapter::parse_dbus_path(&object) {
-                        Some(name) => Some(SessionEvent::AdapterAdded(name.to_string())),
-                        None => None,
-                    }
+                    Adapter::parse_dbus_path(&object).map(|name| SessionEvent::AdapterAdded(name.to_string()))
                 }
                 Event::ObjectRemoved { object, interfaces }
                     if interfaces.iter().any(|i| i == adapter::INTERFACE) =>
                 {
-                    match Adapter::parse_dbus_path(&object) {
-                        Some(name) => Some(SessionEvent::AdapterRemoved(name.to_string())),
-                        None => None,
-                    }
+                    Adapter::parse_dbus_path(&object).map(|name| SessionEvent::AdapterRemoved(name.to_string()))
                 }
                 _ => None,
             }
@@ -435,7 +432,7 @@ impl Event {
         let (tx, rx) = mpsc::unbounded();
         let (ready_tx, ready_rx) = oneshot::channel();
         sub_tx
-            .send(SubscriptionReq { path, tx, ready_tx, child_objects })
+            .send(SubscriptionReq { path, child_objects, tx, ready_tx })
             .await
             .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
         ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;

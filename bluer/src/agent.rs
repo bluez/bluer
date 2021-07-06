@@ -38,7 +38,7 @@ impl Default for ReqError {
 
 impl From<ReqError> for dbus::MethodErr {
     fn from(err: ReqError) -> Self {
-        let name: &'static str = err.clone().into();
+        let name: &'static str = err.into();
         Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
     }
 }
@@ -168,14 +168,14 @@ pub struct Agent {
     /// This requests is to make the application agent
     /// the default agent.
     ///
-    ///	Special permission might be required to become
-    ///	the default agent.
+    /// Special permission might be required to become
+    /// the default agent.
     pub request_default: bool,
     /// This method gets called when the service daemon
-    ///	needs to get the passkey for an authentication.
+    /// needs to get the passkey for an authentication.
     ///
-    ///	The return value should be a string of 1-16 characters
-    ///	length. The string can be alphanumeric.
+    /// The return value should be a string of 1-16 characters
+    /// length. The string can be alphanumeric.
     pub request_pin_code: Option<RequestPinCodeFn>,
     /// This method gets called when the service daemon
     /// needs to display a pin code for an authentication.
