@@ -103,10 +103,6 @@ pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
 #[cfg(feature = "bluetoothd")]
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
-// Redefine here to avoid dependency on libbluetooth for AddressType.
-pub(crate) const BDADDR_LE_PUBLIC: i32 = 0x01;
-pub(crate) const BDADDR_LE_RANDOM: i32 = 0x02;
-
 #[cfg(feature = "bluetoothd")]
 macro_rules! publish_path {
     ($path:expr) => {
@@ -424,6 +420,7 @@ pub mod gatt;
 pub mod l2cap;
 #[cfg(feature = "bluetoothd")]
 mod session;
+mod sys;
 
 #[cfg(feature = "bluetoothd")]
 pub use crate::{adapter::*, device::*, session::*};
@@ -631,20 +628,6 @@ impl Address {
     pub const fn any() -> Self {
         Self([0; 6])
     }
-
-    /// Address as system socket address type.
-    #[cfg(feature = "l2cap")]
-    pub fn to_bdaddr(mut self) -> libbluetooth::bluetooth::bdaddr_t {
-        self.0.reverse();
-        libbluetooth::bluetooth::bdaddr_t { b: self.0 }
-    }
-
-    /// Address from system socket address type.
-    #[cfg(feature = "l2cap")]
-    pub fn from_bdaddr(mut addr: libbluetooth::bluetooth::bdaddr_t) -> Self {
-        addr.b.reverse();
-        Self(addr.b)
-    }
 }
 
 impl Deref for Address {
@@ -674,6 +657,20 @@ impl Display for Address {
 impl Debug for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<sys::bdaddr_t> for Address {
+    fn from(mut addr: sys::bdaddr_t) -> Self {
+        addr.b.reverse();
+        Self(addr.b)
+    }
+}
+
+impl From<Address> for sys::bdaddr_t {
+    fn from(mut addr: Address) -> Self {
+        addr.0.reverse();
+        sys::bdaddr_t { b: addr.0 }
     }
 }
 
@@ -714,13 +711,14 @@ impl From<Address> for [u8; 6] {
 
 /// Bluetooth device address type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
+#[repr(u8)]
 pub enum AddressType {
     /// Public address.
     #[strum(serialize = "public")]
-    Public = BDADDR_LE_PUBLIC as _,
+    Public = sys::BDADDR_LE_PUBLIC,
     /// Random address.
     #[strum(serialize = "random")]
-    Random = BDADDR_LE_RANDOM as _,
+    Random = sys::BDADDR_LE_RANDOM,
 }
 
 impl Default for AddressType {

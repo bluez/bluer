@@ -30,7 +30,6 @@
         "freedesktop",
         "gattcat",
         "journalctl",
-        "libbluetooth",
         "libdbus",
         "modalias",
         "multiplexor",

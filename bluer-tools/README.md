@@ -39,7 +39,7 @@ Installation
 First, install D-Bus and Bluetooth libraries on your system.
 On Debian this can be achieved by running
 
-    sudo apt install libdbus-1-dev libbluetooth-dev
+    sudo apt install libdbus-1-dev
 
 Then, run the following command to install BlueR tools
 

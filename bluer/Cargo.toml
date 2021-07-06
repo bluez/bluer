@@ -27,10 +27,9 @@ bluetoothd = ["dbus", "dbus-tokio", "dbus-crossroads", "pin-project",
               "tokio/rt", "tokio/sync", "tokio/macros", "tokio-stream",
               "lazy_static", "custom_debug", "displaydoc"]
 id = []
-l2cap = ["libbluetooth"]
+l2cap = []
 
 [dependencies]
-libbluetooth = { version = "0.1", optional = true }
 dbus = { version = "0.9", features = ["futures"], optional = true }
 dbus-tokio = { version = "0.7",  optional = true }
 dbus-crossroads = { version = "0.4",  optional = true }

@@ -4,16 +4,15 @@
 //! This enables the efficient transfer of large data streams between two devices
 //! using socket-oriented programming.
 
-use crate::{Address, AddressType};
-use futures::ready;
-use libbluetooth::{
-    bluetooth::{
-        bt_security, BTPROTO_L2CAP, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF, BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU,
-        BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW, BT_SECURITY_MEDIUM, BT_SECURITY_SDP,
-        BT_SNDMTU,
+use crate::{
+    sys::{
+        bt_power, bt_security, sockaddr_l2, BTPROTO_L2CAP, BT_MODE, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF,
+        BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU, BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW,
+        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU,
     },
-    l2cap::sockaddr_l2,
+    Address, AddressType,
 };
+use futures::ready;
 use libc::{
     sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_CLOEXEC,
     SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ,
@@ -42,13 +41,6 @@ use std::{
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 pub mod stream;
-
-// Native types missing in libbluetooth crate.
-const BT_MODE: i32 = 15;
-#[repr(C)]
-struct bt_power {
-    force_active: u8,
-}
 
 /// File descriptor that is closed on drop.
 struct OwnedFd {
@@ -130,7 +122,7 @@ impl From<SocketAddr> for sockaddr_l2 {
             l2_family: AF_BLUETOOTH as _,
             l2_psm: (sa.psm as u16).to_le(),
             l2_cid: sa.cid.to_le(),
-            l2_bdaddr: sa.addr.to_bdaddr(),
+            l2_bdaddr: sa.addr.into(),
             l2_bdaddr_type: sa.addr_type as _,
         }
     }
@@ -143,7 +135,7 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
             return Err(Error::new(ErrorKind::InvalidInput, "sockaddr_l2::l2_family is not AF_BLUETOOTH"));
         }
         Ok(Self {
-            addr: Address::from_bdaddr(saddr.l2_bdaddr),
+            addr: Address::from(saddr.l2_bdaddr),
             addr_type: AddressType::from_u8(saddr.l2_bdaddr_type)
                 .ok_or(Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
             psm: u16::from_le(saddr.l2_psm)
