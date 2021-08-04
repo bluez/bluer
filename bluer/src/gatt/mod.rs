@@ -6,10 +6,7 @@ use libc::{AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
 use pin_project::pin_project;
 use std::{
     mem::MaybeUninit,
-    os::{
-        raw::c_int,
-        unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
-    },
+    os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -319,7 +316,7 @@ pub(crate) fn make_socket_pair(non_block: bool) -> std::io::Result<(OwnedFd, Uni
     if non_block {
         ty |= SOCK_NONBLOCK;
     }
-    if unsafe { libc::socketpair(AF_LOCAL, ty, 0, &mut sv as *mut c_int) } == -1 {
+    if unsafe { libc::socketpair(AF_LOCAL, ty, 0, sv.as_mut_ptr()) } == -1 {
         return Err(std::io::Error::last_os_error());
     }
     let [fd1, fd2] = sv;
