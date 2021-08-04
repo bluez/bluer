@@ -78,14 +78,14 @@ All crate features are enabled by default.
 Requirements
 ------------
 
-This library has been tested with BlueZ version 5.59 with [additional patches from the master branch] applied.
+This library has been tested with [BlueZ 5.60].
 Older versions might work, but be aware that many bugs related to GATT handling exist.
 Refer to the [official changelog] for details.
 
 If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
-[additional patches from the master branch]: https://git.kernel.org/pub/scm/bluetooth/bluez.git/
+[BlueZ 5.60]: http://www.bluez.org/release-of-bluez-5-60/
 [official changelog]: https://github.com/bluez/bluez/blob/master/ChangeLog
 
 Configuration
