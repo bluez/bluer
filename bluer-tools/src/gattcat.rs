@@ -969,12 +969,12 @@ struct WriteOpts {
     value: Option<String>,
 }
 
-fn parse_write_op(s: &str) -> Result<WriteOp> {
+fn parse_write_op(s: &str) -> std::result::Result<WriteOp, String> {
     match s {
         "command" => Ok(WriteOp::Command),
         "request" => Ok(WriteOp::Request),
         "reliable" => Ok(WriteOp::Reliable),
-        _ => Err("unknown write operation".into()),
+        _ => Err("unknown write operation".to_string()),
     }
 }
 
