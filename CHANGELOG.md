@@ -4,6 +4,12 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.10.4 - 2021-08-26
+### Changed
+- gatt: Call socketpair() more idiomatically by André Zwing,
+  allowing build with Rust 1.50
+- fix clippy warnings
+
 ## 0.10.3 - 2021-07-18
 ### Added
 - Tokio crate feature dependency `io-util`
