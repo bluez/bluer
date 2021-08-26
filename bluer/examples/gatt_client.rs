@@ -146,7 +146,7 @@ async fn main() -> bluer::Result<()> {
     let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
-    let adapter = session.adapter(&adapter_name)?;
+    let adapter = session.adapter(adapter_name)?;
     adapter.set_powered(true).await?;
 
     {

@@ -713,7 +713,7 @@ impl RegisteredCharacteristic {
         if let Some(handle) = c.handle {
             let _ = c.control_handle.handle_tx.send(Some(handle));
         }
-        Self { c, notify: Mutex::new(None), connection: Arc::downgrade(&connection) }
+        Self { c, notify: Mutex::new(None), connection: Arc::downgrade(connection) }
     }
 
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {

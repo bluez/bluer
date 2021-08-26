@@ -310,7 +310,7 @@ impl RegisteredAgent {
     }
 
     fn parse_device_path(device: &dbus::Path<'static>) -> ReqResult<(String, Address)> {
-        match Device::parse_dbus_path(&device) {
+        match Device::parse_dbus_path(device) {
             Some((adapter, addr)) => Ok((adapter.to_string(), addr)),
             None => {
                 log::error!("Cannot parse device path {}", &device);

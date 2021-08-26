@@ -535,9 +535,9 @@ impl DiscoverOpts {
 
     async fn handle_device(dev: &Device, no_connect: bool) -> Result<()> {
         println!("Device {} [{}]", dev.address(), dev.address_type().await.unwrap_or_default());
-        Self::print_device_info(&dev).await?;
+        Self::print_device_info(dev).await?;
         if !no_connect {
-            Self::enumerate_services(&dev).await?;
+            Self::enumerate_services(dev).await?;
         }
 
         Ok(())
@@ -1601,7 +1601,7 @@ async fn get_session_adapter(addr: Option<Address>) -> Result<(Session, Adapter)
         }
         None => {
             let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-            let adapter = session.adapter(&adapter_name)?;
+            let adapter = session.adapter(adapter_name)?;
             adapter.set_powered(true).await?;
             Ok((session, adapter))
         }

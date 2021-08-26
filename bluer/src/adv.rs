@@ -107,10 +107,10 @@ pub struct Capabilities {
 impl Capabilities {
     pub(crate) fn from_dict(dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>) -> Result<Self> {
         Ok(Self {
-            max_advertisement_length: *read_dict(&dict, "MaxAdvLen")?,
-            max_scan_response_length: *read_dict(&dict, "MaxScnRspLen")?,
-            min_tx_power: *read_dict(&dict, "MinTxPower")?,
-            max_tx_power: *read_dict(&dict, "MaxTxPower")?,
+            max_advertisement_length: *read_dict(dict, "MaxAdvLen")?,
+            max_scan_response_length: *read_dict(dict, "MaxScnRspLen")?,
+            min_tx_power: *read_dict(dict, "MinTxPower")?,
+            max_tx_power: *read_dict(dict, "MaxTxPower")?,
         })
     }
 }

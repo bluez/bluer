@@ -58,7 +58,7 @@ impl SessionInner {
     ) -> Result<SingleSessionToken> {
         let mut single_sessions = self.single_sessions.lock().await;
 
-        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(&path) {
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
             match term_tx_weak.upgrade() {
                 Some(term_tx) => return Ok(SingleSessionToken(term_tx)),
                 None => {

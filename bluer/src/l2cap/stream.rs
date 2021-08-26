@@ -149,7 +149,7 @@ impl Drop for OwnedReadHalf {
     fn drop(&mut self) {
         if self.drop {
             if self.shutdown_on_drop {
-                let _ = shutdown(&self.stream.socket.fd.get_ref(), SHUT_RD);
+                let _ = shutdown(self.stream.socket.fd.get_ref(), SHUT_RD);
             }
             unsafe {
                 ManuallyDrop::drop(&mut self.stream);
@@ -204,7 +204,7 @@ impl AsyncWrite for OwnedWriteHalf {
 impl Drop for OwnedWriteHalf {
     fn drop(&mut self) {
         if self.shutdown_on_drop {
-            let _ = shutdown(&self.stream.socket.fd.get_ref(), SHUT_WR);
+            let _ = shutdown(self.stream.socket.fd.get_ref(), SHUT_WR);
         }
     }
 }

@@ -80,7 +80,7 @@ impl DeviceMonitor {
                         if seen_ago.as_secs() > MAX_AGO {
                             self.remove_device(*addr).await;
                         } else {
-                            self.show_device(&data).await;
+                            self.show_device(data).await;
                         }
                     }
                     next_update = sleep(UPDATE_INTERVAL).boxed();
@@ -161,7 +161,7 @@ impl DeviceMonitor {
     }
 
     async fn show_device(&self, data: &DeviceData) {
-        let line = self.device_line(&data).await.unwrap_or_else(|err| {
+        let line = self.device_line(data).await.unwrap_or_else(|err| {
             format!("{} - Error: {}", data.address.to_string().white(), err.to_string().on_dark_red())
         });
 
@@ -193,7 +193,7 @@ async fn main() -> Result<()> {
     )
     .unwrap();
 
-    let adapter = session.adapter(&adapter_name)?;
+    let adapter = session.adapter(adapter_name)?;
     adapter.set_powered(true).await?;
     DeviceMonitor::run(adapter).await?;
 

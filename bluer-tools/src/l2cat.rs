@@ -340,7 +340,7 @@ async fn advertise() -> Result<AdvertisementHandle> {
     let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-    let adapter = session.adapter(&adapter_name)?;
+    let adapter = session.adapter(adapter_name)?;
 
     let le_advertisement = Advertisement {
         service_uuids: vec![SERVICE_UUID].into_iter().collect(),

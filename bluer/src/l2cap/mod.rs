@@ -577,7 +577,7 @@ impl<Type> Socket<Type> {
     async fn accept_priv(&self) -> Result<(Self, SocketAddr)> {
         let (fd, sa) = loop {
             let mut guard = self.fd.readable().await?;
-            match guard.try_io(|inner| accept(&inner.get_ref())) {
+            match guard.try_io(|inner| accept(inner.get_ref())) {
                 Ok(result) => break result,
                 Err(_would_block) => continue,
             }
@@ -590,7 +590,7 @@ impl<Type> Socket<Type> {
     fn poll_accept_priv(&self, cx: &mut Context) -> Poll<Result<(Self, SocketAddr)>> {
         let (fd, sa) = loop {
             let mut guard = ready!(self.fd.poll_read_ready(cx))?;
-            match guard.try_io(|inner| accept(&inner.get_ref())) {
+            match guard.try_io(|inner| accept(inner.get_ref())) {
                 Ok(result) => break result,
                 Err(_would_block) => continue,
             }
@@ -601,13 +601,13 @@ impl<Type> Socket<Type> {
     }
 
     async fn connect_priv(&self, sa: SocketAddr) -> Result<()> {
-        match connect(&self.fd.get_ref(), sa) {
+        match connect(self.fd.get_ref(), sa) {
             Ok(()) => Ok(()),
             Err(err) if err.raw_os_error() == Some(EINPROGRESS) || err.raw_os_error() == Some(EAGAIN) => {
                 loop {
                     let mut guard = self.fd.writable().await?;
                     match guard.try_io(|inner| {
-                        let err: c_int = getsockopt_level(&inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
+                        let err: c_int = getsockopt_level(inner.get_ref(), SOL_SOCKET, SO_ERROR)?;
                         match err {
                             0 => Ok(()),
                             EINPROGRESS | EAGAIN => Err(ErrorKind::WouldBlock.into()),
@@ -738,7 +738,7 @@ impl<Type> Socket<Type> {
             Shutdown::Write => SHUT_WR,
             Shutdown::Both => SHUT_RDWR,
         };
-        shutdown(&self.fd.get_ref(), how)?;
+        shutdown(self.fd.get_ref(), how)?;
         Ok(())
     }
 
@@ -786,7 +786,7 @@ impl Socket<Stream> {
     /// at any given time.
     pub fn listen(self, backlog: u32) -> Result<StreamListener> {
         listen(
-            &self.fd.get_ref(),
+            self.fd.get_ref(),
             backlog.try_into().map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid backlog"))?,
         )?;
         Ok(StreamListener { socket: self })
@@ -811,7 +811,7 @@ impl Socket<SeqPacket> {
     /// at any given time.
     pub fn listen(self, backlog: u32) -> Result<SeqPacketListener> {
         listen(
-            &self.fd.get_ref(),
+            self.fd.get_ref(),
             backlog.try_into().map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid backlog"))?,
         )?;
         Ok(SeqPacketListener { socket: self })
