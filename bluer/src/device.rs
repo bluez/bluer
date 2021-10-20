@@ -323,8 +323,8 @@ define_properties!(
 
         ///	External appearance of device, as found on GAP service.
         property(
-            Appearance, u32,
-            dbus: (INTERFACE, "Appearance", u32, OPTIONAL),
+            Appearance, u16,
+            dbus: (INTERFACE, "Appearance", u16, OPTIONAL),
             get: (appearance, v => {v.to_owned()}),
         );
 
