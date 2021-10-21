@@ -59,7 +59,7 @@ struct ConnectOpts {
     /// Public Bluetooth address of target device.
     address: Address,
     /// Target PSM.
-    psm: u8,
+    psm: u16,
 }
 
 impl ConnectOpts {
@@ -106,7 +106,7 @@ struct ListenOpts {
     /// PSM to listen on.
     /// Specify 0 to auto allocate an available PSM.
     /// A value below 128 is privileged.
-    psm: u8,
+    psm: u16,
 }
 
 impl ListenOpts {
@@ -164,7 +164,7 @@ struct ServeOpts {
     /// PSM to listen on.
     /// Specify 0 to auto allocate an available PSM.
     /// A value below 128 is privileged.
-    psm: u8,
+    psm: u16,
     /// Program to execute once connection is established.
     command: OsString,
     /// Arguments to program.

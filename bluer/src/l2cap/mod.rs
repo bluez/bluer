@@ -82,12 +82,15 @@ impl Drop for OwnedFd {
 /// `CAP_NET_BIND_SERVICE` capability.
 pub const PSM_DYN_START: u8 = 0x80;
 
+/// The highest protocol service multiplexor (PSM) for Bluetooth Low Energy.
+pub const PSM_LE_MAX: u16 = 0xff;
+
 /// An L2CAP socket address.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SocketAddr {
     /// Device address.
     ///
-    /// Specify [SocketAddr::any] for any local adapter address.
+    /// Specify [Address::any] for any local adapter address.
     pub addr: Address,
     /// Device address type.
     pub addr_type: AddressType,
@@ -95,9 +98,10 @@ pub struct SocketAddr {
     ///
     /// Listening on a PSM below [PSM_DYN_START] requires the
     /// `CAP_NET_BIND_SERVICE` capability.
+    /// The highest PSM for Bluetooth Low Energy is [PSM_LE_MAX].
     ///
     /// Set to 0 for listening to assign an available PSM.
-    pub psm: u8,
+    pub psm: u16,
     /// Connection identifier (CID).
     ///
     /// Should be set to 0.
@@ -106,7 +110,7 @@ pub struct SocketAddr {
 
 impl SocketAddr {
     /// Creates a new L2CAP socket address.
-    pub const fn new(addr: Address, addr_type: AddressType, psm: u8) -> Self {
+    pub const fn new(addr: Address, addr_type: AddressType, psm: u16) -> Self {
         Self { addr, addr_type, psm, cid: 0 }
     }
 
@@ -120,7 +124,7 @@ impl From<SocketAddr> for sockaddr_l2 {
     fn from(sa: SocketAddr) -> Self {
         sockaddr_l2 {
             l2_family: AF_BLUETOOTH as _,
-            l2_psm: (sa.psm as u16).to_le(),
+            l2_psm: sa.psm.to_le(),
             l2_cid: sa.cid.to_le(),
             l2_bdaddr: sa.addr.into(),
             l2_bdaddr_type: sa.addr_type as _,
@@ -138,9 +142,7 @@ impl TryFrom<sockaddr_l2> for SocketAddr {
             addr: Address::from(saddr.l2_bdaddr),
             addr_type: AddressType::from_u8(saddr.l2_bdaddr_type)
                 .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_bdaddr_type"))?,
-            psm: u16::from_le(saddr.l2_psm)
-                .try_into()
-                .map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid sockaddr_l2::l2_psm"))?,
+            psm: u16::from_le(saddr.l2_psm),
             cid: u16::from_le(saddr.l2_cid),
         })
     }
@@ -845,7 +847,7 @@ pub struct StreamListener {
 impl StreamListener {
     /// Creates a new Listener, which will be bound to the specified socket address.
     ///
-    /// Specify [Address::any] for any local adapter address.
+    /// Specify [SocketAddr::any] for any local adapter address.
     /// A PSM below [PSM_DYN_START] requires the `CAP_NET_BIND_SERVICE` capability.
     pub async fn bind(sa: SocketAddr) -> Result<Self> {
         let socket = Socket::<Stream>::new_stream()?;
