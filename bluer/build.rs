@@ -103,6 +103,7 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     writeln!(out, "impl TryFrom<Uuid> for {} {{", name)?;
     writeln!(out, "    type Error = Uuid;")?;
     writeln!(out, "    fn try_from(uuid: Uuid) -> Result<Self, Uuid> {{")?;
+    writeln!(out, "        #[allow(unreachable_patterns)]")?;
     writeln!(out, "        match uuid.as_u128() {{")?;
     for entry in entries {
         writeln!(out, "            {} => Ok(Self::{}),", entry.uuid()?.as_u128(), entry.rust_id(prefix))?;
@@ -189,6 +190,7 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
     writeln!(out, "impl TryFrom<u16> for {} {{", name)?;
     writeln!(out, "    type Error = u16;")?;
     writeln!(out, "    fn try_from(code: u16) -> Result<Self, u16> {{")?;
+    writeln!(out, "        #[allow(unreachable_patterns)]")?;
     writeln!(out, "        match code {{")?;
     for entry in entries {
         writeln!(out, "            {} => Ok(Self::{}),", entry.code, entry.rust_id())?;
