@@ -80,7 +80,7 @@ impl Drop for OwnedFd {
 ///
 /// Listening on a PSM below this requires the
 /// `CAP_NET_BIND_SERVICE` capability.
-pub const PSM_DYN_START: u8 = 0x80;
+pub const PSM_DYN_START: u16 = 0x80;
 
 /// The highest protocol service multiplexor (PSM) for Bluetooth Low Energy.
 pub const PSM_LE_MAX: u16 = 0xff;
