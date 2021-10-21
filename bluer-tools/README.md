@@ -9,7 +9,7 @@ A running [Bluetooth daemon (BlueZ)] is required.
 
 The following command line tools are included.
 
-  - **blemon**: Scans for and monitors Bluetooth LE devices similar to `top`.
+  - **blumon**: Scans for and monitors Bluetooth devices similar to `top`.
 
   - **gattcat**: Swiss army knife for Bluetooth LE GATT services.
     - discovers Bluetooth LE devices and their services

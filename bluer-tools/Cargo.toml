@@ -11,8 +11,8 @@ license = "BSD-2-Clause"
 edition = "2018"
 
 [[bin]]
-name = "blemon"
-path = "src/blemon.rs"
+name = "blumon"
+path = "src/blumon.rs"
 
 [[bin]]
 name = "gattcat"
