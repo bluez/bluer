@@ -27,12 +27,12 @@ bluer = { version = "0.10.4", path = "../bluer" }
 futures = "0.3"
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt-multi-thread"] }
 clap = "=3.0.0-beta.5"
-crossterm = "0.20"
+crossterm = "0.22"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
 pretty-hex = "0.2"
 bytes = "1"
-env_logger = "0.8"
+env_logger = "0.9"
 libc = "0.2"
 log = "0.4"
 hex = { version = "0.4" }
