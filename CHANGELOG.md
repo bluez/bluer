@@ -4,6 +4,14 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.11.0 - 2021-10-21
+## Changed
+- fix `Appearance` device property to be u16 by Daniel Thoma
+- change PSM to be u16 for compatibility with classic Bluetooth
+- rename blemon to blumon and clarify that it discovers all Bluetooth devices
+- update Bluetooth numbers database
+- update dependencies
+
 ## 0.10.4 - 2021-08-26
 ### Changed
 - gatt: Call socketpair() more idiomatically by André Zwing,
