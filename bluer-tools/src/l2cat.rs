@@ -6,7 +6,7 @@ use bluer::{
     Address, AddressType, Uuid,
 };
 use bytes::BytesMut;
-use clap::Clap;
+use clap::Parser;
 use crossterm::{terminal, tty::IsTty};
 use futures::future;
 use libc::{STDIN_FILENO, STDOUT_FILENO};
@@ -25,7 +25,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const SERVICE_UUID: Uuid = Uuid::from_u128(0xdb9517c5d364d6fa1160931502091984);
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(
     name = "l2cat",
     about = "Arbitrary Bluetooth LE L2CAP connections and listens.",
@@ -36,7 +36,7 @@ struct Opts {
     cmd: Cmd,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum Cmd {
     /// Connect to remote device.
     Connect(ConnectOpts),
@@ -47,7 +47,7 @@ enum Cmd {
     Serve(ServeOpts),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ConnectOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -89,7 +89,7 @@ impl ConnectOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ListenOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -143,7 +143,7 @@ impl ListenOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ServeOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]

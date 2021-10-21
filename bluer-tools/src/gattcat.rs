@@ -17,7 +17,7 @@ use bluer::{
     Uuid, UuidExt,
 };
 use bytes::BytesMut;
-use clap::Clap;
+use clap::Parser;
 use crossterm::{terminal, tty::IsTty};
 use futures::{
     future, pin_mut,
@@ -301,7 +301,7 @@ async fn register_agent(session: &Session, request_default: bool, set_trust: boo
 ///
 /// All UUIDs can be specified in full form or in 16-bit
 /// short form as hexadecimals.
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(
     name = "gattcat",
     about = "Swiss army knife for Bluetooth LE GATT services.",
@@ -312,7 +312,7 @@ struct Opts {
     cmd: Cmd,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum Cmd {
     /// List installed Bluetooth adapters.
     Adapters(AdaptersOpts),
@@ -347,7 +347,7 @@ enum Cmd {
     Serve(ServeOpts),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct AdaptersOpts {}
 
 impl AdaptersOpts {
@@ -403,7 +403,7 @@ impl AdaptersOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct DiscoverOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -669,7 +669,7 @@ impl DiscoverOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ConnectDeviceOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -693,7 +693,7 @@ impl ConnectDeviceOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct DisconnectDeviceOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -729,7 +729,7 @@ impl DisconnectDeviceOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct PairDeviceOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -763,7 +763,7 @@ impl PairDeviceOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct RemoveDeviceOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -781,7 +781,7 @@ impl RemoveDeviceOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct PairableOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -829,7 +829,7 @@ impl PairableOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ReadOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -870,7 +870,7 @@ impl ReadOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct NotifyOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -946,7 +946,7 @@ impl NotifyOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct WriteOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -1024,7 +1024,7 @@ impl WriteOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ConnectOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -1180,7 +1180,7 @@ async fn io_loop(
     Ok(())
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ListenOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
@@ -1240,7 +1240,7 @@ impl ListenOpts {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct ServeOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
