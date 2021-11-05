@@ -551,7 +551,7 @@ impl DiscoverOpts {
         print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
         print_if_some(2, "Paired", Some(if dev.is_paired().await? { "yes" } else { "no" }), "");
         print_if_some(2, "Trusted", Some(if dev.is_trusted().await? { "yes" } else { "no" }), "");
-        //Self::print_list(4, "Services", &dev.uuids().await?.unwrap_or_default());
+        print_list(2, "Services", &dev.uuids().await?.unwrap_or_default());
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Service::try_from(uuid) {
