@@ -1,4 +1,4 @@
-BlueR - Official BlueZ Bindings for Rust
+BlueR — Official BlueZ Bindings for Rust
 ========================================
 
 [![crates.io page](https://img.shields.io/crates/v/bluer)](https://crates.io/crates/bluer)

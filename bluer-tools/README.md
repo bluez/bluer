@@ -1,10 +1,10 @@
-BlueR tools -- swiss army knife for GATT services and L2CAP sockets on Linux
-============================================================================
+BlueR tools — swiss army knife for GATT services and L2CAP sockets on Linux
+===========================================================================
 
 [![crates.io page](https://img.shields.io/crates/v/bluer-tools)](https://crates.io/crates/bluer-tools)
 [![BSD-2-Clause license](https://img.shields.io/crates/l/bluer-tools)](https://raw.githubusercontent.com/bluez/bluer/master/LICENSE)
 
-This crate provides tools for [Bluetooth Low Energy (BLE)] on Linux building on the functionality of the [BlueR crate].
+This crate provides tools for Bluetooth on Linux building on the functionality of the [BlueR crate].
 A running [Bluetooth daemon (BlueZ)] is required.
 
 The following command line tools are included.
@@ -27,7 +27,6 @@ The following command line tools are included.
 
 Each tool supports the `--help` option for detailed usage information.
 
-[Bluetooth Low Energy (BLE)]: https://en.wikipedia.org/wiki/Bluetooth_Low_Energy
 [BlueR crate]: https://crates.io/crates/bluer
 [Nordic UART service (NUS)]: https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/include/bluetooth/services/nus.html
 [netcat]: https://sectools.org/tool/netcat/
