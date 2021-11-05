@@ -5,14 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## 0.11.1 - 2021-10-21
-## Changed
+### Changed
 - fix `PSM_DYN_START` to be u16
 
 ## 0.11.0 - 2021-10-21
-## Changed
+### Changed
 - fix `Appearance` device property to be u16 by Daniel Thoma
 - change PSM to be u16 for compatibility with classic Bluetooth
-- rename blemon to blumon and clarify that it discovers all Bluetooth devices
 - update Bluetooth numbers database
 - update dependencies
 
@@ -41,13 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.9.6 - 2021-06-30
 ### Changed
 - clarify use of `advertise` method for LE advertisements
-- gattcat: send LE advertisements for pairing
 - update `dbus-crossroads` crate to 0.4
 
 ## 0.9.5 - 2021-06-21
 ### Added
 - Bluetooth Authorization Agent API
-- gattcat: pair-device, remove-device and pairable commands
 ### Removed
 - Device::cancel_pairing was replaced by automatic cancellation.
 
@@ -60,9 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - documentation fixes
 
 ## 0.9.2 - 2021-06-14
-### Added
-- gattcat: Nordic UART Service (NUS) 
-- gattcat: list adapters
 ### Changed
 - Move tools to `blez-tools` crate.
 
