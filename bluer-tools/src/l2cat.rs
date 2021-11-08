@@ -71,7 +71,7 @@ struct ConnectOpts {
 
 impl ConnectOpts {
     pub async fn perform(self) -> Result<()> {
-        let addr_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+        let addr_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
 
         let socket = Socket::new_stream()?;
         let local_sa = match self.bind {
@@ -133,7 +133,7 @@ impl ListenOpts {
     pub async fn perform(self) -> Result<()> {
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
         let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
@@ -205,7 +205,7 @@ impl ServeOpts {
 
         let _adv = if !self.no_advertise { Some(advertise().await?) } else { None };
 
-        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::Public };
+        let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
         let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;

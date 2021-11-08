@@ -138,7 +138,7 @@ impl SocketAddr {
     /// When specified to [Socket::bind] binds to any public, local adapter address
     /// using Bluetooth Low Energy and a dynamically allocated PSM.
     pub const fn any_le() -> Self {
-        Self { addr: Address::any(), addr_type: AddressType::Public, psm: 0, cid: 0 }
+        Self { addr: Address::any(), addr_type: AddressType::LePublic, psm: 0, cid: 0 }
     }
 }
 
@@ -411,7 +411,7 @@ fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
 fn any_bind_addr(addr: &SocketAddr) -> SocketAddr {
     match addr.addr_type {
         AddressType::BrEdr => SocketAddr::any_br_edr(),
-        AddressType::Public | AddressType::Random => SocketAddr::any_le(),
+        AddressType::LePublic | AddressType::LeRandom => SocketAddr::any_le(),
     }
 }
 
@@ -540,7 +540,7 @@ impl<Type> Socket<Type> {
     /// In this case, try re-querying the MTU after send or receiving some data.
     ///
     /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::Public] or [AddressType::Random].
+    /// [AddressType::LePublic] or [AddressType::LeRandom].
     pub fn send_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_SNDMTU)
     }
@@ -550,7 +550,7 @@ impl<Type> Socket<Type> {
     /// This corresponds to the `BT_RCVMTU` socket option.
     ///
     /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::Public] or [AddressType::Random].
+    /// [AddressType::LePublic] or [AddressType::LeRandom].
     pub fn recv_mtu(&self) -> Result<u16> {
         getsockopt(self.fd.get_ref(), BT_RCVMTU)
     }
@@ -560,7 +560,7 @@ impl<Type> Socket<Type> {
     /// This corresponds to the `BT_RCVMTU` socket option.
     ///
     /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::Public] or [AddressType::Random].
+    /// [AddressType::LePublic] or [AddressType::LeRandom].
     pub fn set_recv_mtu(&self, recv_mtu: u16) -> Result<()> {
         setsockopt(self.fd.get_ref(), BT_RCVMTU, &recv_mtu)
     }

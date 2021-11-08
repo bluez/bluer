@@ -26,7 +26,7 @@ async fn main() -> bluer::Result<()> {
     }
 
     let target_addr: Address = args[1].parse().expect("invalid address");
-    let target_sa = SocketAddr::new(target_addr, AddressType::Public, PSM);
+    let target_sa = SocketAddr::new(target_addr, AddressType::LePublic, PSM);
 
     println!("Connecting to {:?}", &target_sa);
     let mut stream = Stream::connect(target_sa).await.expect("connection failed");

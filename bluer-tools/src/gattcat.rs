@@ -509,7 +509,7 @@ impl DiscoverOpts {
             }
 
             let dev = adapter.device(addr)?;
-            if self.public_only && dev.address_type().await.unwrap_or_default() == AddressType::Random {
+            if self.public_only && dev.address_type().await.unwrap_or_default() == AddressType::LeRandom {
                 continue;
             }
             if let Ok(Some(_)) = dev.rssi().await {

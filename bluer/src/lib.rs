@@ -720,15 +720,15 @@ pub enum AddressType {
     BrEdr = sys::BDADDR_BREDR,
     /// Bluetooth Low Energy (LE) public address.
     #[strum(serialize = "public")]
-    Public = sys::BDADDR_LE_PUBLIC,
+    LePublic = sys::BDADDR_LE_PUBLIC,
     /// Bluetooth Low Energy (LE) random address.
     #[strum(serialize = "random")]
-    Random = sys::BDADDR_LE_RANDOM,
+    LeRandom = sys::BDADDR_LE_RANDOM,
 }
 
 impl Default for AddressType {
     fn default() -> Self {
-        Self::Public
+        Self::LePublic
     }
 }
 
