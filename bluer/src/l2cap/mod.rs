@@ -9,17 +9,17 @@
 
 use crate::{
     sys::{
-        bt_power, bt_security, sockaddr_l2, BTPROTO_L2CAP, BT_MODE, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF,
+        bt_power, bt_security, sockaddr_l2, BTPROTO_L2CAP, BT_MODE, BT_PHY, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF,
         BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU, BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW,
-        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU,
+        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU, L2CAP_CONNINFO, L2CAP_LM, L2CAP_OPTIONS, SOL_L2CAP,
     },
     Address, AddressType,
 };
 use futures::ready;
 use libc::{
     sockaddr, socklen_t, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_CLOEXEC,
-    SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, TIOCINQ,
-    TIOCOUTQ,
+    SOCK_DGRAM, SOCK_NONBLOCK, SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, SO_RCVBUF,
+    TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -43,7 +43,25 @@ use std::{
 };
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
+pub use crate::sys::{l2cap_conninfo as ConnInfo, l2cap_options as Opts};
+
 pub mod stream;
+
+/// Possible bit values for the [link mode socket option](Socket::link_mode).
+pub mod link_mode {
+    pub use crate::sys::{
+        L2CAP_LM_AUTH as AUTH, L2CAP_LM_ENCRYPT as ENCRYPT, L2CAP_LM_FIPS as FIPS, L2CAP_LM_MASTER as MASTER,
+        L2CAP_LM_RELIABLE as RELIABLE, L2CAP_LM_SECURE as SECURE, L2CAP_LM_TRUSTED as TRUSTED,
+    };
+}
+
+/// Possible bit values for the [PHY socket option](Socket::phy).
+pub mod phy {
+    pub use crate::sys::{
+        BR1M1SLOT, BR1M3SLOT, BR1M5SLOT, EDR2M1SLOT, EDR2M3SLOT, EDR2M5SLOT, EDR3M1SLOT, EDR3M3SLOT, EDR3M5SLOT,
+        LE1MRX, LE1MTX, LE2MRX, LE2MTX, LECODEDRX, LECODEDTX,
+    };
+}
 
 /// File descriptor that is closed on drop.
 struct OwnedFd {
@@ -385,16 +403,20 @@ fn getsockopt<T>(socket: &OwnedFd, optname: c_int) -> Result<T> {
     getsockopt_level(socket, SOL_BLUETOOTH, optname)
 }
 
-/// Set Bluetooth level socket option.
-fn setsockopt<T>(socket: &OwnedFd, optname: i32, optval: &T) -> Result<()> {
+/// Set socket option.
+fn setsockopt_level<T>(socket: &OwnedFd, level: c_int, optname: i32, optval: &T) -> Result<()> {
     let optlen: socklen_t = size_of::<T>() as _;
-    if unsafe {
-        libc::setsockopt(socket.as_raw_fd(), SOL_BLUETOOTH, optname, optval as *const _ as *const _, optlen)
-    } == -1
+    if unsafe { libc::setsockopt(socket.as_raw_fd(), level, optname, optval as *const _ as *const _, optlen) }
+        == -1
     {
         return Err(Error::last_os_error());
     }
     Ok(())
+}
+
+/// Set Bluetooth level socket option.
+fn setsockopt<T>(socket: &OwnedFd, optname: i32, optval: &T) -> Result<()> {
+    setsockopt_level(socket, SOL_BLUETOOTH, optname, optval)
 }
 
 /// Perform an IOCTL that reads a single value.
@@ -533,36 +555,40 @@ impl<Type> Socket<Type> {
 
     /// Get maximum transmission unit (MTU) for sending.
     ///
-    /// This corresponds to the `BT_SNDMTU` socket option.
+    /// This corresponds to the `BT_SNDMTU` socket option or [Opts::omtu].
     ///
     /// Note that this value may not be available directly after an connection
     /// has been established and this function will return an error.
     /// In this case, try re-querying the MTU after send or receiving some data.
-    ///
-    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::LePublic] or [AddressType::LeRandom].
     pub fn send_mtu(&self) -> Result<u16> {
-        getsockopt(self.fd.get_ref(), BT_SNDMTU)
+        match self.local_addr()?.addr_type {
+            AddressType::BrEdr => Ok(self.l2cap_opts()?.omtu),
+            _ => getsockopt(self.fd.get_ref(), BT_SNDMTU),
+        }
     }
 
     /// Get maximum transmission unit (MTU) for receiving.
     ///
-    /// This corresponds to the `BT_RCVMTU` socket option.
-    ///
-    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::LePublic] or [AddressType::LeRandom].
+    /// This corresponds to the `BT_RCVMTU` socket option or [Opts::imtu].
     pub fn recv_mtu(&self) -> Result<u16> {
-        getsockopt(self.fd.get_ref(), BT_RCVMTU)
+        match self.local_addr()?.addr_type {
+            AddressType::BrEdr => Ok(self.l2cap_opts()?.imtu),
+            _ => getsockopt(self.fd.get_ref(), BT_RCVMTU),
+        }
     }
 
     /// Set receive MTU.
     ///
-    /// This corresponds to the `BT_RCVMTU` socket option.
-    ///
-    /// This is only supported by LE sockets, i.e. [SocketAddr::addr_type] is
-    /// [AddressType::LePublic] or [AddressType::LeRandom].
+    /// This corresponds to the `BT_RCVMTU` socket option or [Opts::imtu].
     pub fn set_recv_mtu(&self, recv_mtu: u16) -> Result<()> {
-        setsockopt(self.fd.get_ref(), BT_RCVMTU, &recv_mtu)
+        match self.local_addr()?.addr_type {
+            AddressType::BrEdr => {
+                let mut opts = self.l2cap_opts()?;
+                opts.imtu = recv_mtu;
+                self.set_l2cap_opts(&opts)
+            }
+            _ => setsockopt(self.fd.get_ref(), BT_RCVMTU, &recv_mtu),
+        }
     }
 
     /// Get flow control mode.
@@ -580,6 +606,69 @@ impl<Type> Socket<Type> {
     pub fn set_flow_control(&self, flow_control: FlowControl) -> Result<()> {
         let value = flow_control as u8;
         setsockopt(self.fd.get_ref(), BT_MODE, &value)
+    }
+
+    /// Gets the maximum socket receive buffer in bytes.
+    ///
+    /// This corresponds to the `SO_RCVBUF` socket option.
+    pub fn recv_buffer(&self) -> Result<i32> {
+        getsockopt_level(self.fd.get_ref(), SOL_SOCKET, SO_RCVBUF)
+    }
+
+    /// Sets the maximum socket receive buffer in bytes.
+    ///
+    /// This corresponds to the `SO_RCVBUF` socket option.
+    pub fn set_recv_buffer(&self, recv_buffer: i32) -> Result<()> {
+        setsockopt_level(self.fd.get_ref(), SOL_SOCKET, SO_RCVBUF, &recv_buffer)
+    }
+
+    /// Gets the raw L2CAP socket options.
+    ///
+    /// This corresponds to the `L2CAP_OPTIONS` socket option.
+    /// This is only supported by classic sockets, i.e. [SocketAddr::addr_type] is
+    /// [AddressType::BrEdr].
+    pub fn l2cap_opts(&self) -> Result<Opts> {
+        getsockopt_level(self.fd.get_ref(), SOL_L2CAP, L2CAP_OPTIONS)
+    }
+
+    /// Sets the raw L2CAP socket options.
+    ///
+    /// This corresponds to the `L2CAP_OPTIONS` socket option.
+    /// This is only supported by classic sockets, i.e. [SocketAddr::addr_type] is
+    /// [AddressType::BrEdr].
+    pub fn set_l2cap_opts(&self, l2cap_opts: &Opts) -> Result<()> {
+        setsockopt_level(self.fd.get_ref(), SOL_L2CAP, L2CAP_OPTIONS, l2cap_opts)
+    }
+
+    /// Gets the raw L2CAP link mode bit field.
+    ///
+    /// Possible values are defined in the [link_mode] module.
+    /// This corresponds to the `L2CAP_LM` socket option.
+    pub fn link_mode(&self) -> Result<i32> {
+        getsockopt_level(self.fd.get_ref(), SOL_L2CAP, L2CAP_LM)
+    }
+
+    /// Sets the raw L2CAP link mode bit field.
+    ///
+    /// Possible values are defined in the [link_mode] module.
+    /// This corresponds to the `L2CAP_LM` socket option.
+    pub fn set_link_mode(&self, link_mode: i32) -> Result<()> {
+        setsockopt_level(self.fd.get_ref(), SOL_L2CAP, L2CAP_LM, &link_mode)
+    }
+
+    /// Gets the L2CAP socket connection information.
+    ///
+    /// This corresponds to the `L2CAP_CONNINFO` socket option.
+    pub fn conn_info(&self) -> Result<ConnInfo> {
+        getsockopt_level(self.fd.get_ref(), SOL_L2CAP, L2CAP_CONNINFO)
+    }
+
+    /// Gets the supported PHYs bit field.
+    ///
+    /// Possible values are defined in the [phy] module.
+    /// This corresponds to the `BT_PHY` socket option.
+    pub fn phy(&self) -> Result<i32> {
+        getsockopt_level(self.fd.get_ref(), SOL_BLUETOOTH, BT_PHY)
     }
 
     /// Get the number of bytes in the input buffer.
