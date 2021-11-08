@@ -4,6 +4,14 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.12.0 - 2021-11-09
+### Added
+- AddressType::BrEdr for classic Bluetooth
+- Bluetooth classic support for L2CAP sockets
+- l2cap: more socket options
+### Changed
+- rename LE AddressTypes
+
 ## 0.11.1 - 2021-10-21
 ### Changed
 - fix `PSM_DYN_START` to be u16
