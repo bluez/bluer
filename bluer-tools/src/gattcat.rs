@@ -551,7 +551,16 @@ impl DiscoverOpts {
         print_if_some(2, "TX power", dev.tx_power().await?, "dBm");
         print_if_some(2, "Paired", Some(if dev.is_paired().await? { "yes" } else { "no" }), "");
         print_if_some(2, "Trusted", Some(if dev.is_trusted().await? { "yes" } else { "no" }), "");
-        print_list(2, "Services", &dev.uuids().await?.unwrap_or_default());
+
+        print_list(
+            2,
+            "Services",
+            dev.uuids().await?.unwrap_or_default().into_iter().map(|uuid| match id::Service::try_from(uuid) {
+                Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
+                Err(_) => format!("{}", UuidOrShort(uuid)),
+            }),
+        );
+
         for (uuid, data) in dev.service_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Service::try_from(uuid) {
@@ -560,6 +569,7 @@ impl DiscoverOpts {
             };
             print_list(2, &format!("Service data {}", id), lines);
         }
+
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Manufacturer::try_from(id) {
@@ -568,6 +578,7 @@ impl DiscoverOpts {
             };
             print_list(2, &format!("Manufacturer data from {}", id), lines);
         }
+
         Ok(())
     }
 
