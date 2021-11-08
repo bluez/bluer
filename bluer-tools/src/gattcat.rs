@@ -305,7 +305,8 @@ async fn register_agent(session: &Session, request_default: bool, set_trust: boo
 #[clap(
     name = "gattcat",
     about = "Swiss army knife for Bluetooth LE GATT services.",
-    author = "Sebastian Urban <surban@surban.net>"
+    author = "Sebastian Urban <surban@surban.net>",
+    version = env!("CARGO_PKG_VERSION"),
 )]
 struct Opts {
     #[clap(subcommand)]
