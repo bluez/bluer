@@ -112,7 +112,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(feature = "bluetoothd")]
 macro_rules! publish_path {
     ($path:expr) => {
-        concat!("/io/crates/", env!("CARGO_PKG_NAME"), "/", $path)
+        concat!("/org/bluez/", env!("CARGO_PKG_NAME"), "/", $path)
     };
 }
 
