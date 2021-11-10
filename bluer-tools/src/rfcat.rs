@@ -18,7 +18,7 @@ use std::{
 };
 use tab_pty_process::AsyncPtyMaster;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     select,
     time::sleep,
 };
@@ -62,6 +62,9 @@ struct ConnectOpts {
     /// Use together with --pty when serving.
     #[clap(long, short)]
     raw: bool,
+    /// Allocate a TTY for the RFCOMM connection.
+    #[clap(long)]
+    tty: bool,
     /// Public Bluetooth address of target device.
     address: Address,
     /// Target RFCOMM channel.
@@ -127,18 +130,30 @@ impl ConnectOpts {
             }
         };
 
-        let is_tty = std::io::stdin().is_tty();
-        let in_raw = if is_tty && self.raw {
-            terminal::enable_raw_mode()?;
-            true
+        if self.tty {
+            let tty = stream.as_ref().create_tty(-1)?;
+            println!("Allocated TTY {}", tty);
+
+            println!("Press enter to release TTY and exit");
+            let stdin = BufReader::new(tokio::io::stdin());
+            let mut lines = stdin.lines();
+            let _ = lines.next_line().await;
+
+            Socket::release_tty(tty as _)?;
         } else {
-            false
-        };
+            let is_tty = std::io::stdin().is_tty();
+            let in_raw = if is_tty && self.raw {
+                terminal::enable_raw_mode()?;
+                true
+            } else {
+                false
+            };
 
-        io_loop(stream, tokio::io::stdin(), tokio::io::stdout(), true, is_tty, true).await?;
+            io_loop(stream, tokio::io::stdin(), tokio::io::stdout(), true, is_tty, true).await?;
 
-        if in_raw {
-            terminal::disable_raw_mode()?;
+            if in_raw {
+                terminal::disable_raw_mode()?;
+            }
         }
 
         Ok(())
@@ -156,9 +171,6 @@ struct ListenOpts {
     /// Switch the terminal into raw mode when input is a TTY.
     #[clap(long)]
     raw: bool,
-    /// Do not advertise device.
-    #[clap(long, short)]
-    no_advertise: bool,
     /// Channel to listen on.
     /// Specify 0 to auto allocate an available channel.
     #[clap(long, short)]
@@ -239,7 +251,7 @@ struct ServeOpts {
     one_shot: bool,
     /// Allocate a pseudo-terminal (PTY) for the program.
     /// Use together with --raw when connecting.
-    #[clap(long, short)]
+    #[clap(long)]
     pty: bool,
     /// Channel to listen on.
     /// Specify 0 to auto allocate an available channel.
@@ -557,7 +569,7 @@ impl SpeedServerOpts {
         adapter.set_discoverable(true).await?;
         adapter.set_discoverable_timeout(0).await?;
 
-        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), 0);
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), self.channel);
         let listen = Listener::bind(local_sa).await?;
 
         let local_sa = listen.as_ref().local_addr()?;

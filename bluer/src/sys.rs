@@ -77,7 +77,7 @@ pub const BTPROTO_RFCOMM: i32 = 3;
 /// Bluetooth address.
 #[repr(packed)]
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct bdaddr_t {
     pub b: [u8; 6],
 }
@@ -187,7 +187,7 @@ pub const RFCOMMRELEASEDEV: c_ulong = request_code_write!('R', 201, size_of::<c_
 
 /// RFCOMM TTY device request.
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct rfcomm_dev_req {
     pub dev_id: i16,
     pub flags: u32,

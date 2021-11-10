@@ -12,8 +12,8 @@
 
 use futures::ready;
 use libc::{
-    c_int, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_STREAM, SOL_BLUETOOTH,
-    SOL_SOCKET, SO_ERROR, SO_RCVBUF, TIOCINQ, TIOCOUTQ,
+    c_int, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_RAW, SOCK_STREAM,
+    SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, SO_RCVBUF, TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -262,9 +262,10 @@ impl Socket {
     /// Creates a TTY (virtual serial port) for this RFCOMM connection.
     ///
     /// Set `dev_id` to -1 to automatically allocate an id.
+    /// Returns the allocated device id.
     ///
     /// This corresponds to the `RFCOMMCREATEDEV` IOCTL.
-    pub fn create_tty(&self, dev_id: i16) -> Result<c_int> {
+    pub fn create_tty(&self, dev_id: i16) -> Result<i16> {
         let local_addr = self.local_addr()?;
         let remote_addr = self.peer_addr_priv()?;
         let req = rfcomm_dev_req {
@@ -276,25 +277,17 @@ impl Socket {
         };
 
         let id: c_int = sock::ioctl_write(self.fd.get_ref(), RFCOMMCREATEDEV, &req)?;
-        Ok(id)
+        Ok(id as i16)
     }
 
     /// Releases a TTY (virtual serial port) for this RFCOMM connection.
     ///
     /// This corresponds to the `RFCOMMRELEASEDEV` IOCTL.
-    pub fn release_tty(&self, dev_id: i16) -> Result<c_int> {
-        let local_addr = self.local_addr()?;
-        let remote_addr = self.peer_addr_priv()?;
-        let req = rfcomm_dev_req {
-            dev_id,
-            flags: RFCOMM_REUSE_DLC | RFCOMM_RELEASE_ONHUP,
-            src: local_addr.addr.into(),
-            dst: remote_addr.addr.into(),
-            channel: local_addr.channel,
-        };
-
-        let id: c_int = sock::ioctl_write(self.fd.get_ref(), RFCOMMRELEASEDEV, &req)?;
-        Ok(id)
+    pub fn release_tty(dev_id: i16) -> Result<()> {
+        let ctl_fd = AsyncFd::new(sock::socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_RFCOMM)?)?;
+        let req = rfcomm_dev_req { dev_id, flags: RFCOMM_REUSE_DLC | RFCOMM_RELEASE_ONHUP, ..Default::default() };
+        sock::ioctl_write(ctl_fd.get_ref(), RFCOMMRELEASEDEV, &req)?;
+        Ok(())
     }
 
     /// Constructs a new [Socket] from the given raw file descriptor.
