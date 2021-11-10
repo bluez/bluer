@@ -114,6 +114,8 @@ pub struct Service {
     pub characteristics: Vec<Characteristic>,
     /// Control handle for service once it has been registered.
     pub control_handle: ServiceControlHandle,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 // ----------
@@ -235,6 +237,8 @@ pub struct CharacteristicRead {
     /// Function called for each read request returning value.
     #[debug(skip)]
     pub fun: CharacteristicReadFun,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Default for CharacteristicRead {
@@ -245,6 +249,7 @@ impl Default for CharacteristicRead {
             encrypt_authenticated_read: false,
             secure_read: false,
             fun: Box::new(|_| async move { Err(ReqError::NotSupported) }.boxed()),
+            _non_exhaustive: (),
         }
     }
 }
@@ -310,6 +315,8 @@ pub struct CharacteristicWrite {
     pub secure_write: bool,
     /// Write value method.
     pub method: CharacteristicWriteMethod,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl CharacteristicWrite {
@@ -368,6 +375,8 @@ pub struct CharacteristicNotify {
     pub indicate: bool,
     /// Notification and indication method.
     pub method: CharacteristicNotifyMethod,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl CharacteristicNotify {
@@ -403,6 +412,8 @@ pub struct Characteristic {
     pub notify: Option<CharacteristicNotify>,
     /// Control handle for characteristic once it has been registered.
     pub control_handle: CharacteristicControlHandle,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Characteristic {
@@ -419,6 +430,7 @@ impl Characteristic {
 
 /// Read value request.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct CharacteristicReadRequest {
     /// Offset.
     pub offset: u16,
@@ -440,6 +452,7 @@ impl CharacteristicReadRequest {
 
 /// Write value request.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct CharacteristicWriteRequest {
     /// Start offset.
     pub offset: u16,
@@ -679,6 +692,7 @@ pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControl
 
 /// Characteristic acquire write or notify request.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 struct CharacteristicAcquireRequest {
     /// Exchanged MTU.
     pub mtu: u16,
@@ -795,6 +809,7 @@ impl RegisteredCharacteristic {
                             method: CharacteristicNotifyMethod::Fun(notify_fn),
                             indicate,
                             notify,
+                            _non_exhaustive: (),
                         }) => {
                             let (stop_notify_tx, stop_notify_rx) = mpsc::channel(1);
                             let (confirm_tx, confirm_rx) = if *indicate && !*notify {
@@ -923,6 +938,8 @@ pub struct DescriptorRead {
     /// Function called for each read request returning value.
     #[debug(skip)]
     pub fun: DescriptorReadFun,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Default for DescriptorRead {
@@ -933,6 +950,7 @@ impl Default for DescriptorRead {
             encrypt_authenticated_read: false,
             secure_read: false,
             fun: Box::new(|_| async move { Err(ReqError::NotSupported) }.boxed()),
+            _non_exhaustive: (),
         }
     }
 }
@@ -965,6 +983,8 @@ pub struct DescriptorWrite {
     /// Function called for each write request.
     #[debug(skip)]
     pub fun: DescriptorWriteFun,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Default for DescriptorWrite {
@@ -975,6 +995,7 @@ impl Default for DescriptorWrite {
             encrypt_authenticated_write: false,
             secure_write: false,
             fun: Box::new(|_, _| async move { Err(ReqError::NotSupported) }.boxed()),
+            _non_exhaustive: (),
         }
     }
 }
@@ -1005,6 +1026,8 @@ pub struct Descriptor {
     pub write: Option<DescriptorWrite>,
     /// Control handle for characteristic descriptor once it has been registered.
     pub control_handle: DescriptorControlHandle,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Descriptor {
@@ -1019,6 +1042,7 @@ impl Descriptor {
 
 /// Read characteristic descriptor value request.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct DescriptorReadRequest {
     /// Offset.
     pub offset: u16,
@@ -1037,6 +1061,7 @@ impl DescriptorReadRequest {
 
 /// Write characteristic descriptor value request.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct DescriptorWriteRequest {
     /// Offset.
     pub offset: u16,
@@ -1193,10 +1218,12 @@ impl RegisteredDescriptor {
 pub(crate) const GATT_APP_PREFIX: &str = publish_path!("gatt/app/");
 
 /// Definition of local GATT application to publish over Bluetooth.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Application {
     /// Services to publish.
     pub services: Vec<Service>,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Application {
@@ -1309,10 +1336,12 @@ pub(crate) const GATT_PROFILE_PREFIX: &str = publish_path!("gatt/profile/");
 /// an application effectively indicates support for a specific GATT profile
 /// and requests automatic connections to be established to devices
 /// supporting it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Profile {
     /// 128-bit GATT service UUIDs to auto connect.
     pub uuids: HashSet<Uuid>,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Profile {

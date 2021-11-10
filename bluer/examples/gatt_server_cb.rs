@@ -113,6 +113,7 @@ async fn main() -> bluer::Result<()> {
             }],
             ..Default::default()
         }],
+        ..Default::default()
     };
     let app_handle = adapter.serve_gatt_application(app).await?;
 

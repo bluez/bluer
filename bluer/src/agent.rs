@@ -48,6 +48,7 @@ pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
 /// Arguments for a pin code request.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RequestPinCode {
     /// Adapter making the request.
     pub adapter: String,
@@ -61,6 +62,7 @@ pub type RequestPinCodeFn =
 
 /// Arguments for a display pin code request.
 #[derive(custom_debug::Debug)]
+#[non_exhaustive]
 pub struct DisplayPinCode {
     /// Adapter making the request.
     pub adapter: String,
@@ -79,6 +81,7 @@ pub type DisplayPinCodeFn =
 
 /// Argument for a passkey request.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RequestPasskey {
     /// Adapter making the request.
     pub adapter: String,
@@ -92,6 +95,7 @@ pub type RequestPasskeyFn =
 
 /// Arguments for a display passkey request.
 #[derive(custom_debug::Debug)]
+#[non_exhaustive]
 pub struct DisplayPasskey {
     /// Adapter making the request.
     pub adapter: String,
@@ -112,6 +116,7 @@ pub type DisplayPasskeyFn =
 
 /// Arguments for a confirmation request.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RequestConfirmation {
     /// Adapter making the request.
     pub adapter: String,
@@ -127,6 +132,7 @@ pub type RequestConfirmationFn =
 
 /// Arguments for an authorization request.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RequestAuthorization {
     /// Adapter making the request.
     pub adapter: String,
@@ -140,6 +146,7 @@ pub type RequestAuthorizationFn =
 
 /// Arguments for an authorize service request.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct AuthorizeService {
     /// Adapter making the request.
     pub adapter: String,

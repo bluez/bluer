@@ -1028,7 +1028,12 @@ impl WriteOpts {
 
         char.write_ext(
             &value,
-            &remote::CharacteristicWriteRequest { offset: 0, op_type, prepare_authorize: self.prepare_authorize },
+            &remote::CharacteristicWriteRequest {
+                offset: 0,
+                op_type,
+                prepare_authorize: self.prepare_authorize,
+                ..Default::default()
+            },
         )
         .await?;
 
@@ -1452,6 +1457,7 @@ async fn make_app(
                 ],
                 ..Default::default()
             }],
+            ..Default::default()
         };
         let control = stream::select(control_tx, control_rx).boxed();
         (adapter.serve_gatt_application(app).await?, control)
@@ -1478,6 +1484,7 @@ async fn make_app(
                 }],
                 ..Default::default()
             }],
+            ..Default::default()
         };
         (adapter.serve_gatt_application(app).await?, control.boxed())
     };

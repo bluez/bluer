@@ -440,6 +440,8 @@ impl Characteristic {
 pub struct CharacteristicReadRequest {
     /// Offset.
     pub offset: u16,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl CharacteristicReadRequest {
@@ -459,6 +461,8 @@ pub struct CharacteristicWriteRequest {
     pub op_type: WriteOp,
     /// True if prepare authorization request.
     pub prepare_authorize: bool,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl CharacteristicWriteRequest {
@@ -655,6 +659,8 @@ impl Descriptor {
 pub struct DescriptorReadRequest {
     /// Offset.
     pub offset: u16,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl DescriptorReadRequest {
@@ -672,6 +678,8 @@ pub struct DescriptorWriteRequest {
     pub offset: u16,
     /// True if prepare authorization request.
     pub prepare_authorize: bool,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl DescriptorWriteRequest {
