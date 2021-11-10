@@ -122,6 +122,8 @@ impl Capabilities {
 /// data.  Required advertisement data types will always be included.
 /// All UUIDs are 128-bit versions in the API, and 16 or 32-bit
 /// versions of the same UUID will be used in the advertising data as appropriate.
+///
+/// Use [Adapter::advertise] to register a new advertisement.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Advertisement {
     /// Determines the type of advertising packet requested.
