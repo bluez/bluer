@@ -229,6 +229,11 @@ impl Session {
     }
 
     /// This registers a Bluetooth profile implementation for RFCOMM connections.
+    /// 
+    /// The returned [ProfileHandle] provides a stream of
+    /// [connection requests](crate::profile::ConnectRequest).
+    /// 
+    /// Drop the handle to unregister the profile.
     pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
         let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
         let reg_profile = RegisteredProfile::new(req_tx);
