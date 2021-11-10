@@ -1,7 +1,7 @@
 [package]
 name = "bluer-tools"
 version = "0.12.0"
-description = "BlueR tools: swiss army knife for GATT services and L2CAP sockets on Linux"
+description = "BlueR tools: swiss army knife for GATT services, L2CAP and RFCOMM sockets on Linux"
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>"]
 repository = "https://github.com/bluez/bluer"
@@ -21,6 +21,10 @@ path = "src/gattcat.rs"
 [[bin]]
 name = "l2cat"
 path = "src/l2cat.rs"
+
+[[bin]]
+name = "rfcat"
+path = "src/rfcat.rs"
 
 [dependencies]
 bluer = { version = "0.12.0", path = "../bluer" }

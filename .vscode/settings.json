@@ -41,6 +41,7 @@
         "RCVBUF",
         "RCVMTU",
         "reconnections",
+        "rfcat",
         "RFCOMM",
         "RFCOMMCREATEDEV",
         "RFCOMMRELEASEDEV",

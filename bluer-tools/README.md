@@ -1,5 +1,5 @@
-BlueR tools — swiss army knife for GATT services and L2CAP sockets on Linux
-===========================================================================
+BlueR tools — swiss army knife for GATT services, L2CAP and RFCOMM sockets on Linux
+===================================================================================
 
 [![crates.io page](https://img.shields.io/crates/v/bluer-tools)](https://crates.io/crates/bluer-tools)
 [![BSD-2-Clause license](https://img.shields.io/crates/l/bluer-tools)](https://raw.githubusercontent.com/bluez/bluer/master/LICENSE)
@@ -7,7 +7,7 @@ BlueR tools — swiss army knife for GATT services and L2CAP sockets on Linux
 This crate provides tools for Bluetooth on Linux building on the functionality of the [BlueR crate].
 A running [Bluetooth daemon (BlueZ)] is required.
 
-The following command line tools are included.
+The following command line tools are included:
 
   - **blumon**: Scans for and monitors Bluetooth devices similar to `top`.
 
@@ -24,6 +24,14 @@ The following command line tools are included.
     - connects to remote L2CAP PSMs
     - listens on local L2CAP PSMs and accepts connections
     - serves a local program on an L2CAP PSM
+    - speed tests
+
+  - **rfcat**: [netcat]-like for Bluetooth RFCOMM sockets.
+    - connects to remote RFCOMM channels
+    - listens on local RFCOMM channels
+    - serves a local program on an RFCOMM channel
+    - resolve and publish SDP records
+    - speed tests
 
 Each tool supports the `--help` option for detailed usage information.
 
