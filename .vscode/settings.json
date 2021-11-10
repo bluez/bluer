@@ -41,6 +41,7 @@
         "RCVBUF",
         "RCVMTU",
         "reconnections",
+        "RFCOMM",
         "RSSI",
         "rustup",
         "SNDMTU",

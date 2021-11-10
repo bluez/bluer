@@ -421,6 +421,8 @@ pub mod gatt;
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
 #[cfg(feature = "bluetoothd")]
+pub mod profile;
+#[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;
 

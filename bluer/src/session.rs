@@ -31,7 +31,9 @@ use crate::{
     adapter,
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    all_dbus_objects, gatt, parent_path,
+    profile::{Profile, ProfileHandle, RegisteredProfile},
+    Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 /// Terminate TX and terminated RX for single session.
@@ -47,6 +49,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
+    pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
 }
@@ -148,10 +151,11 @@ impl Session {
         let gatt_service_token = gatt::local::RegisteredService::register_interface(&mut crossroads);
         let gatt_reg_characteristic_token =
             gatt::local::RegisteredCharacteristic::register_interface(&mut crossroads);
-        let gatt_characteristic_descriptor_token =
+        let gatt_reg_characteristic_descriptor_token =
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
         let agent_token = RegisteredAgent::register_interface(&mut crossroads);
+        let profile_token = RegisteredProfile::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
         Event::handle_connection(connection.clone(), event_sub_rx).await?;
@@ -162,9 +166,10 @@ impl Session {
             le_advertisment_token,
             gatt_reg_service_token: gatt_service_token,
             gatt_reg_characteristic_token,
-            gatt_reg_characteristic_descriptor_token: gatt_characteristic_descriptor_token,
+            gatt_reg_characteristic_descriptor_token,
             gatt_profile_token,
             agent_token,
+            profile_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
         });
@@ -221,6 +226,13 @@ impl Session {
     pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
         let reg_agent = RegisteredAgent::new(agent);
         reg_agent.register(self.inner.clone()).await
+    }
+
+    /// This registers a Bluetooth profile implementation for RFCOMM connections.
+    pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
+        let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
+        let reg_profile = RegisteredProfile::new(req_tx);
+        reg_profile.register(self.inner.clone(), profile, req_rx).await
     }
 
     /// Stream adapter added and removed events.
