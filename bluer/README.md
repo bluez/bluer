@@ -7,7 +7,7 @@ BlueR — Official BlueZ Bindings for Rust
 
 This library provides the official [Rust] interface to the [Linux Bluetooth protocol stack (BlueZ)].
 Both publishing local and consuming remote [GATT services] using *idiomatic* Rust code is supported.
-L2CAP sockets are presented using an API similar to [Tokio] networking.
+L2CAP and RFCOMM sockets are presented using an API similar to [Tokio] networking.
 
 The following functionality is provided:
 
@@ -43,11 +43,15 @@ The following functionality is provided:
     * sequential packet oriented
     * datagram oriented
     * async IO interface with `AsyncRead` and `AsyncWrite` support
+* RFCOMM sockets
+    * support for classic Bluetooth (BR/EDR)
+    * stream oriented
+    * async IO interface with `AsyncRead` and `AsyncWrite` support
 * database of assigned numbers
     * manufacturer ids
     * GATT services, characteristics and descriptors
 
-Currently, classic Bluetooth functionality is mostly unimplemented except for device discovery.
+Currently, some classic Bluetooth (BR/EDR) functionality is missing.
 However, pull requests and contributions are welcome!
 
 [Rust]: https://www.rust-lang.org/
@@ -75,6 +79,7 @@ All crate features are enabled by default.
   For building, D-Bus library headers, provided by `libdbus-1-dev` on Debian, must be installed.
 * `id`: Enables database of assigned numbers.
 * `l2cap`: Enables L2CAP sockets.
+* `rfcomm`: Enables RFCOMM sockets.
 
 Requirements
 ------------

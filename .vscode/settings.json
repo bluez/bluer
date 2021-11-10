@@ -42,6 +42,8 @@
         "RCVMTU",
         "reconnections",
         "RFCOMM",
+        "RFCOMMCREATEDEV",
+        "RFCOMMRELEASEDEV",
         "RSSI",
         "rustup",
         "SNDMTU",

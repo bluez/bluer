@@ -4,7 +4,7 @@
 //!
 //! This library provides the official Rust interface to the [Linux Bluetooth protocol stack (BlueZ)].
 //! Both publishing local and consuming remote [GATT services] using *idiomatic* Rust code is supported.
-//! L2CAP sockets are presented using an API similar to Tokio networking.
+//! L2CAP and RFCOMM sockets are presented using an API similar to Tokio networking.
 //!
 //! This library depends on the [tokio] asynchronous runtime.
 //!
@@ -42,11 +42,15 @@
 //!     * sequential packet oriented
 //!     * datagram oriented
 //!     * async IO interface with [AsyncRead] and [AsyncWrite] support
+//! * [RFCOMM sockets](rfcomm)
+//!     * support for classic Bluetooth (BR/EDR)
+//!     * stream oriented
+//!     * async IO interface with [AsyncRead] and [AsyncWrite] support
 //! * [database of assigned numbers](id)
 //!     * manufacturer ids
 //!     * GATT services, characteristics and descriptors
 //!
-//! Currently, classic Bluetooth functionality is mostly unimplemented except for device discovery.
+//! Currently, some classic Bluetooth (BR/EDR) functionality is missing.
 //! However, pull requests and contributions are welcome!
 //!
 //! ## Crate features
@@ -55,14 +59,15 @@
 //! * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
 //! * `id`: Enables database of assigned numbers.
 //! * `l2cap`: Enables L2CAP sockets.
+//! * `rfcomm`: Enables RFCOMM sockets.
 //!
 //! ## Basic usage
 //! Create a [Session] using [Session::new]; this establishes a connection to the Bluetooth daemon.
 //! Then obtain a Bluetooth adapter using [Session::adapter].
 //! From there on you can access most of the functionality using the methods provided by [Adapter].
 //!
-//! ## L2CAP sockets
-//! Refer to the [l2cap] module.
+//! ## L2CAP and RFCOMM sockets
+//! Refer to the [l2cap] and [rfcomm] modules.
 //! No [Session] and therefore no running Bluetooth daemon is required.
 //!
 //! [Linux Bluetooth protocol stack (BlueZ)]: http://www.bluez.org/
@@ -404,6 +409,10 @@ macro_rules! read_opt_prop {
     };
 }
 
+#[cfg(any(feature = "l2cap", feature = "rfcomm"))]
+#[macro_use]
+mod sock;
+
 #[cfg(feature = "bluetoothd")]
 mod adapter;
 #[cfg(feature = "bluetoothd")]
@@ -420,8 +429,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
-#[cfg(feature = "bluetoothd")]
-pub mod profile;
+#[cfg(feature = "rfcomm")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
+pub mod rfcomm;
 #[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;

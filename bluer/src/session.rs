@@ -32,7 +32,7 @@ use crate::{
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
     all_dbus_objects, gatt, parent_path,
-    profile::{Profile, ProfileHandle, RegisteredProfile},
+    rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle},
     Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
@@ -228,11 +228,11 @@ impl Session {
         reg_agent.register(self.inner.clone()).await
     }
 
-    /// This registers a Bluetooth profile implementation for RFCOMM connections.
-    /// 
+    /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
+    ///
     /// The returned [ProfileHandle] provides a stream of
-    /// [connection requests](crate::profile::ConnectRequest).
-    /// 
+    /// [connection requests](crate::rfcomm::ConnectRequest).
+    ///
     /// Drop the handle to unregister the profile.
     pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
         let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);

@@ -10,25 +10,17 @@ use pin_project::{pin_project, pinned_drop};
 use std::{
     collections::HashMap,
     fmt,
-    os::unix::{
-        io::{AsRawFd, IntoRawFd, RawFd},
-        prelude::FromRawFd,
-    },
+    os::unix::io::IntoRawFd,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 use strum::{Display, EnumString, IntoStaticStr};
-use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::UnixStream,
-    sync::{mpsc, oneshot, Mutex},
-};
+use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
-pub mod stream;
-
+use super::{Socket, Stream};
 use crate::{method_call, read_dict, Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.ProfileManager1";
@@ -37,6 +29,7 @@ pub(crate) const PROFILE_INTERFACE: &str = "org.bluez.Profile1";
 pub(crate) const PROFILE_PREFIX: &str = publish_path!("profile/");
 
 /// Error response from us to a Bluetooth profile request.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
 #[non_exhaustive]
 pub enum ReqError {
@@ -62,9 +55,11 @@ impl From<ReqError> for dbus::MethodErr {
 }
 
 /// Result of a Bluetooth profile request to us.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
 /// Local profile role.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
 pub enum Role {
     /// Client.
@@ -75,9 +70,34 @@ pub enum Role {
     Server,
 }
 
-/// Bluetooth profile definition.
+/// Bluetooth RFCOMM profile definition.
 ///
 /// Use [Session::register_profile](crate::Session::register_profile) to register a profile.
+///
+/// Some predefined services:
+///
+///   * HFP AG UUID: `0000111f-0000-1000-8000-00805f9b34fb`
+///     Default profile Version is 1.7, profile Features
+///     is 0b001001 and RFCOMM channel is 13.
+///     Authentication is required.
+///
+///   * HFP HS UUID: `0000111e-0000-1000-8000-00805f9b34fb`
+///     Default profile Version is 1.7, profile Features
+///     is 0b000000 and RFCOMM channel is 7.
+///     Authentication is required.
+///
+///   * HSP AG UUID: `00001112-0000-1000-8000-00805f9b34fb`
+///     Default profile Version is 1.2, RFCOMM channel
+///     is 12 and Authentication is required. Does not
+///     support any Features, option is ignored.
+///
+///   * HSP HS UUID: `00001108-0000-1000-8000-00805f9b34fb`
+///     Default profile Version is 1.2, profile features
+///     is 0b0 and RFCOMM channel is 6. Authentication
+///     is required. Features is one bit value, specify
+///     capability of Remote Audio Volume Control
+///     (by default turned off).
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Profile {
     /// Profile UUID.
@@ -85,30 +105,6 @@ pub struct Profile {
     /// Human readable name for the profile.
     pub name: Option<String>,
     /// The primary service class UUID (if different from the actual profile UUID).
-    ///
-    /// Some predefined services:
-    ///
-    ///   * HFP AG UUID: `0000111f-0000-1000-8000-00805f9b34fb`
-    ///     Default profile Version is 1.7, profile Features
-    ///     is 0b001001 and RFCOMM channel is 13.
-    ///     Authentication is required.
-    ///
-    ///   * HFP HS UUID: `0000111e-0000-1000-8000-00805f9b34fb`
-    ///     Default profile Version is 1.7, profile Features
-    ///     is 0b000000 and RFCOMM channel is 7.
-    ///     Authentication is required.
-    ///
-    ///   * HSP AG UUID: `00001112-0000-1000-8000-00805f9b34fb`
-    ///     Default profile Version is 1.2, RFCOMM channel
-    ///     is 12 and Authentication is required. Does not
-    ///     support any Features, option is ignored.
-    ///
-    ///   * HSP HS UUID: `00001108-0000-1000-8000-00805f9b34fb`
-    ///     Default profile Version is 1.2, profile features
-    ///     is 0b0 and RFCOMM channel is 6. Authentication
-    ///     is required. Features is one bit value, specify
-    ///     capability of Remote Audio Volume Control
-    ///     (by default turned off).
     pub service: Option<Uuid>,
     /// For asymmetric profiles that do not have UUIDs available to uniquely identify
     /// each side this parameter allows specifying the precise local role.
@@ -182,6 +178,7 @@ impl Profile {
 /// A request to connect to this profile, either as client or server.
 ///
 /// The new service level connection has been made and authorized.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 pub struct ConnectRequest {
     device: Address,
     fd: OwnedFd,
@@ -216,16 +213,25 @@ impl ConnectRequest {
         self.props.features
     }
 
+    /// Returns a future that resolves when the profile gets disconnected.
+    ///
+    /// The file descriptor is no longer owned by the service
+    /// daemon and the profile implementation needs to take
+    /// care of cleaning up all connections.
+    pub fn closed(&self) -> impl Future<Output = ()> {
+        let closed_tx = self.closed_tx.clone();
+        async move { closed_tx.closed().await }
+    }
+
     /// Accept the connection request and establish an RFCOMM connection.
     pub fn accept(self) -> Result<Stream> {
-        let Self { fd, tx, closed_tx, .. } = self;
+        let Self { fd, tx, .. } = self;
 
-        let us = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_raw_fd()) };
-        us.set_nonblocking(true)?;
-        let stream = UnixStream::from_std(us)?;
-
+        let socket = unsafe { Socket::from_raw_fd(fd.into_raw_fd()) }?;
+        let stream = Stream::from_socket(socket)?;
         let _ = tx.send(Ok(()));
-        Ok(Stream { stream, closed_tx })
+
+        Ok(stream)
     }
 
     /// Reject the connection request.
@@ -246,86 +252,6 @@ impl ConnectRequestProps {
             version: read_dict(dict, "Version").ok().cloned(),
             features: read_dict(dict, "Features").ok().cloned(),
         }
-    }
-}
-
-/// An RFCOMM stream that can send and receive data.
-#[pin_project]
-#[derive(Debug)]
-pub struct Stream {
-    #[pin]
-    stream: UnixStream,
-    closed_tx: mpsc::Sender<()>,
-}
-
-impl Stream {
-    /// Returns a future that resolves when the profile gets disconnected.
-    ///
-    /// The file descriptor is then no longer owned by the service
-    /// daemon and the profile implementation needs to take
-    /// care of cleaning up all connections.
-    pub fn closed(&self) -> impl Future<Output = ()> {
-        let closed_tx = self.closed_tx.clone();
-        async move {
-            closed_tx.closed().await;
-        }
-    }
-
-    /// Returns true if the profile has been disconnected.
-    pub fn is_closed(&self) -> bool {
-        self.closed_tx.is_closed()
-    }
-
-    /// Splits the stream into a borrowed read half and a borrowed write half, which can be used
-    /// to read and write the stream concurrently.
-    #[allow(clippy::needless_lifetimes)]
-    pub fn split<'a>(&'a mut self) -> (stream::ReadHalf<'a>, stream::WriteHalf<'a>) {
-        let (rh, wh) = self.stream.split();
-        (stream::ReadHalf(rh), stream::WriteHalf(wh))
-    }
-
-    /// Splits the into an owned read half and an owned write half, which can be used to read
-    /// and write the stream concurrently.
-    pub fn into_split(self) -> (stream::OwnedReadHalf, stream::OwnedWriteHalf) {
-        let (rh, wh) = self.stream.into_split();
-        (stream::OwnedReadHalf(rh), stream::OwnedWriteHalf(wh))
-    }
-
-    /// Consumes this object, returning the raw underlying file descriptor.
-    pub fn into_raw_fd(self) -> std::io::Result<RawFd> {
-        Ok(self.stream.into_std()?.into_raw_fd())
-    }
-}
-
-impl AsyncRead for Stream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for Stream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
-        self.project().stream.poll_write(cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_flush(cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context) -> Poll<std::io::Result<()>> {
-        self.project().stream.poll_shutdown(cx)
-    }
-}
-
-impl AsRawFd for Stream {
-    fn as_raw_fd(&self) -> RawFd {
-        self.stream.as_raw_fd()
-    }
-}
-
-impl IntoRawFd for Stream {
-    fn into_raw_fd(self) -> RawFd {
-        self.into_raw_fd().expect("into_raw_fd failed")
     }
 }
 
@@ -435,9 +361,10 @@ impl RegisteredProfile {
     }
 }
 
-/// Handle to registered Bluetooth profile receiving its connect requests.
+/// Handle to registered Bluetooth RFCOMM profile receiving its connect requests.
 ///
 /// Drop to unregister profile.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[pin_project(PinnedDrop)]
 pub struct ProfileHandle {
     name: dbus::Path<'static>,

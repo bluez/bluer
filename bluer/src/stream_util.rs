@@ -1,5 +1,7 @@
 //! Stream utility types.
 
+// Note that this is included as a module by both l2cap and rfcomm.
+
 use libc::{SHUT_RD, SHUT_WR};
 use std::{
     fmt,
@@ -12,7 +14,8 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use super::{shutdown, Stream};
+use super::Stream;
+use crate::sock;
 
 /// Borrowed read half of [Stream], created by [Stream::split].
 #[derive(Debug)]
@@ -149,7 +152,7 @@ impl Drop for OwnedReadHalf {
     fn drop(&mut self) {
         if self.drop {
             if self.shutdown_on_drop {
-                let _ = shutdown(self.stream.socket.fd.get_ref(), SHUT_RD);
+                let _ = sock::shutdown(self.stream.socket.fd.get_ref(), SHUT_RD);
             }
             unsafe {
                 ManuallyDrop::drop(&mut self.stream);
@@ -204,7 +207,7 @@ impl AsyncWrite for OwnedWriteHalf {
 impl Drop for OwnedWriteHalf {
     fn drop(&mut self) {
         if self.shutdown_on_drop {
-            let _ = shutdown(self.stream.socket.fd.get_ref(), SHUT_WR);
+            let _ = sock::shutdown(self.stream.socket.fd.get_ref(), SHUT_WR);
         }
     }
 }
