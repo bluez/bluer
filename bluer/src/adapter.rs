@@ -5,7 +5,10 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-use futures::{stream, Stream, StreamExt};
+use futures::{
+    stream::{self, SelectAll},
+    Stream, StreamExt,
+};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::{Debug, Formatter},
@@ -13,6 +16,8 @@ use std::{
     u32,
 };
 use strum::{Display, EnumString};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use crate::{
@@ -112,7 +117,15 @@ impl Adapter {
     ///
     /// This process will start streaming device addresses as new devices are discovered.
     /// A device may be discovered multiple times.
+    ///
     /// All already known devices are also included in the device stream.
+    /// This may include devices that are currently not in range.
+    /// Check the [Device::rssi] property to see if the device is currently present.
+    ///
+    /// Device properties are queried asynchronously and may not be available
+    /// yet when a [DeviceAdded event](AdapterEvent::DeviceAdded) occurs.
+    /// Use [discover_devices_with_changes](Self::discover_devices_with_changes)
+    /// when you want to be notified when the device properties change.
     pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let token = self.discovery_session().await?;
         let change_events = self.events().await?.map(move |evt| {
@@ -126,6 +139,55 @@ impl Adapter {
         let all_events = known_events.chain(change_events);
 
         Ok(all_events)
+    }
+
+    /// This method starts the device discovery session and notifies of device property changes.
+    ///
+    /// This includes an inquiry procedure and remote device name resolving.
+    ///
+    /// This process will start streaming device addresses as new devices are discovered.
+    /// Each time device properties change you will receive an additional
+    /// [DeviceAdded event](AdapterEvent::DeviceAdded) for that device.
+    ///
+    /// All already known devices are also included in the device stream.
+    /// This may include devices that are currently not in range.
+    /// Check the [Device::rssi] property to see if the device is currently present.
+    pub async fn discover_devices_with_changes(&self) -> Result<impl Stream<Item = AdapterEvent>> {
+        let (tx, rx) = mpsc::channel(1);
+        let mut discovery = self.discover_devices().await?;
+        let adapter = self.clone();
+
+        tokio::spawn(async move {
+            let mut changes = SelectAll::new();
+
+            loop {
+                tokio::select! {
+                    evt = discovery.next() => {
+                        match evt {
+                            Some(AdapterEvent::DeviceAdded(addr)) => {
+                                if let Ok(dev) = adapter.device(addr) {
+                                    if let Ok(dev_evts) = dev.events().await {
+                                        changes.push(dev_evts.map(move |_| addr));
+                                    }
+                                }
+                                let _ = tx.send(AdapterEvent::DeviceAdded(addr)).await;
+                            },
+                            Some(AdapterEvent::DeviceRemoved(addr)) => {
+                                let _ = tx.send(AdapterEvent::DeviceRemoved(addr)).await;
+                            },
+                            Some(_) => (),
+                            None => break,
+                        }
+                    },
+                    Some(addr) = changes.next(), if !changes.is_empty() => {
+                        let _ = tx.send(AdapterEvent::DeviceAdded(addr)).await;
+                    },
+                    () = tx.closed() => break,
+                }
+            }
+        });
+
+        Ok(ReceiverStream::new(rx))
     }
 
     async fn discovery_session(&self) -> Result<SingleSessionToken> {

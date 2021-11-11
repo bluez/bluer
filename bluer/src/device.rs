@@ -434,6 +434,8 @@ define_properties!(
 
         /// Received Signal Strength Indicator of the remote
         ///	device (inquiry or advertising).
+        ///
+        /// `None` if the device is known, but not currently present.
         property(
             Rssi, i16,
             dbus: (INTERFACE, "RSSI", i16, OPTIONAL),
