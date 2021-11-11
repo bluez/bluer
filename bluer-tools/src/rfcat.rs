@@ -2,8 +2,9 @@
 
 use bluer::{
     agent::Agent,
+    id::ServiceClass,
     rfcomm::{Listener, Profile, ReqError, Role, Socket, SocketAddr, Stream},
-    AdapterEvent, Address, Uuid, UuidExt,
+    AdapterEvent, Address, Uuid,
 };
 use bytes::BytesMut;
 use clap::Parser;
@@ -91,7 +92,7 @@ impl ConnectOpts {
                 socket.connect(peer_sa).await?
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
@@ -224,7 +225,7 @@ impl ListenOpts {
                 stream
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
@@ -326,7 +327,7 @@ impl ServeOpts {
                 listener = Some(listen);
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
