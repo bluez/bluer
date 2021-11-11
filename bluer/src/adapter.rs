@@ -261,24 +261,25 @@ impl Adapter {
     /// successful this method returns the created
     /// device object.
     ///
-    /// Parameters that may be set in the filter dictionary
-    /// include the following:
+    /// Parameters are the following:
     ///
     /// * `address` -
     ///     The Bluetooth device address of the remote
-    ///     device. This parameter is mandatory.
+    ///     device.
     /// * `address_type` -
     ///     The Bluetooth device Address Type. This is
     ///     address type that should be used for initial
-    ///     connection. If this parameter is not present
-    ///     BR/EDR device is created.
+    ///     connection.
     ///
     /// This method is experimental.
-    pub async fn connect_device(&self, address: Address, address_type: Option<AddressType>) -> Result<Device> {
+    pub async fn connect_device(&self, address: Address, address_type: AddressType) -> Result<Device> {
         let mut m = HashMap::new();
         m.insert("Address", address.to_string());
-        if let Some(address_type) = address_type {
-            m.insert("AddressType", address_type.to_string());
+        match address_type {
+            AddressType::LePublic | AddressType::LeRandom => {
+                m.insert("AddressType", address_type.to_string());
+            }
+            AddressType::BrEdr => (),
         }
         let (_path,): (Path,) = self.call_method("ConnectDevice", (m,)).await?;
 
