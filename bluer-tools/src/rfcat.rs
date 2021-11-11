@@ -1,8 +1,9 @@
 //! Arbitrary RFCOMM connections and listens.
 
 use bluer::{
+    agent::Agent,
     rfcomm::{Listener, Profile, ReqError, Role, Socket, SocketAddr, Stream},
-    AdapterEvent, Address, Uuid,
+    AdapterEvent, Address, Uuid, UuidExt,
 };
 use bytes::BytesMut;
 use clap::Parser;
@@ -89,14 +90,28 @@ impl ConnectOpts {
                 let peer_sa = SocketAddr::new(self.address, channel);
                 socket.connect(peer_sa).await?
             }
-            (None, Some(uuid)) => {
+            (None, uuid_opt) => {
+                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
                 let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
                 let adapter = session.adapter(adapter_name)?;
                 adapter.set_powered(true).await?;
+                adapter.set_pairable(false).await?;
 
-                let profile = Profile { uuid, role: Some(Role::Client), ..Default::default() };
+                let agent = Agent::default();
+                let _agent_hndl = session.register_agent(agent).await?;
+
+                let profile = Profile {
+                    uuid,
+                    name: Some("rfcat client".to_string()),
+                    role: Some(Role::Client),
+                    require_authentication: Some(false),
+                    require_authorization: Some(false),
+                    auto_connect: Some(true),
+                    ..Default::default()
+                };
                 let mut hndl = session.register_profile(profile).await?;
 
                 eprintln!("Discovering device...");
@@ -108,19 +123,31 @@ impl ConnectOpts {
                         }
                     }
                 }
+                let dev = adapter.device(self.address)?;
+                drop(devs);
 
                 eprintln!("Connecting profile...");
-                let dev = adapter.device(self.address)?;
-                dev.connect_profile(&uuid).await?;
-
                 loop {
-                    let req = hndl.next().await.expect("received no connect request");
-                    eprintln!("Connect request from {}", req.device());
-                    if req.device() == self.address {
-                        eprintln!("Accepting request...");
-                        break req.accept()?;
-                    } else {
-                        req.reject(ReqError::Rejected);
+                    tokio::select! {
+                        res = async {
+                            let _ = dev.connect().await;
+                            dev.connect_profile(&uuid).await
+                        } => {
+                            if let Err(err) = res {
+                                eprintln!("Connect profile failed: {}", err);
+                            }
+                            sleep(Duration::from_secs(3)).await;
+                        },
+                        req = hndl.next() => {
+                            let req = req.unwrap();
+                            eprintln!("Connect request from {}", req.device());
+                            if req.device() == self.address {
+                                eprintln!("Accepting request...");
+                                break req.accept()?;
+                            } else {
+                                req.reject(ReqError::Rejected);
+                            }
+                        },
                     }
                 }
             }
@@ -196,7 +223,9 @@ impl ListenOpts {
                 }
                 stream
             }
-            (None, Some(uuid)) => {
+            (None, uuid_opt) => {
+                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
                 let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
@@ -204,8 +233,20 @@ impl ListenOpts {
                 adapter.set_powered(true).await?;
                 adapter.set_discoverable(true).await?;
                 adapter.set_discoverable_timeout(0).await?;
+                adapter.set_pairable(false).await?;
 
-                let profile = Profile { uuid, role: Some(Role::Server), ..Default::default() };
+                let agent = Agent::default();
+                let _agent_hndl = session.register_agent(agent).await?;
+
+                let profile = Profile {
+                    uuid,
+                    name: Some("rfcat listener".to_string()),
+                    channel: Some(0),
+                    role: Some(Role::Server),
+                    require_authentication: Some(false),
+                    require_authorization: Some(false),
+                    ..Default::default()
+                };
                 let mut hndl = session.register_profile(profile).await?;
 
                 eprintln!("Registered profile");
@@ -272,6 +313,7 @@ impl ServeOpts {
 
         let mut listener = None;
         let mut hndl = None;
+        let _agent_hndl;
 
         match (self.channel, self.profile) {
             (Some(channel), None) => {
@@ -283,7 +325,9 @@ impl ServeOpts {
                 }
                 listener = Some(listen);
             }
-            (None, Some(uuid)) => {
+            (None, uuid_opt) => {
+                let uuid = uuid_opt.unwrap_or(Uuid::from_u16(0x1101));
+
                 let session = bluer::Session::new().await?;
                 let adapter_names = session.adapter_names().await?;
                 let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
@@ -291,8 +335,21 @@ impl ServeOpts {
                 adapter.set_powered(true).await?;
                 adapter.set_discoverable(true).await?;
                 adapter.set_discoverable_timeout(0).await?;
+                adapter.set_pairable(true).await?;
 
-                let profile = Profile { uuid, role: Some(Role::Server), ..Default::default() };
+                let agent = Agent::default();
+                _agent_hndl = session.register_agent(agent).await?;
+
+                let profile = Profile {
+                    uuid,
+                    name: Some("rfcat server".to_string()),
+                    channel: Some(0),
+                    role: Some(Role::Server),
+                    require_authentication: Some(false),
+                    require_authorization: Some(false),
+                    auto_connect: Some(true),
+                    ..Default::default()
+                };
                 hndl = Some(session.register_profile(profile).await?);
                 eprintln!("Registered profile");
             }

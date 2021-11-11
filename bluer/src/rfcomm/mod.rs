@@ -7,6 +7,7 @@
 //!   2. Register a [Profile] and listen to [connect requests](ConnectRequest) using the [ProfileHandle].
 //!      This will register and discover SDP records and connect using
 //!      automatically discovered channel numbers.
+//!      You will probably need to register an [authorization agent](crate::agent) for this to succeed.
 //!      This requires a running Bluetooth daemon.
 //!
 

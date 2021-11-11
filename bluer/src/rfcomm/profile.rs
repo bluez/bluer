@@ -271,7 +271,7 @@ impl RegisteredProfile {
                 "NewConnection",
                 ("device", "fd", "fd_properties"),
                 (),
-                |ctx, cr, (device_path, fd, props): (dbus::Path, OwnedFd, PropMap)| {
+                |ctx, cr, (device_path, fd, props): (dbus::Path<'static>, OwnedFd, PropMap)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let device = if let Some((_, device)) = Device::parse_dbus_path(&device_path) {
                             device
@@ -304,7 +304,7 @@ impl RegisteredProfile {
                 "RequestDisconnection",
                 ("device",),
                 (),
-                |ctx, cr, (device_path,): (dbus::Path,)| {
+                |ctx, cr, (device_path,): (dbus::Path<'static>,)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let device = if let Some((_, device)) = Device::parse_dbus_path(&device_path) {
                             device
