@@ -41,6 +41,7 @@ struct UuidEntry {
     name: String,
     identifier: String,
     uuid: String,
+    #[serde(default)]
     source: String,
 }
 
@@ -82,8 +83,10 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     writeln!(out, "pub enum {} {{", name)?;
     for entry in &entries {
         writeln!(out, "    /// {}", &entry.name)?;
-        writeln!(out, "    ///")?;
-        writeln!(out, "    /// Source: {}", &entry.source)?;
+        if !entry.source.is_empty() {
+            writeln!(out, "    ///")?;
+            writeln!(out, "    /// Source: {}", &entry.source)?;
+        }
         writeln!(out, "    #[strum(serialize = \"{}\")]", &entry.name)?;
         writeln!(out, "    {},", entry.rust_id(prefix))?;
     }
@@ -205,6 +208,15 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
 }
 
 fn build_ids() -> Result<(), Box<dyn Error>> {
+    convert_uuids(
+        "service_class_uuids.json",
+        "service_class.inc",
+        "ServiceClass",
+        "service classes and profiles",
+        " ",
+    )
+    .expect("service classes");
+
     convert_uuids(
         "bluetooth-numbers-database/v1/service_uuids.json",
         "service.inc",

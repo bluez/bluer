@@ -49,7 +49,7 @@ The following functionality is provided:
     * async IO interface with `AsyncRead` and `AsyncWrite` support
 * database of assigned numbers
     * manufacturer ids
-    * GATT services, characteristics and descriptors
+    * service classes, GATT services, characteristics and descriptors
 
 Currently, some classic Bluetooth (BR/EDR) functionality is missing.
 However, pull requests and contributions are welcome!
