@@ -293,7 +293,7 @@ async fn register_agent(session: &Session, request_default: bool, set_trust: boo
         authorize_service: Some(Box::new(|req| authorize_service(req).boxed())),
         ..Default::default()
     };
-    let handle = session.register_agent(agent).await?;
+    let handle = session.register_agent(agent, None).await?;
     Ok(handle)
 }
 

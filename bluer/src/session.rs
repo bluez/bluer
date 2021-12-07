@@ -223,9 +223,9 @@ impl Session {
     /// agents per application is not supported.
     ///
     /// Drop the returned [AgentHandle] to unregister the agent.
-    pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
+    pub async fn register_agent(&self, agent: Agent, capability: Option<&str>) -> Result<AgentHandle> {
         let reg_agent = RegisteredAgent::new(agent);
-        reg_agent.register(self.inner.clone()).await
+        reg_agent.register(self.inner.clone(), capability).await
     }
 
     /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.

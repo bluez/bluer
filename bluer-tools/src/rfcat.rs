@@ -102,7 +102,7 @@ impl ConnectOpts {
                 adapter.set_pairable(false).await?;
 
                 let agent = Agent::default();
-                let _agent_hndl = session.register_agent(agent).await?;
+                let _agent_hndl = session.register_agent(agent, None).await?;
 
                 let profile = Profile {
                     uuid,
@@ -237,7 +237,7 @@ impl ListenOpts {
                 adapter.set_pairable(false).await?;
 
                 let agent = Agent::default();
-                let _agent_hndl = session.register_agent(agent).await?;
+                let _agent_hndl = session.register_agent(agent, None).await?;
 
                 let profile = Profile {
                     uuid,
@@ -339,7 +339,7 @@ impl ServeOpts {
                 adapter.set_pairable(true).await?;
 
                 let agent = Agent::default();
-                _agent_hndl = session.register_agent(agent).await?;
+                _agent_hndl = session.register_agent(agent, None).await?;
 
                 let profile = Profile {
                     uuid,
