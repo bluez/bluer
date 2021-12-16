@@ -292,7 +292,7 @@ define_properties!(
             get: (name, v => {v.to_owned()}),
         );
 
-        /// The Bluetooth device Address Type.
+        /// The Bluetooth device address type.
         ///
         /// For dual-mode and
         /// BR/EDR only devices this defaults to "public". Single
