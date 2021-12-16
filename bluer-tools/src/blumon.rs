@@ -6,7 +6,7 @@ use crossterm::{
     style::{self, Stylize},
     terminal::{self, ClearType},
 };
-use futures::{pin_mut, stream::SelectAll, FutureExt, StreamExt};
+use futures::{pin_mut, FutureExt, StreamExt};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -49,8 +49,7 @@ impl DeviceMonitor {
     }
 
     async fn perform(&mut self) -> Result<()> {
-        let mut all_change_events = SelectAll::new();
-        let device_events = self.adapter.discover_devices().await?;
+        let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
         let mut next_update = sleep(UPDATE_INTERVAL).boxed();
@@ -60,18 +59,13 @@ impl DeviceMonitor {
                 Some(device_event) = device_events.next() => {
                     match device_event {
                         AdapterEvent::DeviceAdded(addr) => {
-                            self.add_device(addr).await;
-                            let device = self.adapter.device(addr)?;
-                            let change_events = device.events().await?.map(move |_| addr);
-                            all_change_events.push(change_events);
+                            match self.devices.get_mut(&addr) {
+                                Some(data) => data.last_seen = Instant::now(),
+                                None => self.add_device(addr).await,
+                            }
                         },
                         AdapterEvent::DeviceRemoved(addr) => self.remove_device(addr).await,
                         _ => (),
-                    }
-                },
-                Some(addr) = all_change_events.next() => {
-                    if let Some(data) = self.devices.get_mut(&addr) {
-                        data.last_seen = Instant::now();
                     }
                 },
                 _ = &mut next_update => {
