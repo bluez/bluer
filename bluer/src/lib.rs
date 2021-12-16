@@ -313,14 +313,19 @@ macro_rules! define_properties {
                 match name {
                     $(
                         $dbus_name => {
-                            let dbus_opt_value: Option<&$dbus_type> = dbus::arg::cast(&var_value.0);
-                            match dbus_opt_value {
-                                Some($dbus_value) => {
-                                    let value: $type = $getter_transform;
-                                    Ok(Some(Self::$name (value)))
-                                },
-                                None => Ok(None),
-                            }
+                            crate::with_variant_property_cast(&var_value.0, |dbus_opt_value: Option<&$dbus_type>| {
+                                match dbus_opt_value {
+                                    Some($dbus_value) => {
+                                        let value: $type = $getter_transform;
+                                        Ok(Some(Self::$name (value)))
+                                    },
+                                    None => {
+                                        log::warn!("Casting variant property {} with value {:?} failed",
+                                            &name, &var_value.0);
+                                        Ok(None)
+                                    }
+                                }
+                            })
                         }
                     )*,
                     _ => Ok(None),
@@ -332,6 +337,59 @@ macro_rules! define_properties {
                 prop_map.into_iter().filter_map(|(name, value)|
                     Self::from_variant_property(&name, value).ok().flatten()
                 ).collect()
+            }
+        }
+    }
+}
+
+#[cfg(feature = "bluetoothd")]
+fn variant_hashmap<K>(a: &(dyn RefArg + 'static)) -> HashMap<K, Variant<Box<dyn RefArg + 'static>>>
+where
+    K: std::hash::Hash + std::cmp::Eq + Clone + 'static,
+{
+    let mut hm: HashMap<K, Variant<Box<dyn RefArg + 'static>>> = HashMap::new();
+
+    let mut key: Option<K> = None;
+    for i in a.as_iter().unwrap() {
+        let ib = i.box_clone();
+        match key.take() {
+            Some(key) => {
+                let value: &Variant<Box<dyn RefArg + 'static>> = dbus::arg::cast(&ib).unwrap();
+                hm.insert(key, Variant(value.0.box_clone()));
+            }
+            None => {
+                let key_ref: Option<&K> = dbus::arg::cast(&ib);
+                key = Some(key_ref.unwrap().clone());
+            }
+        }
+    }
+
+    hm
+}
+
+#[cfg(feature = "bluetoothd")]
+pub(crate) fn with_variant_property_cast<T, R>(a: &(dyn RefArg + 'static), f: impl FnOnce(Option<&T>) -> R) -> R
+where
+    T: 'static,
+{
+    let dbus_cast: Option<&T> = dbus::arg::cast(a);
+    match dbus_cast {
+        Some(v) => f(Some(v)),
+        None => {
+            use std::any::Any;
+
+            if a.signature().starts_with("a{yv") {
+                let hm = variant_hashmap::<u8>(a);
+                f((&hm as &dyn Any).downcast_ref())
+            } else if a.signature().starts_with("a{qv") {
+                let hm = variant_hashmap::<u16>(a);
+                f((&hm as &dyn Any).downcast_ref())
+            } else if a.signature().starts_with("a{sv") {
+                let hm = variant_hashmap::<String>(a);
+                f((&hm as &dyn Any).downcast_ref())
+            } else {
+                log::warn!("unimplemented D-Bus type signature: {}", a.signature());
+                f(None)
             }
         }
     }
