@@ -2,7 +2,7 @@
 
 use bluer::{Adapter, AdapterEvent, Address, DeviceEvent};
 use futures::{pin_mut, stream::SelectAll, StreamExt};
-use std::env;
+use std::{collections::HashSet, env};
 
 async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
     let device = adapter.device(addr)?;
@@ -25,6 +25,7 @@ async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> bluer::Result<()> {
     let with_changes = env::args().any(|arg| arg == "--changes");
+    let filter_addr: HashSet<_> = env::args().filter_map(|arg| arg.parse::<Address>().ok()).collect();
 
     env_logger::init();
     let session = bluer::Session::new().await?;
@@ -44,6 +45,10 @@ async fn main() -> bluer::Result<()> {
             Some(device_event) = device_events.next() => {
                 match device_event {
                     AdapterEvent::DeviceAdded(addr) => {
+                        if !filter_addr.is_empty() && !filter_addr.contains(&addr) {
+                            continue;
+                        }
+
                         println!("Device added: {}", addr);
                         if let Err(err) = query_device(&adapter, addr).await {
                             println!("    Error: {}", &err);
