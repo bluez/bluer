@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.13.0"
+version = "0.13.1"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
@@ -9,7 +9,7 @@ authors = [
     "Ben Stern <bstern@fortian.com>",
 ]
 repository = "https://github.com/bluez/bluer"
-keywords = ["bluetooth", "bluez", "ble", "gatt", "l2cap"]
+keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2018"
