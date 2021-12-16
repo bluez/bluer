@@ -452,7 +452,9 @@ impl RegisteredAgent {
         })
     }
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>, capability: Option<&str>) -> Result<AgentHandle> {
+    pub(crate) async fn register(
+        self, inner: Arc<SessionInner>, capability: Option<&str>,
+    ) -> Result<AgentHandle> {
         let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
         let capability = match capability {
             Some(c) => c,
