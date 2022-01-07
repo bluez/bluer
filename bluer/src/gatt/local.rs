@@ -1053,7 +1053,7 @@ pub struct DescriptorReadRequest {
 impl DescriptorReadRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
-            offset: read_prop!(dict, "offset", u16),
+            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
         })
     }
@@ -1074,7 +1074,7 @@ pub struct DescriptorWriteRequest {
 impl DescriptorWriteRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
         Ok(Self {
-            offset: read_prop!(dict, "offset", u16),
+            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
             prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
         })
