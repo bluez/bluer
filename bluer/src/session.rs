@@ -25,7 +25,10 @@ use std::{
     fmt::{Debug, Formatter},
     sync::{Arc, Weak},
 };
-use tokio::{select, task::spawn_blocking};
+use tokio::{
+    select,
+    task::{spawn_blocking, JoinHandle},
+};
 
 use crate::{
     adapter,
@@ -52,6 +55,7 @@ pub(crate) struct SessionInner {
     pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
+    dbus_task: JoinHandle<connection::IOResourceError>,
 }
 
 impl SessionInner {
@@ -96,6 +100,13 @@ impl SessionInner {
     }
 }
 
+impl Drop for SessionInner {
+    fn drop(&mut self) {
+        // documentation for dbus_tokio::connection::IOResource indicates it is abortable
+        self.dbus_task.abort();
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct SingleSessionToken(Arc<oneshot::Sender<()>>);
 
@@ -136,7 +147,7 @@ impl Session {
     /// This establishes a connection to the system Bluetooth daemon over D-Bus.
     pub async fn new() -> Result<Self> {
         let (resource, connection) = spawn_blocking(connection::new_system_sync).await??;
-        tokio::spawn(resource);
+        let dbus_task = tokio::spawn(resource);
         log::trace!("Connected to D-Bus with unique name {}", &connection.unique_name());
 
         let mut crossroads = Crossroads::new();
@@ -172,13 +183,18 @@ impl Session {
             profile_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
+            dbus_task,
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;
-        let mc_inner = inner.clone();
+        let mc_inner = Arc::downgrade(&inner);
         tokio::spawn(async move {
             let (_mc_callback, mut mc_stream) = mc_callback.msg_stream();
             while let Some(msg) = mc_stream.next().await {
+                let mc_inner = match mc_inner.upgrade() {
+                    Some(inner) => inner,
+                    None => return,
+                };
                 let mut crossroads = mc_inner.crossroads.lock().await;
                 let _ = crossroads.handle_message(msg, &*mc_inner.connection);
             }
