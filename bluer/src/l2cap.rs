@@ -479,6 +479,22 @@ impl Socket<Stream> {
     /// Establish a stream connection with a peer at the specified socket address.
     pub async fn connect(self, sa: SocketAddr) -> Result<Stream> {
         self.connect_priv(sa).await?;
+        Ok(Stream::from_socket(self))
+    }
+
+    /// Assume that `listen()` has already been successfully called on this socket, and return a
+    /// [StreamListener].
+    ///
+    /// Only use this function if the socket was created with [Socket::from_raw_fd].
+    pub fn assume_listening(self) -> StreamListener {
+        StreamListener { socket: self }
+    }
+
+    /// Assume that `connect()` has already successfully been called on this socket, and return a
+    /// [Stream].
+    ///
+    /// Only use this function if the socket was created with [Socket::from_raw_fd].
+    pub fn assume_connected(self) -> Stream {
         Stream::from_socket(self)
     }
 }
@@ -508,6 +524,22 @@ impl Socket<SeqPacket> {
     pub async fn connect(self, sa: SocketAddr) -> Result<SeqPacket> {
         self.connect_priv(sa).await?;
         Ok(SeqPacket { socket: self })
+    }
+
+    /// Assume that `listen()` has already been successfully called on this socket, and return a
+    /// [SeqPacketListener].
+    ///
+    /// Only use this function if the socket was created with [Socket::from_raw_fd].
+    pub fn assume_listening(self) -> SeqPacketListener {
+        SeqPacketListener { socket: self }
+    }
+
+    /// Assume that `connect()` has already successfully been called on this socket, and return a
+    /// [SeqPacket].
+    ///
+    /// Only use this function if the socket was created with [Socket::from_raw_fd].
+    pub fn assume_connected(self) -> SeqPacket {
+        SeqPacket { socket: self }
     }
 }
 
@@ -543,13 +575,13 @@ impl StreamListener {
     /// Accepts a new incoming connection from this listener.
     pub async fn accept(&self) -> Result<(Stream, SocketAddr)> {
         let (socket, sa) = self.socket.accept_priv().await?;
-        Ok((Stream::from_socket(socket)?, sa))
+        Ok((Stream::from_socket(socket), sa))
     }
 
     /// Polls to accept a new incoming connection to this listener.
     pub fn poll_accept(&self, cx: &mut Context) -> Poll<Result<(Stream, SocketAddr)>> {
         let (socket, sa) = ready!(self.socket.poll_accept_priv(cx))?;
-        Poll::Ready(Ok((Stream::from_socket(socket)?, sa)))
+        Poll::Ready(Ok((Stream::from_socket(socket), sa)))
     }
 }
 
@@ -574,8 +606,8 @@ pub struct Stream {
 
 impl Stream {
     /// Create Stream from Socket.
-    fn from_socket(socket: Socket<Stream>) -> Result<Self> {
-        Ok(Self { socket, send_mtu: 0.into() })
+    fn from_socket(socket: Socket<Stream>) -> Self {
+        Self { socket, send_mtu: 0.into() }
     }
 
     /// Establish a stream connection with a peer at the specified socket address.
