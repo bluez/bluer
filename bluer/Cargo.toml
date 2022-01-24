@@ -1,10 +1,11 @@
 [package]
 name = "bluer"
-version = "0.13.1"
+version = "0.13.2"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
     "Sebastian Urban <surban@surban.net>",
+    "BlueR contributors",
     "Attila Dusnoki <adusnoki@inf.u-szeged.hu>",
     "Ben Stern <bstern@fortian.com>",
 ]
@@ -41,7 +42,7 @@ tokio-stream = { version = "0.1",  optional = true }
 hex = { version = "0.4" }
 lazy_static = { version = "1",  optional = true }
 uuid = { version = "0.8", features = ["v4"] }
-strum = { version = "0.22", features = ["derive"] }
+strum = { version = "0.23", features = ["derive"] }
 num-traits = "0.2"
 num-derive = "0.3"
 libc = "0.2"
@@ -63,3 +64,4 @@ rand = "0.8"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples=examples"]

@@ -4,6 +4,14 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.13.2 - 2022-01-24
+### Added
+- implement from_raw_fd for socket types
+- Session::default_adapter
+### Fixed
+- avoid memory/resource leak when dropping Session
+- make descriptor offset property optional
+
 ## 0.13.1 - 2021-12-16
 ### Changed
 - fix manufacturer data property change events not working
