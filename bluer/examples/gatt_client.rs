@@ -144,15 +144,13 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
-    let adapter_names = session.adapter_names().await?;
-    let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
-    let adapter = session.adapter(adapter_name)?;
+    let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
     {
         println!(
             "Discovering on Bluetooth adapter {} with address {}\n",
-            &adapter_name,
+            adapter.name(),
             adapter.address().await?
         );
         let discover = adapter.discover_devices().await?;

@@ -24,12 +24,10 @@ include!("gatt.inc");
 async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
-    let adapter_names = session.adapter_names().await?;
-    let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
-    let adapter = session.adapter(adapter_name)?;
+    let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
-    println!("Advertising on Bluetooth adapter {} with address {}", &adapter_name, adapter.address().await?);
+    println!("Advertising on Bluetooth adapter {} with address {}", adapter.name(), adapter.address().await?);
     let mut manufacturer_data = BTreeMap::new();
     manufacturer_data.insert(MANUFACTURER_ID, vec![0x21, 0x22, 0x23, 0x24]);
     let le_advertisement = Advertisement {
@@ -41,7 +39,7 @@ async fn main() -> bluer::Result<()> {
     };
     let adv_handle = adapter.advertise(le_advertisement).await?;
 
-    println!("Serving GATT service on Bluetooth adapter {}", &adapter_name);
+    println!("Serving GATT service on Bluetooth adapter {}", adapter.name());
     let (service_control, service_handle) = service_control();
     let (char_control, char_handle) = characteristic_control();
     let app = Application {

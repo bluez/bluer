@@ -176,18 +176,16 @@ impl DeviceMonitor {
 async fn main() -> Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
-    let adapter_names = session.adapter_names().await?;
-    let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
+    let adapter = session.default_adapter().await?;
 
     execute!(
         stdout(),
         terminal::Clear(ClearType::All),
         cursor::MoveTo(0, 0),
-        style::Print(format!("Discovering devices using Bluetooth adapater {}", adapter_name.clone().blue()))
+        style::Print(format!("Discovering devices using Bluetooth adapater {}", adapter.name().blue()))
     )
     .unwrap();
 
-    let adapter = session.adapter(adapter_name)?;
     adapter.set_powered(true).await?;
     DeviceMonitor::run(adapter).await?;
 

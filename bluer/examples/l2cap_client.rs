@@ -14,9 +14,7 @@ include!("l2cap.inc");
 async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
-    let adapter_names = session.adapter_names().await?;
-    let adapter_name = adapter_names.first().expect("No Bluetooth adapter present");
-    let adapter = session.adapter(adapter_name)?;
+    let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
     let args: Vec<_> = env::args().collect();

@@ -92,12 +92,10 @@ impl ConnectOpts {
                 socket.connect(peer_sa).await?
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
+                let uuid = uuid_opt.unwrap_or_else(|| ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
-                let adapter_names = session.adapter_names().await?;
-                let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-                let adapter = session.adapter(adapter_name)?;
+                let adapter = session.default_adapter().await?;
                 adapter.set_powered(true).await?;
                 adapter.set_pairable(false).await?;
 
@@ -225,12 +223,10 @@ impl ListenOpts {
                 stream
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
+                let uuid = uuid_opt.unwrap_or_else(|| ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
-                let adapter_names = session.adapter_names().await?;
-                let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-                let adapter = session.adapter(adapter_name)?;
+                let adapter = session.default_adapter().await?;
                 adapter.set_powered(true).await?;
                 adapter.set_discoverable(true).await?;
                 adapter.set_discoverable_timeout(0).await?;
@@ -327,12 +323,10 @@ impl ServeOpts {
                 listener = Some(listen);
             }
             (None, uuid_opt) => {
-                let uuid = uuid_opt.unwrap_or(ServiceClass::SerialPort.into());
+                let uuid = uuid_opt.unwrap_or_else(|| ServiceClass::SerialPort.into());
 
                 let session = bluer::Session::new().await?;
-                let adapter_names = session.adapter_names().await?;
-                let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-                let adapter = session.adapter(adapter_name)?;
+                let adapter = session.default_adapter().await?;
                 adapter.set_powered(true).await?;
                 adapter.set_discoverable(true).await?;
                 adapter.set_discoverable_timeout(0).await?;
@@ -620,9 +614,7 @@ struct SpeedServerOpts {
 impl SpeedServerOpts {
     pub async fn perform(self) -> Result<()> {
         let session = bluer::Session::new().await?;
-        let adapter_names = session.adapter_names().await?;
-        let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-        let adapter = session.adapter(adapter_name)?;
+        let adapter = session.default_adapter().await?;
         adapter.set_powered(true).await?;
         adapter.set_discoverable(true).await?;
         adapter.set_discoverable_timeout(0).await?;

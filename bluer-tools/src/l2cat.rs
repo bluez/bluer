@@ -375,9 +375,7 @@ async fn io_loop(
 
 async fn advertise(br_edr: bool) -> Result<AdvertisementHandle> {
     let session = bluer::Session::new().await?;
-    let adapter_names = session.adapter_names().await?;
-    let adapter_name = adapter_names.first().ok_or("no Bluetooth adapter present")?;
-    let adapter = session.adapter(adapter_name)?;
+    let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
     if br_edr {
