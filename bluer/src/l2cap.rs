@@ -551,6 +551,19 @@ impl StreamListener {
         let (socket, sa) = ready!(self.socket.poll_accept_priv(cx))?;
         Poll::Ready(Ok((Stream::from_socket(socket)?, sa)))
     }
+
+    /// Constructs a new [StreamListener] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self { socket: Socket::from_raw_fd(fd)? })
+    }
 }
 
 impl AsRef<Socket<Stream>> for StreamListener {
@@ -562,6 +575,20 @@ impl AsRef<Socket<Stream>> for StreamListener {
 impl AsRawFd for StreamListener {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
+    }
+}
+
+impl FromRawFd for StreamListener {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [StreamListener::from_raw_fd] for a non-panicking variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
 }
 
@@ -656,6 +683,19 @@ impl Stream {
 
         self.socket.poll_send_priv(cx, buf)
     }
+
+    /// Constructs a new [Stream] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self::from_socket(Socket::from_raw_fd(fd)?)?)
+    }
 }
 
 impl AsRef<Socket<Stream>> for Stream {
@@ -667,6 +707,20 @@ impl AsRef<Socket<Stream>> for Stream {
 impl AsRawFd for Stream {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
+    }
+}
+
+impl FromRawFd for Stream {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [Stream::from_raw_fd] for a non-panicking variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
 }
 
@@ -721,6 +775,19 @@ impl SeqPacketListener {
         let (socket, sa) = ready!(self.socket.poll_accept_priv(cx))?;
         Poll::Ready(Ok((SeqPacket { socket }, sa)))
     }
+
+    /// Constructs a new [SeqPacketListener] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self { socket: Socket::from_raw_fd(fd)? })
+    }
 }
 
 impl AsRef<Socket<SeqPacket>> for SeqPacketListener {
@@ -732,6 +799,20 @@ impl AsRef<Socket<SeqPacket>> for SeqPacketListener {
 impl AsRawFd for SeqPacketListener {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
+    }
+}
+
+impl FromRawFd for SeqPacketListener {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [SeqPacketListener::from_raw_fd] for a non-panicking variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
 }
 
@@ -801,6 +882,19 @@ impl SeqPacket {
     pub fn recv_mtu(&self) -> Result<usize> {
         self.socket.recv_mtu().map(|v| v.into())
     }
+
+    /// Constructs a new [SeqPacket] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self { socket: Socket::from_raw_fd(fd)? })
+    }
 }
 
 impl AsRef<Socket<SeqPacket>> for SeqPacket {
@@ -812,6 +906,20 @@ impl AsRef<Socket<SeqPacket>> for SeqPacket {
 impl AsRawFd for SeqPacket {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
+    }
+}
+
+impl FromRawFd for SeqPacket {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [SeqPacket::from_raw_fd] for a non-panicking variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
 }
 
@@ -916,6 +1024,19 @@ impl Datagram {
     pub fn recv_mtu(&self) -> Result<usize> {
         self.socket.recv_mtu().map(|v| v.into())
     }
+
+    /// Constructs a new [Datagram] from the given raw file descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// This function *consumes ownership* of the specified file descriptor.
+    /// The returned object will take responsibility for closing it when the object goes out of scope.
+    ///
+    /// # Safety
+    /// If the passed file descriptor is invalid, undefined behavior may occur.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        Ok(Self { socket: Socket::from_raw_fd(fd)? })
+    }
 }
 
 impl AsRef<Socket<Datagram>> for Datagram {
@@ -927,5 +1048,19 @@ impl AsRef<Socket<Datagram>> for Datagram {
 impl AsRawFd for Datagram {
     fn as_raw_fd(&self) -> RawFd {
         self.socket.as_raw_fd()
+    }
+}
+
+impl FromRawFd for Datagram {
+    /// Constructs a new instance of `Self` from the given raw file
+    /// descriptor.
+    ///
+    /// The file descriptor must have been set to non-blocking mode.
+    ///
+    /// # Panics
+    /// Panics when the conversion fails.
+    /// Use [Datagram::from_raw_fd] for a non-panicking variant.
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Self::from_raw_fd(fd).expect("from_raw_fd failed")
     }
 }
