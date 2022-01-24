@@ -30,7 +30,7 @@ path = "src/rfcat.rs"
 bluer = { version = "0.13.1", path = "../bluer" }
 futures = "0.3"
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt-multi-thread"] }
-clap = "=3.0.0-beta.5"
+clap = { version = "3", features = ["derive"] }
 crossterm = "0.22"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
