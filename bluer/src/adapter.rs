@@ -33,6 +33,9 @@ pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
 pub(crate) const PATH: &str = "/org/bluez";
 pub(crate) const PREFIX: &str = "/org/bluez/";
 
+/// Default adapter name.
+pub(crate) const DEFAULT_NAME: &str = "hci0";
+
 /// Interface to a Bluetooth adapter.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone)]

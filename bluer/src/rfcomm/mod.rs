@@ -485,7 +485,7 @@ impl Stream {
     /// # Safety
     /// If the passed file descriptor is invalid, undefined behavior may occur.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
-        Ok(Self::from_socket(Socket::from_raw_fd(fd)?)?)
+        Self::from_socket(Socket::from_raw_fd(fd)?)
     }
 }
 
