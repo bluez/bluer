@@ -203,6 +203,26 @@ impl Session {
         Ok(Self { inner })
     }
 
+    /// Create an interface to the default Bluetooth adapter.
+    ///
+    /// If `hci0` is present it is used as the default adapter.
+    /// Otherwise the adapter that is first by lexicographic sorting is used as default.
+    ///
+    /// If the system has no Bluetooth adapter an error with
+    /// [ErrorKind::NotFound] is returned.
+    pub async fn default_adapter(&self) -> Result<Adapter> {
+        let mut names = self.adapter_names().await?;
+        if names.iter().any(|name| name == adapter::DEFAULT_NAME) {
+            self.adapter(adapter::DEFAULT_NAME)
+        } else {
+            names.sort();
+            match names.first() {
+                Some(name) => self.adapter(name),
+                None => Err(Error::new(ErrorKind::NotFound)),
+            }
+        }
+    }
+
     /// Enumerate connected Bluetooth adapters and return their names.
     pub async fn adapter_names(&self) -> Result<Vec<String>> {
         let mut names = Vec::new();
