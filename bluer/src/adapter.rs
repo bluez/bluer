@@ -1,7 +1,7 @@
 //! Bluetooth adapter.
 
 use dbus::{
-    arg::{RefArg, Variant},
+    arg::{PropMap, RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
     Path,
 };
@@ -338,11 +338,11 @@ impl Adapter {
     ///
     /// This method is experimental.
     pub async fn connect_device(&self, address: Address, address_type: AddressType) -> Result<Device> {
-        let mut m = HashMap::new();
-        m.insert("Address", address.to_string());
+        let mut m = PropMap::new();
+        m.insert("Address".to_string(), Variant(address.to_string().box_clone()));
         match address_type {
             AddressType::LePublic | AddressType::LeRandom => {
-                m.insert("AddressType", address_type.to_string());
+                m.insert("AddressType".to_string(), Variant(address_type.to_string().box_clone()));
             }
             AddressType::BrEdr => (),
         }
