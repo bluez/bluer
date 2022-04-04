@@ -269,6 +269,20 @@ macro_rules! define_properties {
         $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
     ) => {};
 
+    (@fetch_prop
+        $self:ident, $props_name:ident, $enum_name:ident, $name:ident, $getter_name:ident, OPTIONAL
+    ) => {
+        if let Some(value) = $self.$getter_name().await? {
+            $props_name.push($enum_name::$name(value));
+        }
+    };
+
+    (@fetch_prop
+        $self:ident, $props_name:ident, $enum_name:ident, $name:ident, $getter_name:ident, MANDATORY
+    ) => {
+        $props_name.push($enum_name::$name($self.$getter_name().await?));
+    };
+
     (
         $struct_name:ident, $(#[$enum_outer:meta])* $enum_vis:vis $enum_name:ident =>
         {$(
@@ -295,6 +309,20 @@ macro_rules! define_properties {
                     $dbus_interface, $dbus_name, $dbus_type => $type
                 );
             )*
+
+            /// Queries and returns all properties.
+            #[allow(dead_code)]
+            $enum_vis async fn all_properties(&self) -> Result<Vec<$enum_name>> {
+                let mut props = Vec::new();
+
+                $(
+                    define_properties!(@fetch_prop
+                        self, props, $enum_name, $name, $getter_name, $opt
+                    );
+                )*
+
+                Ok(props)
+            }
         }
 
         $(#[$enum_outer])*
