@@ -142,7 +142,9 @@ impl Service {
 }
 
 define_properties!(
-    Service, ServiceProperty => {
+    Service,
+    /// GATT service property.
+    pub ServiceProperty => {
         /// Indicates whether or not this GATT service is a
         /// primary service.
         ///
@@ -476,7 +478,9 @@ impl CharacteristicWriteRequest {
 }
 
 define_properties!(
-    Characteristic, CharacteristicProperty => {
+    Characteristic,
+    /// GATT characteristic property.
+    pub CharacteristicProperty => {
         /// 128-bit characteristic UUID.
         property(
             Uuid, Uuid,
@@ -692,7 +696,9 @@ impl DescriptorWriteRequest {
 }
 
 define_properties!(
-    Descriptor, CharacteristicDescriptorProperty => {
+    Descriptor,
+    /// GATT characteristic descriptor property.
+    pub CharacteristicDescriptorProperty => {
         /// 128-bit descriptor UUID.
         property(
             Uuid, Uuid,
