@@ -60,6 +60,7 @@
 //! * `id`: Enables database of assigned numbers.
 //! * `l2cap`: Enables L2CAP sockets.
 //! * `rfcomm`: Enables RFCOMM sockets.
+//! * `serde`: Enables serialization and deserialization of some data types.
 //!
 //! ## Basic usage
 //! Create a [Session] using [Session::new]; this establishes a connection to the Bluetooth daemon.
@@ -297,6 +298,7 @@ macro_rules! define_properties {
         $(#[$enum_outer])*
         #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
         #[derive(Debug, Clone)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         $enum_vis enum $enum_name {
             $(
                 $(#[$outer])*
@@ -418,6 +420,7 @@ macro_rules! define_flags {
         )*
     }) => {
         #[derive(Clone, Copy, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[doc=$doc]
         $vis struct $name {
             $(
@@ -509,6 +512,7 @@ pub mod id;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Error {
     /// Error kind.
     pub kind: ErrorKind,
@@ -520,6 +524,7 @@ pub struct Error {
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// Bluetooth device already connected
@@ -591,6 +596,7 @@ pub enum ErrorKind {
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum InternalErrorKind {
     /// invalid UUID: {0}
@@ -604,6 +610,8 @@ pub enum InternalErrorKind {
     /// join error
     JoinError,
     /// IO error {0:?}
+    // The error kind is not preserved during serialization.
+    #[cfg_attr(feature = "serde", serde(with = "io_errorkind_serde"))]
     Io(std::io::ErrorKind),
     /// D-Bus error {0}
     DBus(String),
@@ -679,12 +687,34 @@ impl From<InvalidAddress> for Error {
     }
 }
 
+#[cfg(all(feature = "bluetoothd", feature = "serde"))]
+mod io_errorkind_serde {
+    pub fn serialize<S>(_kind: &std::io::ErrorKind, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::Serialize;
+        ().serialize(ser)
+    }
+
+    pub fn deserialize<'de, D>(deser: D) -> Result<std::io::ErrorKind, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::Deserialize;
+        <()>::deserialize(deser)?;
+        Ok(std::io::ErrorKind::Other)
+    }
+}
+
 /// Bluetooth result.
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Bluetooth address.
+///
+/// The serialized representation is a string in colon-hexadecimal notation.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Address(pub [u8; 6]);
 
@@ -748,6 +778,7 @@ impl From<Address> for sys::bdaddr_t {
 
 /// Invalid Bluetooth address error.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InvalidAddress(pub String);
 
 impl fmt::Display for InvalidAddress {
@@ -781,8 +812,31 @@ impl From<Address> for [u8; 6] {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(|err| D::Error::custom(&err))
+    }
+}
+
 /// Bluetooth device address type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum AddressType {
     /// Classic Bluetooth (BR/EDR) address.
@@ -806,6 +860,7 @@ impl Default for AddressType {
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Modalias {
     /// Source.
     pub source: String,

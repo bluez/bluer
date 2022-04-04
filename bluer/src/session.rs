@@ -134,6 +134,7 @@ impl Debug for Session {
 /// Bluetooth session event.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SessionEvent {
     /// Adapter added.
     AdapterAdded(String),

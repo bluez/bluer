@@ -31,6 +31,7 @@ pub(crate) const PROFILE_PREFIX: &str = publish_path!("profile/");
 /// Error response from us to a Bluetooth profile request.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Request was rejected.
@@ -61,6 +62,7 @@ pub type ReqResult<T> = std::result::Result<T, ReqError>;
 /// Local profile role.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Role {
     /// Client.
     #[strum(serialize = "client")]
@@ -99,6 +101,7 @@ pub enum Role {
 ///     (by default turned off).
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Profile {
     /// Profile UUID.
     pub uuid: Uuid,

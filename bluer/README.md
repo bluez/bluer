@@ -80,6 +80,7 @@ All crate features are enabled by default.
 * `id`: Enables database of assigned numbers.
 * `l2cap`: Enables L2CAP sockets.
 * `rfcomm`: Enables RFCOMM sockets.
+* `serde`: Enables serialization and deserialization of some data types.
 
 Requirements
 ------------

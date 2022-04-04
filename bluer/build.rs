@@ -79,6 +79,7 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     writeln!(out, "///")?;
     writeln!(out, "/// Can be converted to and from UUIDs.")?;
     writeln!(out, "#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]")?;
+    writeln!(out, "#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]")?;
     writeln!(out, "#[non_exhaustive]")?;
     writeln!(out, "pub enum {} {{", name)?;
     for entry in &entries {
@@ -170,6 +171,7 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
     writeln!(out, "///")?;
     writeln!(out, "/// Can be converted to and from ids.")?;
     writeln!(out, "#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]")?;
+    writeln!(out, "#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]")?;
     writeln!(out, "#[non_exhaustive]")?;
     writeln!(out, "pub enum {} {{", name)?;
     for service in &entries {

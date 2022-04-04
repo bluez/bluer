@@ -79,6 +79,7 @@ pub const PSM_LE_MAX: u16 = 0xff;
 
 /// An L2CAP socket address.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SocketAddr {
     /// Device address.
     ///
@@ -161,6 +162,7 @@ fn any_bind_addr(addr: &SocketAddr) -> SocketAddr {
 
 /// L2CAP socket security level.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, FromPrimitive, ToPrimitive)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SecurityLevel {
     /// Insecure.
     Sdp = BT_SECURITY_SDP as _,
@@ -176,6 +178,7 @@ pub enum SecurityLevel {
 
 /// L2CAP socket security.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Security {
     /// Level.
     pub level: SecurityLevel,
@@ -202,6 +205,7 @@ impl TryFrom<bt_security> for Security {
 
 /// L2CAP socket flow control mode.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, FromPrimitive, ToPrimitive)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FlowControl {
     /// LE flow control.
     Le = 0x03,

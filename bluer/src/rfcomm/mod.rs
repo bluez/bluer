@@ -51,6 +51,7 @@ pub use crate::sys::rfcomm_conninfo as ConnInfo;
 
 /// An RFCOMM socket address.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SocketAddr {
     /// Device address.
     ///
@@ -90,6 +91,7 @@ impl sock::SysSockAddr for SocketAddr {
 
 /// RFCOMM socket security level.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, FromPrimitive, ToPrimitive)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SecurityLevel {
     /// Insecure.
     Sdp = BT_SECURITY_SDP as _,
@@ -103,6 +105,7 @@ pub enum SecurityLevel {
 
 /// RFCOMM socket security.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Security {
     /// Level.
     pub level: SecurityLevel,

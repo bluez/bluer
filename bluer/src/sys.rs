@@ -119,6 +119,7 @@ pub const L2CAP_LM_FIPS: i32 = 0x0040;
 /// Raw socket options for classic Bluetooth (BR/EDR) L2CAP sockets.
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct l2cap_options {
     /// Outgoing MTU.
@@ -146,6 +147,7 @@ impl Default for l2cap_options {
 /// L2CAP socket connection information.
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct l2cap_conninfo {
     /// Host controller interface (HCI) handle for the connection.
@@ -171,6 +173,7 @@ pub const RFCOMM_LM_MASTER: u32 = 0x0001;
 /// RFCOMM socket connection information.
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct rfcomm_conninfo {
     /// Host controller interface (HCI) handle for the connection.

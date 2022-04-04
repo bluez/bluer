@@ -23,6 +23,7 @@ pub(crate) const ADVERTISEMENT_PREFIX: &str = publish_path!("advertising/");
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Type {
     /// Broadcast
     #[strum(serialize = "broadcast")]
@@ -40,6 +41,7 @@ impl Default for Type {
 
 /// Secondary channel for advertisement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum SecondaryChannel {
     /// 1M
@@ -61,6 +63,7 @@ impl Default for SecondaryChannel {
 
 /// Advertisement feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum Feature {
     /// TX power.
@@ -76,6 +79,7 @@ pub enum Feature {
 
 /// LE advertising platform feature.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum PlatformFeature {
     /// Indicates whether platform can
@@ -92,6 +96,7 @@ pub enum PlatformFeature {
 
 /// Advertising-related controller capabilities.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct Capabilities {
     /// Maximum advertising data length.
@@ -125,6 +130,7 @@ impl Capabilities {
 ///
 /// Use [Adapter::advertise] to register a new advertisement.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Advertisement {
     /// Determines the type of advertising packet requested.
     pub advertisement_type: Type,

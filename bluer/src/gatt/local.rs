@@ -37,6 +37,7 @@ pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 
 /// Link type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LinkType {
     /// BR/EDR
     #[strum(serialize = "BR/EDR")]
@@ -52,6 +53,7 @@ pub enum LinkType {
 
 /// Error response from us to a Bluetooth request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Bluetooth request failed
