@@ -1,9 +1,9 @@
 //! System native types and constants.
-
-use std::mem::size_of;
+#![allow(dead_code)]
 
 use libc::{c_int, c_ulong, c_ushort, sa_family_t};
 use nix::request_code_write;
+use std::mem::size_of;
 
 pub const SOL_L2CAP: i32 = 6;
 pub const SOL_RFCOMM: i32 = 18;

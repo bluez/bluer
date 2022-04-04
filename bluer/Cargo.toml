@@ -23,10 +23,21 @@ exclude = [
 ]
 
 [features]
-default = ["bluetoothd", "id", "l2cap", "rfcomm", "serde"]
-bluetoothd = ["dbus", "dbus-tokio", "dbus-crossroads", "pin-project",
-              "tokio/rt", "tokio/sync", "tokio/macros", "tokio-stream",
-              "lazy_static", "custom_debug", "displaydoc"]
+default = []
+full = ["bluetoothd", "id", "l2cap", "rfcomm", "serde"]
+bluetoothd = [
+    "dbus",
+    "dbus-tokio",
+    "dbus-crossroads",
+    "pin-project",
+    "tokio/rt",
+    "tokio/sync",
+    "tokio/macros",
+    "tokio-stream",
+    "lazy_static",
+    "custom_debug",
+    "displaydoc",
+]
 id = []
 l2cap = []
 rfcomm = []
@@ -34,14 +45,14 @@ serde = ["uuid/serde", "dep:serde"]
 
 [dependencies]
 dbus = { version = "0.9", features = ["futures"], optional = true }
-dbus-tokio = { version = "0.7",  optional = true }
-dbus-crossroads = { version = "0.5",  optional = true }
+dbus-tokio = { version = "0.7", optional = true }
+dbus-crossroads = { version = "0.5", optional = true }
 futures = "0.3"
 pin-project = { version = "1", optional = true }
 tokio = { version = "1", features = ["net", "io-util"] }
-tokio-stream = { version = "0.1",  optional = true }
+tokio-stream = { version = "0.1", optional = true }
 hex = { version = "0.4" }
-lazy_static = { version = "1",  optional = true }
+lazy_static = { version = "1", optional = true }
 uuid = { version = "0.8", features = ["v4"] }
 strum = { version = "0.24", features = ["derive"] }
 num-traits = "0.2"
@@ -49,7 +60,7 @@ num-derive = "0.3"
 libc = "0.2"
 nix = "0.23"
 custom_debug = { version = "0.5", optional = true }
-displaydoc = { version = "0.2", optional = true}
+displaydoc = { version = "0.2", optional = true }
 log = "0.4"
 serde = { version = "1", features = ["derive"], optional = true }
 
@@ -67,3 +78,43 @@ rand = "0.8"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples=examples"]
+
+[[example]]
+name = "discover_devices"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "gatt_client"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "gatt_echo_client"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "gatt_echo_server"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "gatt_server_cb"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "gatt_server_io"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "l2cap_client"
+required-features = ["bluetoothd", "l2cap"]
+
+[[example]]
+name = "l2cap_server"
+required-features = ["bluetoothd", "l2cap"]
+
+[[example]]
+name = "le_advertise"
+required-features = ["bluetoothd"]
+
+[[example]]
+name = "list_adapters"
+required-features = ["bluetoothd"]

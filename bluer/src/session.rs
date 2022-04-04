@@ -34,10 +34,11 @@ use crate::{
     adapter,
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    all_dbus_objects, gatt, parent_path,
-    rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle},
-    Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
+
+#[cfg(feature = "rfcomm")]
+use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
 
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
@@ -52,6 +53,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
+    #[cfg(feature = "rfcomm")]
     pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
@@ -167,6 +169,7 @@ impl Session {
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
         let agent_token = RegisteredAgent::register_interface(&mut crossroads);
+        #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
@@ -181,6 +184,7 @@ impl Session {
             gatt_reg_characteristic_descriptor_token,
             gatt_profile_token,
             agent_token,
+            #[cfg(feature = "rfcomm")]
             profile_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
@@ -271,6 +275,8 @@ impl Session {
     /// [connection requests](crate::rfcomm::ConnectRequest).
     ///
     /// Drop the handle to unregister the profile.
+    #[cfg(feature = "rfcomm")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
     pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
         let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
         let reg_profile = RegisteredProfile::new(req_tx);

@@ -309,6 +309,7 @@ pub fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
 }
 
 /// Perform an IOCTL that writes a single value.
+#[allow(dead_code)]
 pub fn ioctl_write<T>(socket: &OwnedFd, request: c_ulong, value: &T) -> Result<c_int> {
     let ret = unsafe { libc::ioctl(socket.as_raw_fd(), request, value as *const _) };
     if ret == -1 {

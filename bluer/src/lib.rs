@@ -54,13 +54,15 @@
 //! However, pull requests and contributions are welcome!
 //!
 //! ## Crate features
-//! All crate features are enabled by default.
+//! The following crate features are available.
 //!
 //! * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
 //! * `id`: Enables database of assigned numbers.
 //! * `l2cap`: Enables L2CAP sockets.
 //! * `rfcomm`: Enables RFCOMM sockets.
 //! * `serde`: Enables serialization and deserialization of some data types.
+//!
+//! To enable all crate features specify the `full` crate feature.
 //!
 //! ## Basic usage
 //! Create a [Session] using [Session::new]; this establishes a connection to the Bluetooth daemon.

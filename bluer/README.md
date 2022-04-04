@@ -73,7 +73,7 @@ also adapted where it makes sense.
 
 Crate features
 --------------
-All crate features are enabled by default.
+The following crate features are available.
 
 * `bluetoothd`: Enables all functions requiring a running Bluetooth daemon.
   For building, D-Bus library headers, provided by `libdbus-1-dev` on Debian, must be installed.
@@ -82,8 +82,12 @@ All crate features are enabled by default.
 * `rfcomm`: Enables RFCOMM sockets.
 * `serde`: Enables serialization and deserialization of some data types.
 
+To enable all crate features specify the `full` crate feature.
+
 Requirements
 ------------
+
+The minimum support Rust version (MSRV) is 1.60.
 
 This library has been tested with [BlueZ 5.60].
 Older versions might work, but be aware that many bugs related to GATT handling exist.
@@ -160,7 +164,7 @@ The following example applications are provided.
 
   - **list_adapters**: List installed Bluetooth adapters and their properties.
 
-Use `cargo run --example <name>` to run a particular example application.
+Use `cargo run --all-features --example <name>` to run a particular example application.
 
 [API documentation]: https://docs.rs/bluer
 [examples folder]: https://github.com/bluez/bluer/tree/master/bluer/examples
