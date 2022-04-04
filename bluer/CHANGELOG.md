@@ -4,6 +4,17 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.14.0 - unreleased
+### Added
+- Implement Serde traits on types where possible.
+- `all_propeties` method on `Adapter` and `Device` to query
+  the values of all properties and return them as a `Vec<xxxProperty>`.
+### Changed
+- Crate features are now opt-in; use the `full` feature to
+  enable all features.
+- MSRV is now 1.60 to make use of namespaced Cargo features.
+- Update Bluetooth numbers database.
+
 ## 0.13.3 - 2022-02-07
 ### Fixed
 - Use a{sv} signature for ConnectDevice call.
