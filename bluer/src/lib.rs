@@ -329,6 +329,7 @@ macro_rules! define_properties {
         #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
         #[derive(Debug, Clone)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[non_exhaustive]
         $enum_vis enum $enum_name {
             $(
                 $(#[$outer])*
