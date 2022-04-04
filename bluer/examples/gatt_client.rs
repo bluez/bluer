@@ -43,11 +43,13 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
         for service in device.services().await? {
             let uuid = service.uuid().await?;
             println!("    Service UUID: {}", &uuid);
+            println!("    Service data: {:?}", service.all_properties().await?);
             if uuid == SERVICE_UUID {
                 println!("    Found our service!");
                 for char in service.characteristics().await? {
                     let uuid = char.uuid().await?;
                     println!("    Characteristic UUID: {}", &uuid);
+                    println!("    Characteristic data: {:?}", char.all_properties().await?);
                     if uuid == CHARACTERISTIC_UUID {
                         println!("    Found our characteristic!");
                         return Ok(Some(char));
