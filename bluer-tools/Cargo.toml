@@ -8,7 +8,7 @@ repository = "https://github.com/bluez/bluer"
 keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm"]
 categories = ["hardware-support", "command-line-utilities"]
 license = "BSD-2-Clause"
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "blumon"

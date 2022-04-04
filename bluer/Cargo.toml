@@ -13,7 +13,8 @@ repository = "https://github.com/bluez/bluer"
 keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
-edition = "2018"
+edition = "2021"
+rust-version = "1.60"
 exclude = [
     "bluetooth-numbers-database/README.md",
     "bluetooth-numbers-database/*.png",
