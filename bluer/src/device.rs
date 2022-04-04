@@ -384,7 +384,7 @@ define_properties!(
         /// host from system suspend.
         property(
             WakeAllowed, bool,
-            dbus: (INTERFACE, "WakeAllowed", bool, MANDATORY),
+            dbus: (INTERFACE, "WakeAllowed", bool, OPTIONAL),
             get: (is_wake_allowed, v => {v.to_owned()}),
             set: (set_wake_allowed, v => {v}),
         );
@@ -497,7 +497,7 @@ define_properties!(
         /// The Advertising Data Flags of the remote device.
         property(
             AdvertisingFlags, Vec<u8>,
-            dbus: (INTERFACE, "AdvertisingFlags", Vec<u8>, MANDATORY),
+            dbus: (INTERFACE, "AdvertisingFlags", Vec<u8>, OPTIONAL),
             get: (advertising_flags, v => {v.to_owned()}),
         );
 
@@ -507,7 +507,7 @@ define_properties!(
         /// application are exposed.
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
-            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Vec<u8>>, MANDATORY),
+            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Vec<u8>>, OPTIONAL),
             get: (advertising_data, v => {v.to_owned()}),
         );
     }

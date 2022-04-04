@@ -581,7 +581,7 @@ define_properties!(
         /// corresponding PHY.
         property(
             SupportedAdvertisingSecondaryChannels, BTreeSet<SecondaryChannel>,
-            dbus: (adv::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, MANDATORY),
+            dbus: (adv::MANAGER_INTERFACE, "SupportedSecondaryChannels", Vec<String>, OPTIONAL),
             get: (supported_advertising_secondary_channels, v => {
                 v.iter().filter_map(|s| s.parse().ok()).collect()
             }),
