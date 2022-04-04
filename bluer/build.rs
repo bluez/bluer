@@ -108,6 +108,7 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     writeln!(out, "    type Error = Uuid;")?;
     writeln!(out, "    fn try_from(uuid: Uuid) -> Result<Self, Uuid> {{")?;
     writeln!(out, "        #[allow(unreachable_patterns)]")?;
+    writeln!(out, "        #[allow(clippy::match_overlapping_arm)]")?;
     writeln!(out, "        match uuid.as_u128() {{")?;
     for entry in entries {
         writeln!(out, "            {} => Ok(Self::{}),", entry.uuid()?.as_u128(), entry.rust_id(prefix))?;
