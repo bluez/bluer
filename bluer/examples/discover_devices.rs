@@ -22,9 +22,19 @@ async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
     Ok(())
 }
 
+async fn query_all_device_properties(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
+    let device = adapter.device(addr)?;
+    let props = device.all_properties().await?;
+    for prop in props {
+        println!("    {:?}", &prop);
+    }
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> bluer::Result<()> {
     let with_changes = env::args().any(|arg| arg == "--changes");
+    let all_properties = env::args().any(|arg| arg == "--all-properties");
     let filter_addr: HashSet<_> = env::args().filter_map(|arg| arg.parse::<Address>().ok()).collect();
 
     env_logger::init();
@@ -48,7 +58,12 @@ async fn main() -> bluer::Result<()> {
                         }
 
                         println!("Device added: {}", addr);
-                        if let Err(err) = query_device(&adapter, addr).await {
+                        let res = if all_properties {
+                            query_all_device_properties(&adapter, addr).await
+                        } else {
+                            query_device(&adapter, addr).await
+                        };
+                        if let Err(err) = res {
                             println!("    Error: {}", &err);
                         }
 
