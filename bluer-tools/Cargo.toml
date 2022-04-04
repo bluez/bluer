@@ -31,7 +31,7 @@ bluer = { version = "0.13.2", path = "../bluer" }
 futures = "0.3"
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt-multi-thread"] }
 clap = { version = "3", features = ["derive"] }
-crossterm = "0.22"
+crossterm = "0.23"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
 pretty-hex = "0.2"

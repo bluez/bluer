@@ -43,7 +43,7 @@ tokio-stream = { version = "0.1",  optional = true }
 hex = { version = "0.4" }
 lazy_static = { version = "1",  optional = true }
 uuid = { version = "0.8", features = ["v4"] }
-strum = { version = "0.23", features = ["derive"] }
+strum = { version = "0.24", features = ["derive"] }
 num-traits = "0.2"
 num-derive = "0.3"
 libc = "0.2"
