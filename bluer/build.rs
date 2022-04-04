@@ -1,5 +1,14 @@
 use serde::Deserialize;
-use std::{collections::HashMap, env, error::Error, fmt, fs::File, io::Write, path::Path, str::FromStr};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    env,
+    error::Error,
+    fmt,
+    fs::File,
+    io::Write,
+    path::Path,
+    str::FromStr,
+};
 use uuid::Uuid;
 
 #[path = "src/uuid_ext.rs"]
@@ -68,11 +77,28 @@ impl UuidEntry {
     }
 }
 
+fn uniquify_names(entries: &mut [UuidEntry]) {
+    let mut name_counts = HashMap::new();
+    for entry in entries {
+        match name_counts.entry(entry.name.clone()) {
+            Entry::Occupied(e) => {
+                let cnt = e.into_mut();
+                *cnt += 1;
+                entry.name = format!("{} {}", &entry.name, cnt);
+            }
+            Entry::Vacant(e) => {
+                e.insert(0);
+            }
+        }
+    }
+}
+
 fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str) -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed={}", src);
 
     let input = File::open(src)?;
-    let entries: Vec<UuidEntry> = serde_json::from_reader(input)?;
+    let mut entries: Vec<UuidEntry> = serde_json::from_reader(input)?;
+    uniquify_names(&mut entries);
     let mut out = File::create(Path::new(&env::var("OUT_DIR")?).join(dest))?;
 
     writeln!(out, "/// Assigned identifiers for {}.", doc_name)?;
