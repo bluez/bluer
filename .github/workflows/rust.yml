@@ -20,6 +20,8 @@ jobs:
         submodules: recursive
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install libdbus-1-dev
+    - name: Install Rust 1.60
+      run: rustup default 1.60.0
     - name: Check code formatting
       run: cargo fmt -- --check
     - name: Build
