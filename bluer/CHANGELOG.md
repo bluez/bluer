@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.14.0 - 2022-04-07
 ### Added
 - Implement Serde traits on types where possible, gated by `serde` feature.
-- `all_propeties` method on `Adapter`, `Device`, `Service` and `Characteristic`
+- `all_properties` method on `Adapter`, `Device`, `Service` and `Characteristic`
   to query the values of all properties and return them as a `Vec<xxxProperty>`.
 ### Changed
 - Crate features are now opt-in; use the `full` feature to
