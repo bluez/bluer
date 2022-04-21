@@ -291,7 +291,7 @@ impl Advertisement {
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> Result<AdvertisementHandle> {
-        let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
+        let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         log::trace!("Publishing advertisement at {}", &name);
 
         {

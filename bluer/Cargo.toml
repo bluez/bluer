@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.14.0"
+version = "0.15.0"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
@@ -54,12 +54,12 @@ tokio = { version = "1", features = ["net", "io-util"] }
 tokio-stream = { version = "0.1", optional = true }
 hex = { version = "0.4" }
 lazy_static = { version = "1", optional = true }
-uuid = { version = "0.8", features = ["v4"] }
+uuid = { version = "1", features = ["v4"] }
 strum = { version = "0.24", features = ["derive"] }
 num-traits = "0.2"
 num-derive = "0.3"
 libc = "0.2"
-nix = "0.23"
+nix = "0.24"
 custom_debug = { version = "0.5", optional = true }
 displaydoc = { version = "0.2", optional = true }
 log = "0.4"
@@ -68,7 +68,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-uuid = "0.8"
+uuid = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["io-std", "io-util", "rt-multi-thread"] }

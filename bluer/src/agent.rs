@@ -454,7 +454,7 @@ impl RegisteredAgent {
     }
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>) -> Result<AgentHandle> {
-        let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().to_simple())).unwrap();
+        let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         let capability = self.a.capability();
         let request_default = self.a.request_default;
         log::trace!("Publishing agent at {} with capability {}", &name, &capability);

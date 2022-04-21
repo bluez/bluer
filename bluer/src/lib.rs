@@ -531,6 +531,7 @@ mod sys;
 #[cfg(feature = "bluetoothd")]
 pub use crate::{adapter::*, device::*, session::*};
 
+#[doc(no_inline)]
 pub use uuid::Uuid;
 mod uuid_ext;
 pub use uuid_ext::UuidExt;

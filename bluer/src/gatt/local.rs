@@ -1233,7 +1233,7 @@ impl Application {
         mut self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ApplicationHandle> {
         let mut reg_paths = Vec::new();
-        let app_path = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().to_simple());
+        let app_path = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().as_simple());
         let app_path = dbus::Path::new(app_path).unwrap();
         log::trace!("Publishing application at {}", &app_path);
 
@@ -1358,7 +1358,7 @@ impl Profile {
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ProfileHandle> {
-        let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().to_simple());
+        let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().as_simple());
         let profile_path = dbus::Path::new(profile_path).unwrap();
         log::trace!("Publishing profile at {}", &profile_path);
 
