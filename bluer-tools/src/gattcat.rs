@@ -158,7 +158,7 @@ fn print_list<T: Display>(indent: usize, mut label: &str, values: impl IntoItera
 }
 
 fn to_hex(v: &[u8]) -> Vec<String> {
-    let cfg = HexConfig { title: false, ascii: true, width: 10, group: 0, chunk: 1 };
+    let cfg = HexConfig { title: false, ascii: true, width: 10, group: 0, chunk: 1, ..Default::default() };
     let mut out = String::new();
     hex_write(&mut out, &v, cfg).unwrap();
 
