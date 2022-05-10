@@ -3,3 +3,15 @@ members = [
     "bluer",
     "bluer-tools",
 ]
+
+[patch.crates-io]
+btmesh-common = { git = "https://github.com/drogue-iot/btmesh.git" }
+#btmesh-common = { git = "https://github.com/dejanb/btmesh.git", branch="bluer"}
+#btmesh-common = { path = "../../drogue-iot/btmesh/btmesh-common" }
+btmesh-models = { git = "https://github.com/drogue-iot/btmesh.git" }
+#btmesh-models = { git = "https://github.com/dejanb/btmesh.git", branch="bluer"}
+#btmesh-models = { path = "../../drogue-iot/btmesh/btmesh-models" }
+
+# dbus = { path = "../dbus-rs/dbus/", features = ["futures"], optional = true }
+# dbus-tokio = { path = "../dbus-rs/dbus-tokio/", optional = true }
+# dbus-crossroads = { path = "../dbus-rs/dbus-crossroads/", optional = true }

@@ -1,4 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(feature = "mesh", feature(type_alias_impl_trait))]
+#![cfg_attr(feature = "mesh", feature(associated_type_defaults))]
 
 //! # BlueR — Official BlueZ Bindings for Rust
 //!
@@ -531,6 +533,8 @@ pub mod rfcomm;
 #[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;
+#[cfg(feature = "mesh")]
+pub mod mesh;
 
 #[cfg(feature = "bluetoothd")]
 pub use crate::{adapter::*, device::*, session::*};
