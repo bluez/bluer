@@ -428,7 +428,7 @@ impl RegisteredAgent {
                 },
             );
             ib.method_with_cr_async(
-                "RequestConfirmation",
+                "AuthorizeService",
                 ("device", "uuid"),
                 (),
                 |ctx, cr, (device, uuid): (dbus::Path<'static>, String)| {
