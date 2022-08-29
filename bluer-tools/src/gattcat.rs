@@ -357,7 +357,7 @@ impl AdaptersOpts {
         let adapter_names = session.adapter_names().await?;
         for adapter_name in adapter_names {
             let adapter = session.adapter(&adapter_name)?;
-            println!("Bluetooth adapater {}", &adapter_name);
+            println!("Bluetooth adapter {}", &adapter_name);
 
             print_if_some_20(
                 2,
@@ -369,7 +369,7 @@ impl AdaptersOpts {
             print_if_some_20(2, "Friendly name", Some(adapter.alias().await?), "");
 
             print_if_some_20(2, "Powered", Some(adapter.is_powered().await?), "");
-            print_if_some_20(2, "Discoverabe", Some(adapter.is_discoverable().await?), "");
+            print_if_some_20(2, "Discoverable", Some(adapter.is_discoverable().await?), "");
             print_if_some_20(2, "Pairable", Some(adapter.is_pairable().await?), "");
 
             println!("  Advertising");
@@ -447,7 +447,7 @@ fn char_flags_to_vec(f: &CharacteristicFlags) -> Vec<&'static str> {
         v.push("write")
     };
     if f.write_without_response {
-        v.push("write without respone");
+        v.push("write without response");
     }
     if f.reliable_write {
         v.push("reliable write");
