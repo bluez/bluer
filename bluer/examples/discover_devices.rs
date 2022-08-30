@@ -11,7 +11,7 @@ async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {
     println!("    Icon:               {:?}", device.icon().await?);
     println!("    Class:              {:?}", device.class().await?);
     println!("    UUIDs:              {:?}", device.uuids().await?.unwrap_or_default());
-    println!("    Paried:             {:?}", device.is_paired().await?);
+    println!("    Paired:             {:?}", device.is_paired().await?);
     println!("    Connected:          {:?}", device.is_connected().await?);
     println!("    Trusted:            {:?}", device.is_trusted().await?);
     println!("    Modalias:           {:?}", device.modalias().await?);
