@@ -140,8 +140,7 @@ impl RegisteredMonitor {
                 (),
                 |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        reg.call(&reg.m.release, () )
-                        .await?;
+                        reg.call(&reg.m.release, (), ).await?;
                         Ok(())
                     })
                 },
@@ -153,7 +152,7 @@ impl RegisteredMonitor {
                 |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call(
-                            &reg.m.activate, () )
+                            &reg.m.activate, (), )
                         .await?;
                         Ok(())
                     })
@@ -166,7 +165,7 @@ impl RegisteredMonitor {
                 |ctx, cr, (addr,):(dbus::Path<'static>,) | {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
-                        reg.call(&reg.m.device_found, DeviceFound { adapter, addr })
+                        reg.call(&reg.m.device_found, DeviceFound { adapter, addr },)
                         .await?;
                         Ok(())
                     })
