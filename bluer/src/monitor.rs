@@ -101,6 +101,7 @@ pub(crate) struct RegisteredMonitor {
     m: Monitor,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
+
 impl RegisteredMonitor {
     pub(crate) fn new(monitor: Monitor) -> Self {
         Self { m: monitor, cancel: Mutex::new(None) }
@@ -118,6 +119,16 @@ impl RegisteredMonitor {
     {
         match f {
             Some(f) => f(arg).await,
+            None => Err(ReqError::Rejected),
+        }
+    }
+
+    async fn call_no_params<F, R>(&self, f: &Option<impl Fn() -> F>) -> ReqResult<R>
+    where
+        F: Future<Output = ReqResult<R>> + Send + 'static,
+    {
+        match f {
+            Some(f) => f().await,
             None => Err(ReqError::Rejected),
         }
     }
@@ -140,7 +151,7 @@ impl RegisteredMonitor {
                 (),
                 |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        reg.call(&reg.m.release, (), ).await?;
+                        reg.call_no_params(&reg.m.release,).await?;
                         Ok(())
                     })
                 },
@@ -151,8 +162,8 @@ impl RegisteredMonitor {
                 (),
                 |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        reg.call(
-                            &reg.m.activate, (), )
+                        reg.call_no_params(
+                            &reg.m.activate, )
                         .await?;
                         Ok(())
                     })
