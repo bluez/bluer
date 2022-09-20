@@ -18,6 +18,35 @@ pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManage
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
 pub(crate) const AGENT_PREFIX: &str = publish_path!("monitor/");
 
+// Error response from us to a Bluetooth agent request.
+#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum ReqError {
+    /// Request was rejected.
+    Rejected,
+    /// Request was canceled.
+    Canceled,
+}
+
+impl std::error::Error for ReqError {}
+
+impl Default for ReqError {
+    fn default() -> Self {
+        Self::Canceled
+    }
+}
+
+impl From<ReqError> for dbus::MethodErr {
+    fn from(err: ReqError) -> Self {
+        let name: &'static str = err.into();
+        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+    }
+}
+
+/// Result of a Bluetooth agent request to us.
+pub type ReqResult<T> = std::result::Result<T, ReqError>;
+
 pub type ReleaseFn =
     Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
 
@@ -134,9 +163,9 @@ impl RegisteredMonitor {
                 "DeviceFound",
                 ("device",),
                 ("value",),
-                |ctx, cr, (device,): (dbus::Path<'static>,)| {
+                |ctx, cr, (addr,): (dbus::Path<'static>,)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
+                        let (adapter, addr) = Self::parse_device_path(&addr)?;
                         reg.call(&reg.m.device_found, DeviceFound { adapter, addr })
                         .await?;
                         Ok(())
@@ -147,9 +176,9 @@ impl RegisteredMonitor {
                 "DeviceLost",
                 ("device",),
                 (),
-                |ctx, cr, (device,): (dbus::Path<'static>, u32, u16)| {
+                |ctx, cr, (addr,): (dbus::Path<'static>, u32, u16)| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
+                        let (adapter, addr) = Self::parse_device_path(&addr)?;
                         reg.call(
                             &reg.m.device_lost,
                             DeviceLost { adapter, addr },
@@ -162,7 +191,7 @@ impl RegisteredMonitor {
         })
     }
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>) -> Result<AgentHandle> {
+    pub(crate) async fn register(self, inner: Arc<SessionInner>) -> Result<MonitorHandle> {
         let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         log::trace!("Publishing monitor at {}", &name);
 
