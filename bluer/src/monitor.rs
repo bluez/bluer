@@ -138,7 +138,7 @@ impl RegisteredMonitor {
                 "Release",
                 (),
                 (),
-                |ctx, cr, () )| {
+                |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call(&reg.m.release, () )
                         .await?;
@@ -150,7 +150,7 @@ impl RegisteredMonitor {
                 "Activate",
                 (),
                 (),
-                |ctx, cr, () ) | {
+                |ctx, cr, ()| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call(
                             &reg.m.activate, () )
