@@ -87,7 +87,7 @@ pub struct Monitor {
     pub rssi_low_timeout: i16,
     pub rssi_high_timeout: i16,
     pub rssi_sampling_period: i16,
-    pub patters: Mutext<vec<u8>>,
+    pub patters: Mutext<Vec<u8>>,
 
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
@@ -138,7 +138,7 @@ impl RegisteredMonitor {
                 "Release",
                 (),
                 (),
-                |ctx, cr, (): (dbus::Path<'static>,)| {
+                |ctx, cr, (,): (dbus::Path<'static>,)| {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call(&reg.m.release, () )
                         .await?;
@@ -150,7 +150,7 @@ impl RegisteredMonitor {
                 "Activate",
                 (),
                 (),
-                |ctx, cr, (): (dbus::Path<'static>, String) | {
+                |ctx, cr, (,): (dbus::Path<'static>, String) | {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call(
                             &reg.m.activate, () )
