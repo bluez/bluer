@@ -273,7 +273,7 @@ impl Session {
         reg_agent.register(self.inner.clone()).await
     }
 
-    pub async fn register_monitor(&self, monitor: Monitor) -> Result<AgentHandle> {
+    pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
         let reg_monitor = RegisteredMonitor::new(monitor);
         reg_monitor.register(self.inner.clone()).await
     }
