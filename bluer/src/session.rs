@@ -33,7 +33,8 @@ use tokio::{
 use crate::{
     adapter,
     adv::Advertisement,
-    agent::{Agent, AgentHandle, RegisteredAgent, Monitor, MonitorHandle, RegisteredMonitor},
+    agent::{Agent, AgentHandle, RegisteredAgent},
+    monitor::{Monitor, MonitorHandle, RegisteredMonitor},
     all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
