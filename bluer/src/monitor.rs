@@ -104,12 +104,15 @@ impl Default for Monitor {
             rssi_high_threshold: 20,
             rssi_low_timeout: 1,
             rssi_high_timeout: 2,
+            rssi_sampling_period: 1,
             patterns: Option::None,
 
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
             device_lost: Option::None,
+
+            _non_exhaustive: (),
         }
     }
 }
