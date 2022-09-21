@@ -82,6 +82,8 @@ pub struct DeviceLost {
 pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
 
+#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Monitor {
     pub monitor_type: String,
     pub rssi_low_threshold: Option<i16>,
