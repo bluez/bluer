@@ -315,7 +315,7 @@ define_properties!(
 ///
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
-    monitor: Acr<Monitor>,
+    monitor: Arc<Monitor>,
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
 }
