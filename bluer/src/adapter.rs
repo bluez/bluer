@@ -111,6 +111,7 @@ impl Adapter {
     }
 
     pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
+        monitor.inner = Some(self.inner.clone());
         let reg_monitor = RegisteredMonitor::new(monitor);
         reg_monitor.register(self.inner.clone(), self.name()).await
     }

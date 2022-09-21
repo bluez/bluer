@@ -79,6 +79,7 @@ pub type DeviceLostFn =
 
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
+    inner: Option<Arc<SessionInner>>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -90,6 +91,7 @@ pub struct Monitor {
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
+            inner: Option::None,
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
@@ -103,7 +105,9 @@ impl Default for Monitor {
 impl Monitor {
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*self.inner.connection)
+        if let Some(innter) = self.inner {
+            Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*inner.connection)
+        }
     }
 
     /*pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
@@ -281,7 +285,7 @@ define_properties!(
         property(
             MonitorType, String,
             dbus: (INTERFACE, "Type", String, MANDATORY),
-            get: (monitor_type, v => { v.to_owned()? }),
+            get: (monitor_type, v => { v.to_owned() }),
         );
 
         property(
