@@ -168,7 +168,7 @@ impl RegisteredMonitor {
     }
 
     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(self.m.dbus_path.clone(), |ib: &mut IfaceBuilder<Arc<Self>>| {
+        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
             ib.method_with_cr_async(
                 "Release",
                 (),
