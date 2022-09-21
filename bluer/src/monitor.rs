@@ -75,7 +75,7 @@ pub struct DeviceLost {
 }
 
 pub type DeviceLostFn =
-    Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = (ReqResult<String>> + Send>>)) + Send + Sync>;
+    Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
 
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
