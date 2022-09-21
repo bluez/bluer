@@ -16,7 +16,7 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const AGENT_PREFIX: &str = publish_path!("monitor/");
+pub(crate) const MONITOR_PREFIX: &str = publish_path!("monitor/");
 
 // Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
@@ -101,6 +101,33 @@ impl Default for Monitor {
 }
 
 impl Monitor {
+
+    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
+        Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*self.inner.connection)
+    }
+
+    /*pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
+        Path::new(format!("{}{}", PREFIX, adapter_name,))
+            .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
+    }
+
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<(&'a str, &'a str)> {
+        match path.strip_prefix(PREFIX) {
+            Some(p) => {
+                let sep = p.find('/').unwrap_or(p.len());
+                Some((&p[0..sep], &p[sep..]))
+            }
+            None => None,
+        }
+    }
+
+    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
+        match Self::parse_dbus_path_prefix(path) {
+            Some((v, "")) => Some(v),
+            _ => None,
+        }
+    }*/
+
     dbus_interface!();
     dbus_default_interface!(INTERFACE);
 }
@@ -211,7 +238,7 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
+        let name = dbus::Path::new(format!("{}", MONITOR_PREFIX)).unwrap();
         log::trace!("Publishing monitor at {}", &name);
 
         {
