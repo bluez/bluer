@@ -79,7 +79,7 @@ pub type DeviceLostFn =
 
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
-    inner: Option<Arc<SessionInner>>,
+    pub inner: Option<Arc<SessionInner>>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -105,7 +105,7 @@ impl Default for Monitor {
 impl Monitor {
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        if let Some(innter) = self.inner {
+        if let Some(inner) = self.inner {
             Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*inner.connection)
         }
     }
