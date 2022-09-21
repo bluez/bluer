@@ -20,7 +20,7 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const MONITOR_PREFIX: &str = publish_path!("monitor/");
+pub(crate) const MONITOR_PREFIX: &str = "/org/bluez/monitor");
 
 // Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
@@ -81,17 +81,16 @@ pub struct DeviceLost {
 pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
 
-/// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
-pub struct Monitor {
+pub struct MonitorCallbacks {
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
     pub device_lost: Option<DeviceLostFn>,
 }
 
-impl Default for Monitor {
-    fn default() -> Monitor {
-        Monitor {
+impl Default for MonitorCallbacks {
+    fn default() -> MonitorCallbacks {
+        MonitorCallbacks {
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
@@ -100,18 +99,22 @@ impl Default for Monitor {
     }
 }
 
-pub struct MonitorProperties {
+pub struct Monitor {
     inner: Arc<SessionInner>,
+    dbus_path: Path<'static>,
+    callbacks: MonitorCallbacks
 }
 
-impl MonitorProperties {
 
-    pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
-        Self { inner: inner }
+impl Monitor {
+
+    pub(crate) fn new(inner: Arc<SessionInner>, callbacks: MonitorCallbacks) -> Self {
+        let name = dbus::Path::new(format!("{}/{}", MANAGER_PATH,Uuid::new_v4().as_simple())).unwrap();
+        Self { inner: inner, callbacks: callbacks, dbus_path: name }
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*self.inner.connection)
+        Proxy::new(SERVICE_NAME, self.dbus_path, TIMEOUT, &*self.inner.connection)
     }
 
     dbus_interface!();
@@ -119,15 +122,13 @@ impl MonitorProperties {
 }
 
 pub(crate) struct RegisteredMonitor {
-    inner: Arc<SessionInner>,
     m: Monitor,
-    p: MonitorProperties,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl RegisteredMonitor {
-    pub(crate) fn new(inner: Arc<SessionInner>, monitor: Monitor) -> Self {
-        Self { inner: inner.clone(), m: monitor, p: MonitorProperties::new(inner.clone()), cancel: Mutex::new(None) }
+    pub(crate) fn new(monitor: Monitor) -> Self {
+        Self { m: monitor, cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
@@ -224,12 +225,11 @@ impl RegisteredMonitor {
         })
     }
 
-    pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
+    pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = dbus::Path::new(format!("{}", MONITOR_PREFIX)).unwrap();
-        log::trace!("Publishing monitor at {}", &name);
+        let name = self.m.dbus_path;
 
-        let inner = self.inner.clone();
+        log::trace!("Publishing monitor at {}", &name);
 
         {
             let mut cr = inner.crossroads.lock().await;
@@ -259,9 +259,9 @@ impl RegisteredMonitor {
 }
 
 define_properties!(
-    MonitorProperties,
+    Monitor,
     /// Bluetooth monitor properties.
-    pub MonitorInnerProperties => {
+    pub ManitorProperties => {
 
         // ===========================================================================================
         // Monitor properties
