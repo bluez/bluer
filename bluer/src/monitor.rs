@@ -100,7 +100,7 @@ impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
             monitor_type: String::from(""),
-            rssi_low_timeout: -90,
+            rssi_low_threshold: -90,
             rssi_high_threshold: 20,
             rssi_low_timeout: 1,
             rssi_high_timeout: 2,
