@@ -227,7 +227,7 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = &self.m.dbus_path;
+        let name = self.m.dbus_path.clone();
 
         log::trace!("Publishing monitor at {}", &name);
 
@@ -315,7 +315,7 @@ define_properties!(
 ///
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
-    name: &dbus::Path<'static>,
+    name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
 }
 
