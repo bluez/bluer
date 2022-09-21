@@ -219,13 +219,13 @@ impl RegisteredMonitor {
                     })
                 },
             );
-            ib.property("Type").get(|_,r| Ok(r.m.monitor_type));
+            ib.property("Type").get(|_,r| Ok(r.m.monitor_type.clone()));
             ib.property("RSSILowThreshold").get(|_,r| Ok(r.m.rssi_low_threshold));
             ib.property("RSSIHighThreshold").get(|_,r| Ok(r.m.rssi_high_threshold));
             ib.property("RSSILowTimeout").get(|_,r| Ok(r.m.rssi_low_timeout));
             ib.property("RSSIHighTimeout").get(|_,r| Ok(r.m.rssi_high_timeout));
             ib.property("RSSISamplingPeriod").get(|_,r| Ok(r.m.rssi_sampling_period));
-            ib.property("Patterns").get({|_,r| Ok(r.m.patterns)});
+            ib.property("Patterns").get({|_,r| Ok(r.m.patterns.clone())});
         })
     }
 
