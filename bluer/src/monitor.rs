@@ -87,7 +87,7 @@ pub struct Monitor {
     pub rssi_low_timeout: i16,
     pub rssi_high_timeout: i16,
     pub rssi_sampling_period: i16,
-    pub patterns: Mutex<Vec<u8>>,
+    pub patterns: Option<Vec<u8>>,
 
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
@@ -95,6 +95,24 @@ pub struct Monitor {
     pub device_lost: Option<DeviceLostFn>,
    #[doc(hidden)]
     pub _non_exhaustive: (),
+}
+
+impl Default for Monitor {
+    fn default() -> Monitor {
+        Monitor {
+            monitor_type: "",
+            rssi_low_timeout: -90,
+            rssi_high_threshold: 20,
+            rssi_low_timeout: 1,
+            rssi_high_timeout: 2,
+            patterns: Option::None,
+
+            release: Option::None,
+            activate: Option::None,
+            device_found: Option::None,
+            device_lost: Option::None,
+        }
+    }
 }
 
 pub(crate) struct RegisteredMonitor {
