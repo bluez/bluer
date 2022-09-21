@@ -231,8 +231,8 @@ impl RegisteredMonitor {
             ib.property("RSSIHighTimeout").get(|_,_monitor| Ok(2 as i16));
             ib.property("RSSISamplingPeriod").get(|_,_monitor| Ok(0 as i16));
             ib.property("Patterns").get({|_,_monitor| 
-                let val: [u8; 9] = [0, 1, 127, 0, 127, 0, 5, 0x99,'_'.into()];
-                Ok(val)
+                let pattern: [u8; 9 as usize] = [0, 1, 127, 0, 127, 0, 5, 0x99,'_'.into()];
+                Ok(pattern)
             });
         })
     }
