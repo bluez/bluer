@@ -254,38 +254,38 @@ define_properties!(
 
         property(
             RSSILowThreshold, i16,
-            dbus: (INTERFACE, "RSSILowThreshold", i16, MANDATORY),
-            get: (rssi_low_threshold, v => {v.parse()?}),
+            dbus: (INTERFACE, "RSSILowThreshold", i16, OPTIONAL),
+            get: (rssi_low_threshold, v => {v.to_owned()?}),
         );
 
         property(
             RSSIHighThreshold, i16,
-            dbus: (INTERFACE, "RSSIHighThreshold", i16, MANDATORY),
+            dbus: (INTERFACE, "RSSIHighThreshold", i16, OPTIONAL),
             get: (rssi_high_threshold, v => {v.to_owned()}),
         );
 
         property(
             RSSILowTimeout, i16,
-            dbus: (INTERFACE, "RSSILowTimeout", i16, MANDATORY),
+            dbus: (INTERFACE, "RSSILowTimeout", i16, OPTIONAL),
             get: (rssi_low_timeout, v => {v.to_owned()}),
         );
 
         property(
             RSSIHighTimeout, i16,
-            dbus: (INTERFACE, "RSSIHighTimeout", i16, MANDATORY),
+            dbus: (INTERFACE, "RSSIHighTimeout", i16, OPTIONAL),
             get: (rssi_high_timeout, v => {v.to_owned()}),
         );
 
         property(
             RSSISamplingPeriod, u16,
-            dbus: (INTERFACE, "RSSISamplingPeriod", u16, MANDATORY),
+            dbus: (INTERFACE, "RSSISamplingPeriod", u16, OPTIONAL),
             get: (rssi_sampling_period, v => {v.to_owned()}),
         );
 
         property(
             Patterns, Vec<u8>,
-            dbus: (INTERFACE, "Patterns", Vec<u8>, MANDATORY),
-            get: (patterns, v => {v.to_owned()}),
+            dbus: (INTERFACE, "Patterns", Vec<u8>, OPTIONAL),
+            get: (patterns, v => { v.iter().filter_map(|s| s.parse().ok()).collect() }),
         );
    }
 );
