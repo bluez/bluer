@@ -224,6 +224,7 @@ impl RegisteredMonitor {
                     })
                 },
             );
+            ib.property("Type");
         })
     }
 
