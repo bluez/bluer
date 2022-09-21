@@ -3,6 +3,7 @@
 
 use dbus::{
     nonblock::{Proxy, SyncConnection},
+    Path,
 };
 
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
