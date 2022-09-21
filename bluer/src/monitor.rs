@@ -83,73 +83,51 @@ pub type DeviceLostFn =
 
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
-    pub inner: Option<Arc<SessionInner>>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
     pub device_lost: Option<DeviceLostFn>,
-   #[doc(hidden)]
-    pub _non_exhaustive: (),
 }
 
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
-            inner: Option::None,
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
             device_lost: Option::None,
-
-            _non_exhaustive: (),
         }
     }
 }
 
-impl Monitor {
+pub struct MonitorProperties {
+    pub inner: Arc<SessionInner>,
+}
+
+impl MonitorProperties {
+
+    pub fn new(inner: Arc<SessionInner>) -> Self {
+        Self { inner: inner }
+    }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        if let Some(inner) = self.inner {
-            Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*inner.connection)
-        } else {
-            assert!("Session not find to monitor");
-        }
+        Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*self.inner.connection)
     }
-
-    /*pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
-        Path::new(format!("{}{}", PREFIX, adapter_name,))
-            .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
-    }
-
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<(&'a str, &'a str)> {
-        match path.strip_prefix(PREFIX) {
-            Some(p) => {
-                let sep = p.find('/').unwrap_or(p.len());
-                Some((&p[0..sep], &p[sep..]))
-            }
-            None => None,
-        }
-    }
-
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
-        match Self::parse_dbus_path_prefix(path) {
-            Some((v, "")) => Some(v),
-            _ => None,
-        }
-    }*/
 
     dbus_interface!();
     dbus_default_interface!(INTERFACE);
 }
 
 pub(crate) struct RegisteredMonitor {
+    inner: Arc<SessionInner>,
     m: Monitor,
+    p: MonitorProperties,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl RegisteredMonitor {
-    pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: monitor, cancel: Mutex::new(None) }
+    pub(crate) fn new(inner: Arc<SessionInner>, monitor: Monitor) -> Self {
+        Self { inner: inner, m: monitor, p: MonitorProperties::new(inner), cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
@@ -246,20 +224,20 @@ impl RegisteredMonitor {
         })
     }
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
+    pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
         let name = dbus::Path::new(format!("{}", MONITOR_PREFIX)).unwrap();
         log::trace!("Publishing monitor at {}", &name);
 
         {
-            let mut cr = inner.crossroads.lock().await;
-            cr.insert(name.clone(), &[inner.monitor_token], Arc::new(self));
+            let mut cr = self.inner.crossroads.lock().await;
+            cr.insert(name.clone(), &[self.inner.monitor_token], Arc::new(self));
         }
 
         log::trace!("Registering monitor at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
-        let connection = inner.connection.clone();
+        let connection = self.inner.connection.clone();
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
@@ -271,7 +249,7 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
@@ -280,9 +258,9 @@ impl RegisteredMonitor {
 }
 
 define_properties!(
-    Monitor,
+    MonitorProperties,
     /// Bluetooth monitor properties.
-    pub MonitorProperty => {
+    pub MonitorInnerProperties => {
 
         // ===========================================================================================
         // Monitor properties
