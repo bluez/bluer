@@ -82,14 +82,6 @@ pub struct DeviceLost {
 pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
-
-#[derive(Clone, RefArg)]
-pub struct MonitorPattern {
-    start: u8,
-    data: u8,
-    pattern: Vec<u8>
-}
-
 pub struct Monitor {
     pub monitor_type: String,
     pub rssi_low_threshold: Option<i16>,
@@ -97,7 +89,7 @@ pub struct Monitor {
     pub rssi_low_timeout: Option<u16>,
     pub rssi_high_timeout: Option<u16>,
     pub rssi_sampling_period: Option<u16>,
-    pub patterns: Option<MonitorPattern>,
+    pub patterns: Option<Vec<u8>>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
