@@ -220,14 +220,33 @@ impl RegisteredMonitor {
                     })
                 },
             );
-            ib.property("Type").get(|_,r| Ok(r.m.monitor_type.clone()));
-            ib.property("RSSILowThreshold").get(|_,r| Ok(r.m.rssi_low_threshold));
-            ib.property("RSSIHighThreshold").get(|_,r| Ok(r.m.rssi_high_threshold));
-            ib.property("RSSILowTimeout").get(|_,r| Ok(r.m.rssi_low_timeout));
-            ib.property("RSSIHighTimeout").get(|_,r| Ok(r.m.rssi_high_timeout));
-            ib.property("RSSISamplingPeriod").get(|_,r| Ok(r.m.rssi_sampling_period));
-            ib.property("Patterns").get({|_,r| Ok(r.m.patterns.clone())});
-            ib.signal::<(), _>("CheckComplete", ());
+            cr_property!(ib,"Type",r => {
+                Some(r.m.monitor_type.clone())
+            });
+
+            cr_property!(ib,"RSSILowThreshold",r => {
+                Some(r.m.rssi_low_threshold)
+            });
+
+            cr_property!(ib,"RSSIHighThreshold",r => {
+                Some(r.m.rssi_high_threshold)
+            });
+
+            cr_property!(ib,"RSSILowTimeout",r => {
+                Some(r.m.rssi_low_timeout)
+            });
+
+            cr_property!(ib,"RSSIHighTimeout",r => {
+                Some(r.m.rssi_high_timeout)
+            });
+
+            cr_property!(ib,"RSSISamplingPeriod",r => {
+                Some(r.m.rssi_sampling_period)
+            });
+
+            cr_property!(ib,"Patterns",r => {
+                Some(r.m.patterns.clone())
+            });
         })
     }
 
