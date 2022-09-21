@@ -114,7 +114,7 @@ impl Monitor {
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, self.dbus_path, TIMEOUT, &*self.inner.connection)
+        Proxy::new(SERVICE_NAME, self.dbus_path.clone(), TIMEOUT, &*self.inner.connection)
     }
 
     dbus_interface!();
