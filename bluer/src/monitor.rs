@@ -15,7 +15,7 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
-pub(crate) const MANAGER_PATH: &str = "/org/bluez/hci0";
+pub(crate) const MANAGER_PATH: &str = "/org/bluez";
 pub(crate) const AGENT_PREFIX: &str = concat!("/org/bluez","/", "hci0");
 
 // Error response from us to a Bluetooth agent request.
@@ -221,9 +221,9 @@ impl RegisteredMonitor {
         })
     }
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>) -> Result<MonitorHandle> {
-        //let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
-        let name = dbus::Path::new(format!("{}", AGENT_PREFIX)).unwrap();
+    pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
+        let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
+        let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         log::trace!("Publishing monitor at {}", &name);
 
         {
@@ -232,7 +232,7 @@ impl RegisteredMonitor {
         }
 
         log::trace!("Registering monitor at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
         let connection = inner.connection.clone();
 

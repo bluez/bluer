@@ -109,6 +109,12 @@ impl Adapter {
         Ok(addrs)
     }
 
+    pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
+        let reg_monitor = RegisteredMonitor::new(monitor);
+        reg_monitor.register(self.inner.clone(), self.name).await
+    }
+
+
     /// Get interface to Bluetooth device of specified address.
     pub fn device(&self, address: Address) -> Result<Device> {
         Device::new(self.inner.clone(), self.name.clone(), address)

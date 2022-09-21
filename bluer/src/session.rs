@@ -273,11 +273,6 @@ impl Session {
         reg_agent.register(self.inner.clone()).await
     }
 
-    pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
-        let reg_monitor = RegisteredMonitor::new(monitor);
-        reg_monitor.register(self.inner.clone()).await
-    }
-
     /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
     ///
     /// The returned [ProfileHandle] provides a stream of
