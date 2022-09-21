@@ -79,15 +79,6 @@ pub type DeviceLostFn =
 
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
-    /// Monitor Type.
-    pub monitor_type: String,
-    pub rssi_low_threshold: i16,
-    pub rssi_high_threshold: i16,
-    pub rssi_low_timeout: i16,
-    pub rssi_high_timeout: i16,
-    pub rssi_sampling_period: i16,
-    pub patterns: Option<Vec<u8>>,
-
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -99,14 +90,6 @@ pub struct Monitor {
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
-            monitor_type: String::from(""),
-            rssi_low_threshold: -90,
-            rssi_high_threshold: 20,
-            rssi_low_timeout: 1,
-            rssi_high_timeout: 2,
-            rssi_sampling_period: 1,
-            patterns: Option::None,
-
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
@@ -253,6 +236,59 @@ impl RegisteredMonitor {
         Ok(MonitorHandle { name, _drop_tx: drop_tx })
     }
 }
+
+define_properties!(
+    Adapter,
+    /// Bluetooth monitor properties.
+    pub MonitorProperty => {
+
+        // ===========================================================================================
+        // Monitor properties
+        // ===========================================================================================
+
+        property(
+            MonitorType, String,
+            dbus: (INTERFACE, "Type", String, MANDATORY),
+            get: (monitor_type, v => { v.parse()? }),
+        );
+
+        property(
+            RSSILowThreshold, i16,
+            dbus: (INTERFACE, "RSSILowThreshold", i16, MANDATORY),
+            get: (rssi_low_threshold, v => {v.parse()?}),
+        );
+
+        property(
+            RSSIHighThreshold, i16,
+            dbus: (INTERFACE, "RSSIHighThreshold", i16, MANDATORY),
+            get: (rssi_high_threshold, v => {v.to_owned()}),
+        );
+
+        property(
+            RSSILowTimeout, i16,
+            dbus: (INTERFACE, "RSSILowTimeout", i16, MANDATORY),
+            get: (rssi_low_timeout, v => {v.to_owned()}),
+        );
+
+        property(
+            RSSIHighTimeout, i16,
+            dbus: (INTERFACE, "RSSIHighTimeout", i16, MANDATORY),
+            get: (rssi_high_timeout, v => {v.to_owned()}),
+        );
+
+        property(
+            RSSISamplingPeriod, u16,
+            dbus: (INTERFACE, "RSSISamplingPeriod", u16, MANDATORY),
+            get: (rssi_sampling_period, v => {v.to_owned()}),
+        );
+
+        property(
+            Patterns, Vec<u8>,
+            dbus: (INTERFACE, "Patterns", Vec<u8>, MANDATORY),
+            get: (patterns, v => {v.to_owned()}),
+        );
+   }
+);
 
 /// Handle to registered monitor.
 ///
