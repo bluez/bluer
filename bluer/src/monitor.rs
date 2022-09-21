@@ -101,7 +101,7 @@ impl Default for Monitor {
 }
 
 pub struct MonitorProperties {
-    pub inner: Arc<SessionInner>,
+    inner: Arc<SessionInner>,
 }
 
 impl MonitorProperties {
