@@ -34,7 +34,7 @@ use crate::{
     adapter,
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    monitor::{Monitor, MonitorHandle, RegisteredMonitor, MonitorCallbacks},
+    monitor::{Monitor, MonitorHandle, RegisteredMonitor},
     all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
@@ -249,12 +249,6 @@ impl Session {
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
         Adapter::new(self.inner.clone(), adapter_name)
-    }
-
-
-    /// Create an interface to the Bluetooth adapter with the specified name.
-    pub fn monitor(&self, callbacks: MonitorCallbacks) -> Result<Monitor> {
-        Monitor::new(self.inner.clone(), callbacks)
     }
 
     /// This registers a Bluetooth authorization agent handler.

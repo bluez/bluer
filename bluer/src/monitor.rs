@@ -254,7 +254,7 @@ impl RegisteredMonitor {
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
-        Ok(MonitorHandle { name, _drop_tx: drop_tx })
+        Ok(MonitorHandle { monitor: self.m, name, _drop_tx: drop_tx })
     }
 }
 
@@ -315,6 +315,7 @@ define_properties!(
 ///
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
+    monitor: Monitor,
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
 }
