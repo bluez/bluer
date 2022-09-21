@@ -100,6 +100,11 @@ impl Default for Monitor {
     }
 }
 
+impl Monitor {
+    dbus_interface!();
+    dbus_default_interface!(INTERFACE);
+}
+
 pub(crate) struct RegisteredMonitor {
     m: Monitor,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
