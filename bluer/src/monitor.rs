@@ -249,7 +249,7 @@ define_properties!(
         property(
             MonitorType, String,
             dbus: (INTERFACE, "Type", String, MANDATORY),
-            get: (monitor_type, v => { v.parse()? }),
+            get: (monitor_type, v => { v.to_owned()? }),
         );
 
         property(
