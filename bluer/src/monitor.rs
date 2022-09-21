@@ -224,7 +224,16 @@ impl RegisteredMonitor {
                     })
                 },
             );
-            ib.property("Type");
+            ib.property("Type").get(|_,_monitor| Ok("or_pattern"));
+            ib.property("RSSILowThreshold").get(|_,_monitor| Ok(20));
+            ib.property("RSSIHighThreshold").get(|_,_monitor| Ok(-100));
+            ib.property("RSSILowTimeout").get(|_,_monitor| Ok(1));
+            ib.property("RSSIHighTimeout").get(|_,_monitor| Ok(2));
+            ib.property("RSSISamplingPeriod").get(|_,_monitor| Ok(0));
+            ib.property("Patterns").get({|_,_monitor| 
+                let data:[u8; 10] = [0, 1, 127, 0, 127, 0, 5, 0x99,'_'.into()];
+                Ok(data)
+            });
         })
     }
 
