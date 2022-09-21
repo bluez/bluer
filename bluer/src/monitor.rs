@@ -100,11 +100,11 @@ impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
             monitor_type: String::from("or_pattern"),
-            rssi_low_threshold: Optinal:None,
-            rssi_high_threshold: Optinal:None,
-            rssi_low_timeout: Optinal:None,
-            rssi_high_timeout: Optinal:None,
-            rssi_sampling_period: Optinal:None,
+            rssi_low_threshold: Optinal::None,
+            rssi_high_threshold: Optinal::None,
+            rssi_low_timeout: Optinal::None,
+            rssi_high_timeout: Optinal::None,
+            rssi_sampling_period: Optinal::None,
             patterns: Some(vec![0 as u8, 1, 127, 0, 127, 0, 5, 0x99,'_' as u8]),
             release: Option::None,
             activate: Option::None,
