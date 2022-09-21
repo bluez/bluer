@@ -105,7 +105,7 @@ impl Default for Monitor {
             rssi_low_timeout: Option::None,
             rssi_high_timeout: Option::None,
             rssi_sampling_period: Option::None,
-            patterns: Some(vec![0xff as u8, 0x0a, 0x9a, 0x55, 0xbe, 0xff]),
+            patterns: Option::None,
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
