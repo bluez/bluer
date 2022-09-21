@@ -15,7 +15,7 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
-pub(crate) const MANAGER_PATH: &str = "/org/bluez";
+pub(crate) const MANAGER_PATH: &str = "/org/bluez/hci0";
 pub(crate) const AGENT_PREFIX: &str = concat!("/org/bluez","/", "hci0");
 
 // Error response from us to a Bluetooth agent request.
