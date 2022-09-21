@@ -123,7 +123,7 @@ pub(crate) struct RegisteredMonitor {
 
 impl RegisteredMonitor {
     pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
+        Self { m: monitor, cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
