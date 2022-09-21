@@ -122,13 +122,13 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    m: Monitor,
+    m: Arc<Monitor>,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl RegisteredMonitor {
     pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: monitor, cancel: Mutex::new(None) }
+        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
@@ -227,8 +227,8 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = self.m.dbus_path.clone();
-
+        let monitor = self.m.clone();
+        let name = monitor.dbus_path.clone();
         log::trace!("Publishing monitor at {}", &name);
 
         {
