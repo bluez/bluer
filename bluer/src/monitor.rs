@@ -255,7 +255,7 @@ define_properties!(
         property(
             RSSILowThreshold, i16,
             dbus: (INTERFACE, "RSSILowThreshold", i16, OPTIONAL),
-            get: (rssi_low_threshold, v => {v.to_owned()?}),
+            get: (rssi_low_threshold, v => {v.to_owned()}),
         );
 
         property(
