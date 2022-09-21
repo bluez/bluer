@@ -48,10 +48,10 @@ impl From<ReqError> for dbus::MethodErr {
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
 pub type ReleaseFn =
-    Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
+    Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 pub type ActivateFn =
-    Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ()> + Send>>) + Send + Sync>;
+    Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 #[derive(Debug)]
 #[non_exhaustive]
