@@ -27,6 +27,7 @@ use crate::{
     device::Device,
     gatt, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
     SingleSessionToken, SERVICE_NAME, TIMEOUT,
+    monitor::{Monitor, RegisteredMonitor},
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
