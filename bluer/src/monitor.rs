@@ -68,7 +68,7 @@ pub struct DeviceFound {
 }
 
 pub type DeviceFoundFn =
-    Box<dyn (Fn(DeviceFound) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
+    Box<dyn (Fn(DeviceFound) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -80,7 +80,7 @@ pub struct DeviceLost {
 }
 
 pub type DeviceLostFn =
-    Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
+    Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 pub struct Monitor {
     pub monitor_type: String,
