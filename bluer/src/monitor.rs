@@ -84,12 +84,12 @@ pub type DeviceLostFn =
 
 pub struct Monitor {
     pub monitor_type: String,
-    pub rssi_low_threshold: i16,
-    pub rssi_high_threshold: i16,
-    pub rssi_low_timeout: i16,
-    pub rssi_high_timeout: i16,
-    pub rssi_sampling_period: i16,
-    pub patterns: Vec<u8>,
+    pub rssi_low_threshold: Optional<i16>,
+    pub rssi_high_threshold: Optional<i16>,
+    pub rssi_low_timeout: Optional<i16>,
+    pub rssi_high_timeout: Optional<i16>,
+    pub rssi_sampling_period: Optional<i16>,
+    pub patterns: Optional<Vec<u8>>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -100,12 +100,12 @@ impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
             monitor_type: String::from("or_pattern"),
-            rssi_low_threshold: -100,
-            rssi_high_threshold: 20,
-            rssi_low_timeout: 1,
-            rssi_high_timeout: 2,
-            rssi_sampling_period: 0,
-            patterns: vec![0 as u8, 1, 127, 0, 127, 0, 5, 0x99,'_' as u8],
+            rssi_low_threshold: Optinal:None,
+            rssi_high_threshold: Optinal:None,
+            rssi_low_timeout: Optinal:None,
+            rssi_high_timeout: Optinal:None,
+            rssi_sampling_period: Optinal:None,
+            patterns: Some(vec![0 as u8, 1, 127, 0, 127, 0, 5, 0x99,'_' as u8]),
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
@@ -221,31 +221,31 @@ impl RegisteredMonitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.m.monitor_type.clone())
+                r.m.monitor_type.clone()
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
-                Some(r.m.rssi_low_threshold)
+                r.m.rssi_low_threshold
             });
 
             cr_property!(ib,"RSSIHighThreshold",r => {
-                Some(r.m.rssi_high_threshold)
+                r.m.rssi_high_threshold
             });
 
             cr_property!(ib,"RSSILowTimeout",r => {
-                Some(r.m.rssi_low_timeout)
+                r.m.rssi_low_timeout
             });
 
             cr_property!(ib,"RSSIHighTimeout",r => {
-                Some(r.m.rssi_high_timeout)
+                r.m.rssi_high_timeout
             });
 
             cr_property!(ib,"RSSISamplingPeriod",r => {
-                Some(r.m.rssi_sampling_period)
+                r.m.rssi_sampling_period
             });
 
             cr_property!(ib,"Patterns",r => {
-                Some(r.m.patterns.clone())
+                r.m.patterns.clone()
             });
         })
     }
