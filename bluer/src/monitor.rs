@@ -83,7 +83,7 @@ pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Append)]
 pub struct MonitorPattern {
     start: u8,
     data: u8,
