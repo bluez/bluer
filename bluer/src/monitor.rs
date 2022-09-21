@@ -80,7 +80,7 @@ pub type DeviceLostFn =
 /// Use [Session::register_monitor](crate::session::Session::register_monitor) to register the handler.
 pub struct Monitor {
     /// Monitor Type.
-    pub monitor_type: &str,
+    pub monitor_type: String,
     pub rssi_low_threshold: i16,
     pub rssi_high_threshold: i16,
     pub rssi_low_timeout: i16,
@@ -99,7 +99,7 @@ pub struct Monitor {
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
-            monitor_type: "",
+            monitor_type: String::from(""),
             rssi_low_timeout: -90,
             rssi_high_threshold: 20,
             rssi_low_timeout: 1,
