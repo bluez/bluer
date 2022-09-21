@@ -21,6 +21,7 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
+pub(crate) const MONITOR_PREFIX: &str = publish_path!("monitor/");
 
 // Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
@@ -232,7 +233,7 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = dbus::Path::new(format!("{}/{}/{}", adapter_name, MANAGER_PATH,Uuid::new_v4().as_simple())).unwrap();
+        let name = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
 
         log::trace!("Publishing monitor at {}", &name);
 
