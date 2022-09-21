@@ -20,7 +20,6 @@ use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERV
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const MONITOR_PREFIX: &str = "/org/bluez/monitor");
 
 // Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
