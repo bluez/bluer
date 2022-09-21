@@ -231,14 +231,13 @@ impl RegisteredMonitor {
 
         log::trace!("Registering monitor at {}", &name);
         let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
-        
+
         {
             let mut cr = self.inner.crossroads.lock().await;
             cr.insert(name.clone(), &[self.inner.monitor_token], Arc::new(self));
         }
 
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
-        let connection = self.inner.connection.clone();
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
