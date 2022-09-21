@@ -1,6 +1,10 @@
 //! Bluetooth monitor agent.
 
-use dbus::nonblock::Proxy;
+
+use dbus::{
+    nonblock::{Proxy, SyncConnection},
+};
+
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
@@ -107,6 +111,8 @@ impl Monitor {
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
         if let Some(inner) = self.inner {
             Proxy::new(SERVICE_NAME, MONITOR_PREFIX, TIMEOUT, &*inner.connection)
+        } else {
+            assert!("Session not find to monitor");
         }
     }
 
