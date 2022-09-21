@@ -81,16 +81,30 @@ pub struct DeviceLost {
 pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<String>> + Send>>) + Send + Sync>;
 
-pub struct MonitorCallbacks {
+pub struct Monitor {
+    pub monitor_type: String,
+    pub rssi_low_threshold: i16,
+    pub rssi_high_threshold: i16,
+    pub rssi_low_timeout: i16,
+    pub rssi_high_timeout: i16,
+    pub rssi_sampling_period: i16,
+    pub patterns: Vec<u8>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
     pub device_lost: Option<DeviceLostFn>,
 }
 
-impl Default for MonitorCallbacks {
-    fn default() -> MonitorCallbacks {
-        MonitorCallbacks {
+impl Default for Monitor {
+    fn default() -> Monitor {
+        Monitor {
+            monitor_type: String::from("or_pattern"),
+            rssi_low_threshold: -100,
+            rssi_high_threshold: 20,
+            rssi_low_timeout: 1,
+            rssi_high_timeout: 2,
+            rssi_sampling_period: 0,
+            patterns: vec![0 as u8, 1, 127, 0, 127, 0, 5, 0x99,'_' as u8],
             release: Option::None,
             activate: Option::None,
             device_found: Option::None,
@@ -99,30 +113,11 @@ impl Default for MonitorCallbacks {
     }
 }
 
-pub struct Monitor {
-    inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
-    callbacks: MonitorCallbacks
-}
-
-
 impl Monitor {
-
-    pub(crate) fn new(inner: Arc<SessionInner>, callbacks: MonitorCallbacks) -> Self {
-        let name = dbus::Path::new(format!("{}/{}", MANAGER_PATH,Uuid::new_v4().as_simple())).unwrap();
-        Self { inner: inner, callbacks: callbacks, dbus_path: name }
-    }
-
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, self.dbus_path.clone(), TIMEOUT, &*self.inner.connection)
-    }
-
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
 }
 
 pub(crate) struct RegisteredMonitor {
-    m: Arc<Monitor>,
+    m: Monitor,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
@@ -176,7 +171,7 @@ impl RegisteredMonitor {
                 |ctx, cr, ()| {
                     println!("Release");
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        reg.call_no_params(&reg.m.callbacks.release,).await?;
+                        reg.call_no_params(&reg.m.release,).await?;
                         Ok(())
                     })
                 },
@@ -189,7 +184,7 @@ impl RegisteredMonitor {
                     println!("Activate");
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         reg.call_no_params(
-                            &reg.m.callbacks.activate, )
+                            &reg.m.activate, )
                         .await?;
                         Ok(())
                     })
@@ -202,7 +197,7 @@ impl RegisteredMonitor {
                 |ctx, cr, (addr,):(dbus::Path<'static>,) | {
                     method_call(ctx, cr, |reg: Arc<Self>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
-                        reg.call(&reg.m.callbacks.device_found, DeviceFound { adapter, addr },)
+                        reg.call(&reg.m.device_found, DeviceFound { adapter, addr },)
                         .await?;
                         Ok(())
                     })
@@ -216,7 +211,7 @@ impl RegisteredMonitor {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
                         reg.call(
-                            &reg.m.callbacks.device_lost,
+                            &reg.m.device_lost,
                             DeviceLost { adapter, addr },
                         )
                         .await?;
@@ -224,22 +219,19 @@ impl RegisteredMonitor {
                     })
                 },
             );
-            ib.property("Type").get(|_,_monitor| Ok(String::from("or_pattern")));
-            ib.property("RSSILowThreshold").get(|_,_monitor| Ok(20 as i16));
-            ib.property("RSSIHighThreshold").get(|_,_monitor| Ok(-100 as i16));
-            ib.property("RSSILowTimeout").get(|_,_monitor| Ok(1 as i16));
-            ib.property("RSSIHighTimeout").get(|_,_monitor| Ok(2 as i16));
-            ib.property("RSSISamplingPeriod").get(|_,_monitor| Ok(0 as i16));
-            ib.property("Patterns").get({|_,_monitor| 
-                Ok(vec![0 as u8, 1, 127, 0, 127, 0, 5, 0x99,'_' as u8])
-            });
+            ib.property("Type").get(|_,r| Ok(r.m.monitor_type));
+            ib.property("RSSILowThreshold").get(|_,r| Ok(r.m.rssi_low_threshold));
+            ib.property("RSSIHighThreshold").get(|_,r| Ok(r.m.rssi_high_threshold));
+            ib.property("RSSILowTimeout").get(|_,r| Ok(r.m.rssi_low_timeout));
+            ib.property("RSSIHighTimeout").get(|_,r| Ok(r.m.rssi_high_timeout));
+            ib.property("RSSISamplingPeriod").get(|_,r| Ok(r.m.rssi_sampling_period));
+            ib.property("Patterns").get({|_,r| Ok(r.m.patterns)});
         })
     }
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let monitor = self.m.clone();
-        let name = monitor.dbus_path.clone();
+        let name = self.m.dbus_path.clone();
         log::trace!("Publishing monitor at {}", &name);
 
         {
@@ -265,68 +257,14 @@ impl RegisteredMonitor {
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
-        Ok(MonitorHandle { monitor: monitor.clone(), name, _drop_tx: drop_tx })
+        Ok(MonitorHandle { name, _drop_tx: drop_tx })
     }
 }
-
-define_properties!(
-    Monitor,
-    /// Bluetooth monitor properties.
-    pub ManitorProperties => {
-
-        // ===========================================================================================
-        // Monitor properties
-        // ===========================================================================================
-
-        property(
-            MonitorType, String,
-            dbus: (INTERFACE, "Type", String, MANDATORY),
-            get: (monitor_type, v => { v.to_owned() }),
-        );
-
-        property(
-            RSSILowThreshold, i16,
-            dbus: (INTERFACE, "RSSILowThreshold", i16, OPTIONAL),
-            get: (rssi_low_threshold, v => {v.to_owned()}),
-        );
-
-        property(
-            RSSIHighThreshold, i16,
-            dbus: (INTERFACE, "RSSIHighThreshold", i16, OPTIONAL),
-            get: (rssi_high_threshold, v => {v.to_owned()}),
-        );
-
-        property(
-            RSSILowTimeout, i16,
-            dbus: (INTERFACE, "RSSILowTimeout", i16, OPTIONAL),
-            get: (rssi_low_timeout, v => {v.to_owned()}),
-        );
-
-        property(
-            RSSIHighTimeout, i16,
-            dbus: (INTERFACE, "RSSIHighTimeout", i16, OPTIONAL),
-            get: (rssi_high_timeout, v => {v.to_owned()}),
-        );
-
-        property(
-            RSSISamplingPeriod, u16,
-            dbus: (INTERFACE, "RSSISamplingPeriod", u16, OPTIONAL),
-            get: (rssi_sampling_period, v => {v.to_owned()}),
-        );
-
-        property(
-            Patterns, Vec<u8>,
-            dbus: (INTERFACE, "Patterns", Vec<u8>, OPTIONAL),
-            get: (patterns, v => { v.to_owned() }),
-        );
-   }
-);
 
 /// Handle to registered monitor.
 ///
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
-    pub monitor: Arc<Monitor>,
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
 }
