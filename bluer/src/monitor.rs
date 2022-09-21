@@ -127,7 +127,7 @@ pub(crate) struct RegisteredMonitor {
 
 impl RegisteredMonitor {
     pub(crate) fn new(inner: Arc<SessionInner>, monitor: Monitor) -> Self {
-        Self { inner: inner, m: monitor, p: MonitorProperties::new(inner.clone()), cancel: Mutex::new(None) }
+        Self { inner: inner.clone(), m: monitor, p: MonitorProperties::new(inner.clone()), cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
