@@ -229,14 +229,15 @@ impl RegisteredMonitor {
         let name = dbus::Path::new(format!("{}", MONITOR_PREFIX)).unwrap();
         log::trace!("Publishing monitor at {}", &name);
 
-        log::trace!("Registering monitor at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
+        let inner = self.inner.clone();
 
         {
-            let mut cr = self.inner.crossroads.lock().await;
-            cr.insert(name.clone(), &[self.inner.monitor_token], Arc::new(self));
+            let mut cr = inner.crossroads.lock().await;
+            cr.insert(name.clone(), &[inner.monitor_token], Arc::new(self));
         }
 
+        log::trace!("Registering monitor at {}", &name);
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -249,7 +250,7 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = self.inner.crossroads.lock().await;
+            let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
         });
 
