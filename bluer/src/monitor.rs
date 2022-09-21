@@ -238,7 +238,7 @@ impl RegisteredMonitor {
 }
 
 define_properties!(
-    Adapter,
+    Monitor,
     /// Bluetooth monitor properties.
     pub MonitorProperty => {
 
