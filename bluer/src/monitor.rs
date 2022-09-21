@@ -225,11 +225,11 @@ impl RegisteredMonitor {
                 },
             );
             ib.property("Type").get(|_,_monitor| Ok(String::from("or_pattern")));
-            ib.property("RSSILowThreshold").get(|_,_monitor| Ok(i16(20)));
-            ib.property("RSSIHighThreshold").get(|_,_monitor| Ok(i16(-100)));
-            ib.property("RSSILowTimeout").get(|_,_monitor| Ok(i16((1)));
-            ib.property("RSSIHighTimeout").get(|_,_monitor| Ok(i16(2)));
-            ib.property("RSSISamplingPeriod").get(|_,_monitor| Ok(i16((0)));
+            ib.property("RSSILowThreshold").get(|_,_monitor| Ok(20 as i16));
+            ib.property("RSSIHighThreshold").get(|_,_monitor| Ok(-100 as i16));
+            ib.property("RSSILowTimeout").get(|_,_monitor| Ok(1 as i16));
+            ib.property("RSSIHighTimeout").get(|_,_monitor| Ok(2 as i16));
+            ib.property("RSSISamplingPeriod").get(|_,_monitor| Ok(0 as i16));
             ib.property("Patterns").get({|_,_monitor| 
                 let val:[u8; 10] = [0, 1, 127, 0, 127, 0, 5, 0x99,'_'.into()];
                 Ok(val)
