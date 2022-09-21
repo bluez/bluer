@@ -106,7 +106,7 @@ pub struct MonitorProperties {
 
 impl MonitorProperties {
 
-    pub fn new(inner: Arc<SessionInner>) -> Self {
+    pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
         Self { inner: inner }
     }
 
