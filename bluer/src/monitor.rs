@@ -108,9 +108,9 @@ pub struct Monitor {
 
 impl Monitor {
 
-    pub(crate) fn new(inner: Arc<SessionInner>, callbacks: MonitorCallbacks) -> Result<Self> {
+    pub(crate) fn new(inner: Arc<SessionInner>, callbacks: MonitorCallbacks) -> Self {
         let name = dbus::Path::new(format!("{}/{}", MANAGER_PATH,Uuid::new_v4().as_simple())).unwrap();
-        Ok(Self { inner: inner, callbacks: callbacks, dbus_path: name })
+        Self { inner: inner, callbacks: callbacks, dbus_path: name }
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
