@@ -285,7 +285,7 @@ define_properties!(
         property(
             Patterns, Vec<u8>,
             dbus: (INTERFACE, "Patterns", Vec<u8>, OPTIONAL),
-            get: (patterns, v => { v.iter().filter_map(|s| s.parse().ok()).collect() }),
+            get: (patterns, v => { v.to_owned() }),
         );
    }
 );
