@@ -259,8 +259,8 @@ impl RegisteredMonitor {
         {
             let mut cr = inner.crossroads.lock().await;
             let object_manager_token = cr.object_manager();
-            cr.insert(name.clone(), [&object_manager_token], {});
-            cr.add_interface(name.clone(), &[inner.monitor_token], Arc::new(self));
+            cr.insert(name.clone(), [&object_manager_token], Arc::new(self));
+            cr.add_interface(name.clone(), &[inner.monitor_token]);
         }
 
         log::trace!("Registering monitor at {}", &name);
