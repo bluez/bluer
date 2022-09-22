@@ -177,6 +177,9 @@ impl Session {
         #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
 
+        crossroads.set_object_manager_support(Some(conn.clone()));
+        crossroads.insert("/", &[crossroads.object_manager()], {});
+
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
         Event::handle_connection(connection.clone(), event_sub_rx).await?;
 
