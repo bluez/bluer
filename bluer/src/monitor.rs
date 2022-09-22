@@ -7,6 +7,7 @@ use dbus::{
 };
 
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
+use strum::{Display, EnumString};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
 use strum::IntoStaticStr;
