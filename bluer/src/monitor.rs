@@ -89,7 +89,7 @@ pub struct Monitor {
     pub rssi_low_timeout: Option<u16>,
     pub rssi_high_timeout: Option<u16>,
     pub rssi_sampling_period: Option<u16>,
-    pub patterns: Option<Vec<u8>>,
+    pub patterns: Option<(u8,u8,Vec<u8>)>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
