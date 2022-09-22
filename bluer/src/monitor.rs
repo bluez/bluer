@@ -115,24 +115,6 @@ impl Default for Monitor {
 }
 
 impl Monitor {
-}
-
-pub(crate) struct RegisteredMonitor {
-    m: Arc<Monitor>,
-    cancel: Mutex<Option<oneshot::Sender<()>>>,
-}
-
-impl RegisteredMonitor {
-    pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
-    }
-
-    async fn get_cancel(&self) -> oneshot::Receiver<()> {
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        *self.cancel.lock().await = Some(cancel_tx);
-        cancel_rx
-    }
-
     async fn call<A, F, R>(&self, f: &Option<impl Fn(A) -> F>, arg: A) -> ReqResult<R>
     where
         F: Future<Output = ReqResult<R>> + Send + 'static,
@@ -151,6 +133,17 @@ impl RegisteredMonitor {
             Some(f) => f().await,
             None => Err(ReqError::Rejected),
         }
+    }
+}
+
+pub(crate) struct RegisteredMonitor {
+    m: Arc<Monitor>,
+    cancel: Mutex<Option<oneshot::Sender<()>>>,
+}
+
+impl RegisteredMonitor {
+    pub(crate) fn new(monitor: Monitor) -> Self {
+        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
     }
 
     fn parse_device_path(device: &dbus::Path<'static>) -> ReqResult<(String, Address)> {
