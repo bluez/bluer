@@ -7,7 +7,6 @@ use dbus::{
 };
 
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
-use strum::{Display, EnumString};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
 use strum::IntoStaticStr;
@@ -53,34 +52,6 @@ impl From<ReqError> for dbus::MethodErr {
 /// Result of a Bluetooth agent request to us.
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
-/// Determines the type of advertisement monitor.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum Type {
-    /// Patterns with logic OR applied.
-    #[strum(serialize = "or_patterns")]
-    OrPatterns,
-}
-
-impl Default for Type {
-    fn default() -> Self {
-        Self::OrPatterns
-    }
-}
-
-#[derive(Clone)]
-pub struct Pattern {
-    /// The index in an AD data field where the search should start. The
-    /// beginning of an AD data field is index 0.
-    pub start_position: u8,
-    /// Advertising data type to match. See
-    /// <https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile/> for the
-    /// possible allowed values.
-    pub ad_data_type: u8,
-    /// The value of the pattern. The maximum length of the bytes is 31.
-    pub content_of_pattern: Vec<u8>,
-}
-
 pub type ReleaseFn =
     Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
@@ -112,13 +83,13 @@ pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 pub struct Monitor {
-    pub monitor_type: Type,
+    pub monitor_type: String,
     pub rssi_low_threshold: Option<i16>,
     pub rssi_high_threshold: Option<i16>,
     pub rssi_low_timeout: Option<u16>,
     pub rssi_high_timeout: Option<u16>,
     pub rssi_sampling_period: Option<u16>,
-    pub patterns:  Option<Vec<Pattern>>,
+    pub patterns: Option<(u8,u8,Vec<u8>)>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -128,7 +99,7 @@ pub struct Monitor {
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
-            monitor_type: Type::OrPatterns,
+            monitor_type: String::from("or_patterns"),
             rssi_low_threshold: Option::None,
             rssi_high_threshold: Option::None,
             rssi_low_timeout: Option::None,
@@ -163,7 +134,7 @@ impl Monitor {
             None => Err(ReqError::Rejected),
         }
     }
-
+    
     fn parse_device_path(device: &dbus::Path<'static>) -> ReqResult<(String, Address)> {
         match Device::parse_dbus_path(device) {
             Some((adapter, addr)) => Ok((adapter.to_string(), addr)),
@@ -232,7 +203,7 @@ impl Monitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.monitor_type.to_string())
+                Some(r.monitor_type.clone())
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
@@ -256,12 +227,7 @@ impl Monitor {
             });
 
             cr_property!(ib,"Patterns",r => {
-                r.patterns.as_ref().map(|patterns: &Vec<Pattern>| {
-                    patterns
-                        .iter()
-                        .map(|p| (p.start_position, p.ad_data_type, p.content_of_pattern.clone()))
-                        .collect::<Vec<_>>()
-                })
+                r.patterns.clone()
             });
         })
     }    
