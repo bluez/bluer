@@ -134,18 +134,7 @@ impl Monitor {
             None => Err(ReqError::Rejected),
         }
     }
-}
-
-pub(crate) struct RegisteredMonitor {
-    m: Arc<Monitor>,
-    cancel: Mutex<Option<oneshot::Sender<()>>>,
-}
-
-impl RegisteredMonitor {
-    pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
-    }
-
+    
     fn parse_device_path(device: &dbus::Path<'static>) -> ReqResult<(String, Address)> {
         match Device::parse_dbus_path(device) {
             Some((adapter, addr)) => Ok((adapter.to_string(), addr)),
@@ -241,6 +230,16 @@ impl RegisteredMonitor {
                 r.patterns.clone()
             });
         })
+    }    
+}
+
+pub(crate) struct RegisteredMonitor {
+    m: Arc<Monitor>
+}
+
+impl RegisteredMonitor {
+    pub(crate) fn new(monitor: Monitor) -> Self {
+        Self { m: Arc::new(monitor)}
     }
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
