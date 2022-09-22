@@ -118,13 +118,13 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    m: Monitor,
+    m: Arc<Monitor>,
     cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl RegisteredMonitor {
     pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: monitor, cancel: Mutex::new(None) }
+        Self { m: Arc::new(monitor), cancel: Mutex::new(None) }
     }
 
     async fn get_cancel(&self) -> oneshot::Receiver<()> {
@@ -163,16 +163,16 @@ impl RegisteredMonitor {
         }
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
+    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Monitor>> {
+        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Monitor>>| {
             ib.method_with_cr_async(
                 "Release",
                 (),
                 (),
                 |ctx, cr, ()| {
                     println!("Release");
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        reg.call_no_params(&reg.m.release,).await?;
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
+                        reg.call_no_params(&reg.release,).await?;
                         Ok(())
                     })
                 },
@@ -183,9 +183,9 @@ impl RegisteredMonitor {
                 (),
                 |ctx, cr, ()| {
                     println!("Activate");
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
                         reg.call_no_params(
-                            &reg.m.activate, )
+                            &reg.activate, )
                         .await?;
                         Ok(())
                     })
@@ -196,9 +196,9 @@ impl RegisteredMonitor {
                 ("device",),
                 (),
                 |ctx, cr, (addr,):(dbus::Path<'static>,) | {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
-                        reg.call(&reg.m.device_found, DeviceFound { adapter, addr },)
+                        reg.call(&reg.device_found, DeviceFound { adapter, addr },)
                         .await?;
                         Ok(())
                     })
@@ -209,10 +209,10 @@ impl RegisteredMonitor {
                 ("device",),
                 (),
                 |ctx, cr, (addr,): (dbus::Path<'static>,) | {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
+                    method_call(ctx, cr, move |reg: Arc<Monitor>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
                         reg.call(
-                            &reg.m.device_lost,
+                            &reg.device_lost,
                             DeviceLost { adapter, addr },
                         )
                         .await?;
@@ -221,31 +221,31 @@ impl RegisteredMonitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.m.monitor_type.clone())
+                Some(r.monitor_type.clone())
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
-                r.m.rssi_low_threshold
+                r.rssi_low_threshold
             });
 
             cr_property!(ib,"RSSIHighThreshold",r => {
-                r.m.rssi_high_threshold
+                r.rssi_high_threshold
             });
 
             cr_property!(ib,"RSSILowTimeout",r => {
-                r.m.rssi_low_timeout
+                r.rssi_low_timeout
             });
 
             cr_property!(ib,"RSSIHighTimeout",r => {
-                r.m.rssi_high_timeout
+                r.rssi_high_timeout
             });
 
             cr_property!(ib,"RSSISamplingPeriod",r => {
-                r.m.rssi_sampling_period
+                r.rssi_sampling_period
             });
 
             cr_property!(ib,"Patterns",r => {
-                r.m.patterns.clone()
+                r.patterns.clone()
             });
         })
     }
@@ -261,7 +261,7 @@ impl RegisteredMonitor {
             let object_manager_token = cr.object_manager::<Arc<Monitor>>();
             let introspectable_token = cr.introspectable::<Arc<Monitor>>();
             let properties_token = cr.properties::<Arc<Monitor>>();
-            cr.insert(name.clone(), [&inner.monitor_token, &object_manager_token, &introspectable_token, &properties_token], Arc::new(self));
+            cr.insert(name.clone(), [&inner.monitor_token, &object_manager_token, &introspectable_token, &properties_token], self.m.clone());
         }
 
         log::trace!("Registering monitor at {}", &name);
