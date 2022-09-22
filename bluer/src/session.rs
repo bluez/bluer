@@ -163,6 +163,8 @@ impl Session {
             }),
         )));
 
+        crossroads::set_object_manager_support(Option::None);
+
         let le_advertisment_token = Advertisement::register_interface(&mut crossroads);
         let gatt_service_token = gatt::local::RegisteredService::register_interface(&mut crossroads);
         let gatt_reg_characteristic_token =
