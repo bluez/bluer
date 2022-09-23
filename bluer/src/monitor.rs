@@ -266,13 +266,13 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    monitors: Arc<HashMap<dbus::Path<'static>, Arc<Monitor>>>,
+    monitors: Arc<Mutex<HashMap<dbus::Path<'static>, Arc<Monitor>>>>,
     inner: Arc<SessionInner>
 }
 
 impl RegisteredMonitor {
     pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
-        Self {monitors: Arc::new(HashMap::new()), inner: inner.clone()}
+        Self {monitors: Arc::new(Mutex::new(HashMap::new())), inner: inner.clone()}
     }
 
     pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
@@ -312,7 +312,9 @@ impl RegisteredMonitor {
             let mut cr = rl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in rl.monitors.clone() {
+            let m = rl.monitors.clone();
+            let ml = m.lock().await;
+            for (path,_) in ml {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
@@ -326,7 +328,8 @@ impl RegisteredMonitor {
 
         log::trace!("Publishing monitor rulo at {}", &name);
 
-        self.monitors.insert(name.clone(), monitor.clone());
+        let m = self.monitors.lock().await;
+        m.insert(name.clone(), monitor.clone());
 
         let mut cr = self.inner.crossroads.lock().await;
         cr.insert(name.clone(), [&self.inner.monitor_token], monitor.clone());
