@@ -308,7 +308,7 @@ impl RegisteredMonitor {
             let mut cr = self.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in &self.monitors {
+            for (path,_) in self.monitors {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
@@ -341,7 +341,7 @@ pub struct MonitorHandle {
 impl MonitorHandle {
     pub async fn add_monitor(&mut self, monitor: Monitor) {
         let ra = self.r.clone();
-        if let Ok(ref r) = ra.lock() {
+        if let Ok(ref r) = ra.lock().await {
             r.add_monitor(Arc::new(monitor));
         }
     }
