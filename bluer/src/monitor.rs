@@ -307,12 +307,12 @@ impl RegisteredMonitor {
             let mut cr = self.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in monitors {
+            for (path,_) in &self.monitors {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
 
-        Ok(MonitorHandle { root, r: Arc::new(self), _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: Arc::new(self), _drop_tx: drop_tx })
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
@@ -324,7 +324,7 @@ impl RegisteredMonitor {
         self.monitors.insert(name.clone(), monitor.clone());
 
         let mut cr = self.inner.crossroads.lock().await;
-        cr.insert(name.clone(), [&self.inner.monitor_token], Arc::new(monitor));
+        cr.insert(name.clone(), [&self.inner.monitor_token], monitor.clone());
     }
 }
 

@@ -173,7 +173,7 @@ impl Session {
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
         let agent_token = RegisteredAgent::register_interface(&mut crossroads);
-        let monitor_token = RegisteredMonitor::register_interface(&mut crossroads);
+        let monitor_token = Monitor::register_interface(&mut crossroads);
         #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
 
