@@ -298,7 +298,7 @@ impl RegisteredMonitor {
         let unreg_name = root.clone();
 
         let r = Arc::new(Mutex::new(self));
-
+        let s = r.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -307,12 +307,12 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let rc = r.clone();
-            let rl = rc.lock().await;
-            let mut cr = rl.inner.crossroads.lock().await;
+            let sc = s.clone();
+            let sl = sc.lock().await;
+            let mut cr = sl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            let m = rl.monitors.clone();
+            let m = sl.monitors.clone();
             let ml = m.lock().await;
             for (path,_) in ml.iter() {
                 let _: Option<Self> = cr.remove(&path);
@@ -328,7 +328,7 @@ impl RegisteredMonitor {
 
         log::trace!("Publishing monitor rulo at {}", &name);
 
-        let m = self.monitors.lock().await;
+        let mut m = self.monitors.lock().await;
         m.insert(name.clone(), monitor.clone());
 
         let mut cr = self.inner.crossroads.lock().await;
