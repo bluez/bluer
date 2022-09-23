@@ -214,7 +214,7 @@ impl RegisteredMonitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.monitor_type.clone())
+                Some(r.m.monitor_type.clone())
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
