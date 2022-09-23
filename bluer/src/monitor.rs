@@ -313,10 +313,9 @@ impl RegisteredMonitor {
             let _: Option<Self> = cr.remove(&unreg_name);
 
             let m = rl.monitors.clone();
-            if let (ref ml) = **m.lock().await{
-                for (path,_) in ml {
-                    let _: Option<Self> = cr.remove(&path);
-                }    
+            let ml = m.lock().await;
+            for (path,_) in ml.iter() {
+                let _: Option<Self> = cr.remove(&path);
             }
         });
 
