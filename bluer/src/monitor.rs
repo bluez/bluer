@@ -333,7 +333,7 @@ impl RegisteredMonitor {
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
     name: dbus::Path<'static>,
-    r: Arc<RegistedMonitor>,
+    r: Arc<RegisteredMonitor>,
     _drop_tx: oneshot::Sender<()>,
 }
 
