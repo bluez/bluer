@@ -336,7 +336,7 @@ pub struct MonitorHandle {
 
 impl MonitorHandle {
     pub async fn add_monitor(&mut self, monitor: Monitor) {
-        r.add_monitor(Arc::new(monitor));
+        self.r.add_monitor(Arc::new(monitor));
     }
 }
 

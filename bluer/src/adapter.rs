@@ -110,13 +110,8 @@ impl Adapter {
         Ok(addrs)
     }
 
-    pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
-        let reg_monitor = RegisteredMonitor::new(monitor);
-        reg_monitor.register(self.inner.clone(), self.name()).await
-    }
-
-    pub async fn register_monitor(&self, monitor: Monitor) -> Result<MonitorHandle> {
-        let reg_monitor = RegisteredMonitor::new(monitor);
+    pub async fn register_monitor(&self) -> Result<MonitorHandle> {
+        let reg_monitor = RegisteredMonitor::new();
         reg_monitor.register(self.inner.clone(), self.name()).await
     }
 
