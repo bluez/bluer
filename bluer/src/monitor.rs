@@ -276,7 +276,6 @@ impl RegisteredMonitor {
     }
 
     pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
-        let r = Arc::new(self);
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
         let uuid = Uuid::new_v4().as_simple().to_string();
         let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
@@ -284,7 +283,7 @@ impl RegisteredMonitor {
         log::trace!("Publishing monitor at {}", &root);
 
         {
-            let mut cr = r.inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let object_manager_token = cr.object_manager();
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
@@ -292,12 +291,12 @@ impl RegisteredMonitor {
         }
 
         log::trace!("Registering monitor at {}", &root);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, r.inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = root.clone();
-        let s = r.clone()
+
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -306,15 +305,15 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = s.inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in &s.monitors {
+            for (path,_) in &self.monitors {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
 
-        Ok(MonitorHandle { name: root, r: r.clone(), _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: Arc::new(Mutex::new(self)), _drop_tx: drop_tx })
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
