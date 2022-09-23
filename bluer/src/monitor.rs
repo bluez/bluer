@@ -329,8 +329,7 @@ impl RegisteredMonitor {
         m.insert(name.clone(), monitor.clone());
 
         let mut cr = self.inner.crossroads.lock().await;
-        let object_manager_token = cr.object_manager();
-        cr.insert(name.clone(), [&self.inner.monitor_token,&object_manager_token], monitor.clone());
+        cr.insert(name.clone(), [&self.inner.monitor_token], monitor.clone());
     }
 }
 
