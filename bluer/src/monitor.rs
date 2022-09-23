@@ -266,12 +266,12 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    monitors: <HashMap<dbus::Path<'static>, Arc<Monitor>>>
+    monitors: <HashMap<dbus::Path<'static>, Arc<Monitor>>>,
 }
 
 impl RegisteredMonitor {
     pub(crate) fn new() -> Self {
-        Self
+        Self {monitors: HashMap::new()}
     }
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
@@ -288,8 +288,6 @@ impl RegisteredMonitor {
             let properties_token = cr.properties();
             cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
         }
-
-        self.monitors = HashMap::new();
 
         log::trace!("Registering monitor at {}", &root);
         let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
