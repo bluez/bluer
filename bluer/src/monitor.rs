@@ -128,7 +128,7 @@ pub struct Monitor {
 impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
-            monitor_type: String::from("or_patterns"),
+            monitor_type: Type::OrPatterns,
             rssi_low_threshold: Option::None,
             rssi_high_threshold: Option::None,
             rssi_low_timeout: Option::None,
