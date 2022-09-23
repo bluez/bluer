@@ -335,13 +335,15 @@ impl RegisteredMonitor {
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
     name: dbus::Path<'static>,
-    r: Arc<RegisteredMonitor>,
+    r: Arc<Mutex<RegisteredMonitor>>,
     _drop_tx: oneshot::Sender<()>,
 }
 
 impl MonitorHandle {
     pub async fn add_monitor(&mut self, monitor: Monitor) {
-        &self.r.add_monitor(Arc::new(monitor));
+        if Ok(ref r) = r.lock(){
+            r.add_monitor(Arc::new(monitor));
+        }
     }
 }
 
