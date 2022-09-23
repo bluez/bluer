@@ -254,7 +254,7 @@ impl RegisteredMonitor {
             let object_manager_token = cr.object_manager();
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
-            cr.insert(name.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
+            cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
             cr.insert(name.clone(), [&inner.monitor_token], self.m.clone());
         }
 
