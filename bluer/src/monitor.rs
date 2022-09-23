@@ -8,7 +8,7 @@ use dbus::{
 use strum::{Display, EnumString};
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{pin_mut, Future};
-use std::{fmt, pin::Pin, sync::Arc};
+use std::{fmt, pin::Pin, sync::Arc, collections::HashMap};
 use strum::IntoStaticStr;
 use tokio::{
     select,
@@ -267,22 +267,23 @@ impl Monitor {
 
 pub(crate) struct RegisteredMonitor {
     monitors: HashMap<dbus::Path<'static>, Arc<Monitor>>,
+    inner: Arc<SessionInner>
 }
 
 impl RegisteredMonitor {
-    pub(crate) fn new() -> Self {
-        Self {monitors: HashMap::new()}
+    pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
+        Self {monitors: HashMap::new(), inner: inner.clone()}
     }
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
+    pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
         let uuid = Uuid::new_v4().as_simple().to_string();
-        let root = dbus::Path::new(format!(MONITOR_PREFIX)).unwrap();
+        let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
 
         log::trace!("Publishing monitor at {}", &root);
 
         {
-            let mut cr = inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let object_manager_token = cr.object_manager();
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
@@ -290,7 +291,7 @@ impl RegisteredMonitor {
         }
 
         log::trace!("Registering monitor at {}", &root);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -303,11 +304,11 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for monitor,_ in monitors {
-                let _: Option<Self> = cr.remove(&monitor);
+            for (path,_) in monitors {
+                let _: Option<Self> = cr.remove(&path);
             }
         });
 
@@ -322,8 +323,8 @@ impl RegisteredMonitor {
 
         self.monitors.insert(name.clone(), monitor.clone());
 
-        let mut cr = inner.crossroads.lock().await;
-        cr.insert(name.clone(), [&r.inner.monitor_token], Arc::new(monitor));
+        let mut cr = self.inner.crossroads.lock().await;
+        cr.insert(name.clone(), [&self.inner.monitor_token], Arc::new(monitor));
     }
 }
 
