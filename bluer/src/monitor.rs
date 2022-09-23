@@ -260,7 +260,7 @@ impl RegisteredMonitor {
         }
 
         log::trace!("Registering monitor at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
