@@ -252,16 +252,16 @@ impl RegisteredMonitor {
 
         {
             let mut cr = inner.crossroads.lock().await;
-            let object_manager_token = cr.object_manager::<Monitor>();
-            let introspectable_token = cr.introspectable::<Monitor>();
-            let properties_token = cr.properties::<Monitor>();
-            cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], self.m.clone());
+            let object_manager_token = cr.object_manager();
+            let introspectable_token = cr.introspectable();
+            let properties_token = cr.properties();
+            cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
             cr.insert(name.clone(), [&inner.monitor_token], self.m.clone());
         }
 
         log::trace!("Registering monitor at {}", &name);
         let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
-        proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (name.clone(),)).await?;
+        proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
