@@ -244,16 +244,18 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let name = dbus::Path::new(format!("{}{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
+        let root = dbus::Path::new(format!("{}{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
+        let name = dbus::Path::new(format!("{}{}/app",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
 
         log::trace!("Publishing monitor at {}", &name);
 
         {
             let mut cr = inner.crossroads.lock().await;
-            let object_manager_token = cr.object_manager::<Monitor>();
-            let introspectable_token = cr.introspectable::<Monitor>();
-            let properties_token = cr.properties::<Monitor>();
-            cr.insert(name.clone(), [&inner.monitor_token, &object_manager_token, &introspectable_token, &properties_token], self.m.clone());
+            let object_manager_token = cr.object_manager();
+            let introspectable_token = cr.introspectable();
+            let properties_token = cr.properties();
+            cr.insert(name.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
+            cr.insert(name.clone(), [&inner.monitor_token], self.m.clone());
         }
 
         log::trace!("Registering monitor at {}", &name);
