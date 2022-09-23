@@ -297,6 +297,8 @@ impl RegisteredMonitor {
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = root.clone();
 
+        let r = Arc::new(Mutex::new(self));
+
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -305,15 +307,17 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = self.inner.crossroads.lock().await;
+            let rc = r.clone();
+            let rl = rc.lock().await;
+            let mut cr = rl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in self.monitors {
+            for (path,_) in rl.monitors {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
 
-        Ok(MonitorHandle { name: root, r: Arc::new(Mutex::new(self)), _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: r, _drop_tx: drop_tx })
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
