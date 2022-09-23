@@ -5,7 +5,7 @@ use dbus::{
     nonblock::{Proxy, SyncConnection},
     Path,
 };
-
+use strum::{Display, EnumString};
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
@@ -52,6 +52,35 @@ impl From<ReqError> for dbus::MethodErr {
 /// Result of a Bluetooth agent request to us.
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
+/// Determines the type of advertisement monitor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Type {
+    /// Patterns with logic OR applied.
+    #[strum(serialize = "or_patterns")]
+    OrPatterns,
+}
+
+impl Default for Type {
+    fn default() -> Self {
+        Self::OrPatterns
+    }
+}
+
+/// An advertisement data pattern, used to filter devices in the advertisement monitor.
+#[derive(Clone)]
+pub struct Pattern {
+    /// The index in an AD data field where the search should start. The
+    /// beginning of an AD data field is index 0.
+    pub start_position: u8,
+    /// Advertising data type to match. See
+    /// <https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile/> for the
+    /// possible allowed values.
+    pub ad_data_type: u8,
+    /// The value of the pattern. The maximum length of the bytes is 31.
+    pub content_of_pattern: Vec<u8>,
+}
+
 pub type ReleaseFn =
     Box<dyn (Fn() -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
@@ -83,13 +112,13 @@ pub type DeviceLostFn =
     Box<dyn (Fn(DeviceLost) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
 pub struct Monitor {
-    pub monitor_type: String,
+    pub monitor_type: Type,
     pub rssi_low_threshold: Option<i16>,
     pub rssi_high_threshold: Option<i16>,
     pub rssi_low_timeout: Option<u16>,
     pub rssi_high_timeout: Option<u16>,
     pub rssi_sampling_period: Option<u16>,
-    pub patterns: Option<(u8,u8,Vec<u8>)>,
+    pub patterns: Option<Vec<Pattern>)>,
     pub release: Option<ReleaseFn>,
     pub activate: Option<ActivateFn>,
     pub device_found: Option<DeviceFoundFn>,
@@ -214,7 +243,7 @@ impl RegisteredMonitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.m.monitor_type.clone())
+                Some(r.m.monitor_type.to_string())
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
@@ -238,7 +267,12 @@ impl RegisteredMonitor {
             });
 
             cr_property!(ib,"Patterns",r => {
-                r.m.patterns.clone()
+                r.m.patterns.as_ref().map(|patterns: &Vec<Pattern>| {
+                    patterns
+                        .iter()
+                        .map(|p| (p.start_position, p.ad_data_type, p.content_of_pattern.clone()))
+                        .collect::<Vec<_>>()
+                })
             });
         })
     }    
