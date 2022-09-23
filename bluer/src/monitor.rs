@@ -192,7 +192,6 @@ impl RegisteredMonitor {
                 (),
                 (),
                 |ctx, cr, ()| {
-                    println!("Release");
                     method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
                         reg.call_no_params(&reg.m.release,).await?;
                         Ok(())
@@ -204,7 +203,6 @@ impl RegisteredMonitor {
                 (),
                 (),
                 |ctx, cr, ()| {
-                    println!("Activate");
                     method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
                         reg.call_no_params(
                             &reg.m.activate, )

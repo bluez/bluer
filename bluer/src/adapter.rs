@@ -208,8 +208,8 @@ impl Adapter {
                 &self.dbus_path,
                 async move {
                     let filter = DiscoveryFilter {
-                        //duplicate_data: false,
-                        transport: DiscoveryTransport::Le,
+                        duplicate_data: false,
+                        transport: DiscoveryTransport::Auto,
                         ..Default::default()
                     };
                     self.call_method("SetDiscoveryFilter", (filter.into_dict(),)).await?;
