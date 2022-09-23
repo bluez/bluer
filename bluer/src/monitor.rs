@@ -296,6 +296,7 @@ impl RegisteredMonitor {
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = root.clone();
+        let r = Arc::new(self);
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -312,7 +313,7 @@ impl RegisteredMonitor {
             }
         });
 
-        Ok(MonitorHandle { name: root, r: Arc::new(self), _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: r, _drop_tx: drop_tx })
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
