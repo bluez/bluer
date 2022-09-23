@@ -266,7 +266,7 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    monitors: <HashMap<dbus::Path<'static>, Arc<Monitor>>>,
+    monitors: HashMap<dbus::Path<'static>, Arc<Monitor>>,
 }
 
 impl RegisteredMonitor {
@@ -305,6 +305,10 @@ impl RegisteredMonitor {
             log::trace!("Unpublishing monitor at {}", &unreg_name);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
+
+            for monitor,_ in monitors {
+                let _: Option<Self> = cr.remove(&monitor);
+            }
         });
 
         Ok(MonitorHandle { root, r: Arc::new(self), _drop_tx: drop_tx })
