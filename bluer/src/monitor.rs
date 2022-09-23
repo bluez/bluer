@@ -129,11 +129,11 @@ impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
             monitor_type: Type::OrPatterns,
-            rssi_low_threshold: Option::None,
-            rssi_high_threshold: Option::None,
-            rssi_low_timeout: Option::None,
-            rssi_high_timeout: Option::None,
-            rssi_sampling_period: Option::None,
+            rssi_low_threshold: Some(127),
+            rssi_high_threshold: Some(127),
+            rssi_low_timeout: Some(0),
+            rssi_high_timeout: Some(0),
+            rssi_sampling_period: Some(0),
             patterns: Option::None,
             release: Option::None,
             activate: Option::None,
