@@ -277,7 +277,6 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let uuid = Uuid::new_v4().as_simple().to_string();
         let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
 
         log::trace!("Publishing monitor at {}", &root);
@@ -322,10 +321,9 @@ impl RegisteredMonitor {
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
-        let uuid = Uuid::new_v4().as_simple().to_string();
-        let name = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,uuid)).unwrap();
+        let name = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
 
-        log::trace!("Publishing monitor rulo at {}", &name);
+        log::trace!("Publishing monitor rule at {}", &name);
 
         let mut m = self.monitors.lock().await;
         m.insert(name.clone(), monitor.clone());
@@ -348,7 +346,7 @@ pub struct MonitorHandle {
 impl MonitorHandle {
     pub async fn add_monitor(&mut self, monitor: Monitor) {
         let mut r = self.r.lock().await;
-        r.add_monitor(Arc::new(monitor));
+        r.add_monitor(Arc::new(monitor)).await;
     }
 }
 
