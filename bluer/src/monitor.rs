@@ -276,6 +276,7 @@ impl RegisteredMonitor {
     }
 
     pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
+        let r = Arc::new(self);
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
         let uuid = Uuid::new_v4().as_simple().to_string();
         let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
@@ -296,7 +297,7 @@ impl RegisteredMonitor {
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = root.clone();
-        let r = Arc::new(self);
+        let s = r.clone()
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -305,7 +306,7 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = self.inner.crossroads.lock().await;
+            let mut cr = s.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
             for (path,_) in &self.monitors {
@@ -313,7 +314,7 @@ impl RegisteredMonitor {
             }
         });
 
-        Ok(MonitorHandle { name: root, r: r, _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: r.clone(), _drop_tx: drop_tx })
     }
 
     pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
