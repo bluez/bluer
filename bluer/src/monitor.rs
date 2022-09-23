@@ -244,7 +244,7 @@ impl RegisteredMonitor {
 
     pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let uuid = Uuid::new_v4().as_simple();
+        let uuid = Uuid::new_v4().as_simple().to_string();
         let root = dbus::Path::new(format!("{}{}",MONITOR_PREFIX,uuid)).unwrap();
         let name = dbus::Path::new(format!("{}{}/app",MONITOR_PREFIX,uuid)).unwrap();
 
