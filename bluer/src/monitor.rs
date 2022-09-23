@@ -257,7 +257,7 @@ impl RegisteredMonitor {
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
             cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
-            cr.insert(name.clone(), [&inner.monitor_token], Arc::new(Self));
+            cr.insert(name.clone(), [&inner.monitor_token], Arc::new(self));
         }
 
         log::trace!("Registering monitor at {}", &name);
