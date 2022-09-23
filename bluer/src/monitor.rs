@@ -284,7 +284,7 @@ impl RegisteredMonitor {
         log::trace!("Publishing monitor at {}", &root);
 
         {
-            let mut cr = self.inner.crossroads.lock().await;
+            let mut cr = r.inner.crossroads.lock().await;
             let object_manager_token = cr.object_manager();
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
@@ -292,7 +292,7 @@ impl RegisteredMonitor {
         }
 
         log::trace!("Registering monitor at {}", &root);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, r.inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
