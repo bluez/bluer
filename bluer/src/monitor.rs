@@ -266,13 +266,13 @@ impl Monitor {
 }
 
 pub(crate) struct RegisteredMonitor {
-    monitors: HashMap<dbus::Path<'static>, Arc<Monitor>>,
+    monitors: Arc<HashMap<dbus::Path<'static>, Arc<Monitor>>>,
     inner: Arc<SessionInner>
 }
 
 impl RegisteredMonitor {
     pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
-        Self {monitors: HashMap::new(), inner: inner.clone()}
+        Self {monitors: Arc::new(HashMap::new()), inner: inner.clone()}
     }
 
     pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
@@ -312,7 +312,7 @@ impl RegisteredMonitor {
             let mut cr = rl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
-            for (path,_) in rl.monitors {
+            for (path,_) in rl.monitors.clone() {
                 let _: Option<Self> = cr.remove(&path);
             }
         });
