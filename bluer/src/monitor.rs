@@ -307,8 +307,7 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let sc = s.clone();
-            let sl = sc.lock().await;
+            let sl = s.lock().await;
             let mut cr = sl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
 
