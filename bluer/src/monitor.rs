@@ -341,7 +341,7 @@ pub struct MonitorHandle {
 impl MonitorHandle {
     pub async fn add_monitor(&mut self, monitor: Monitor) {
         let ra = self.r.clone();
-        if let Ok(ref r) = ra.lock().await {
+        if let Ok(ref r) = **ra.lock().await {
             r.add_monitor(Arc::new(monitor));
         }
     }
