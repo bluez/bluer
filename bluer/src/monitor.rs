@@ -313,7 +313,6 @@ impl RegisteredMonitor {
             let m = sl.monitors.clone();
             let ml = m.lock().await;
             for (path,_) in ml.iter() {
-                let _ = ml.remove(&path);
                 let _: Option<Self> = cr.remove(&path);
             }
         });
@@ -360,9 +359,9 @@ pub struct RegisteredMonitorHandle {
 }
 
 impl RegisteredMonitorHandle {
-    pub async fn add_monitor(&mut self, monitor: Monitor) {
+    pub async fn add_monitor(&mut self, monitor: Monitor) -> Result<MonitorHandle> {
         let mut r = self.r.lock().await;
-        r.add_monitor(Arc::new(monitor)).await;
+        r.add_monitor(Arc::new(monitor)).await
     }
 
     pub async fn del_monitor(&mut self, monitorHandle: MonitorHandle) {
