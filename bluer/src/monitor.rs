@@ -8,7 +8,7 @@ use dbus::{
 use strum::{Display, EnumString};
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{pin_mut, Future};
-use std::{fmt, pin::Pin, sync::Arc};
+use std::{fmt, pin::Pin, sync::Arc, collections::HashMap};
 use strum::IntoStaticStr;
 use tokio::{
     select,
@@ -129,11 +129,11 @@ impl Default for Monitor {
     fn default() -> Monitor {
         Monitor {
             monitor_type: Type::OrPatterns,
-            rssi_low_threshold: Option::None,
-            rssi_high_threshold: Option::None,
-            rssi_low_timeout: Option::None,
-            rssi_high_timeout: Option::None,
-            rssi_sampling_period: Option::None,
+            rssi_low_threshold: Some(127),
+            rssi_high_threshold: Some(127),
+            rssi_low_timeout: Some(0),
+            rssi_high_timeout: Some(0),
+            rssi_sampling_period: Some(0),
             patterns: Option::None,
             release: Option::None,
             activate: Option::None,
@@ -144,17 +144,6 @@ impl Default for Monitor {
 }
 
 impl Monitor {
-}
-
-pub(crate) struct RegisteredMonitor {
-    m: Arc<Monitor>
-}
-
-impl RegisteredMonitor {
-    pub(crate) fn new(monitor: Monitor) -> Self {
-        Self { m: Arc::new(monitor)}
-    }
-
     async fn call<A, F, R>(&self, f: &Option<impl Fn(A) -> F>, arg: A) -> ReqResult<R>
     where
         F: Future<Output = ReqResult<R>> + Send + 'static,
@@ -185,15 +174,15 @@ impl RegisteredMonitor {
         }
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<RegisteredMonitor>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<RegisteredMonitor>>| {
+    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Monitor>> {
+        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Monitor>>| {
             ib.method_with_cr_async(
                 "Release",
                 (),
                 (),
                 |ctx, cr, ()| {
-                    method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
-                        reg.call_no_params(&reg.m.release,).await?;
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
+                        reg.call_no_params(&reg.release,).await?;
                         Ok(())
                     })
                 },
@@ -203,9 +192,9 @@ impl RegisteredMonitor {
                 (),
                 (),
                 |ctx, cr, ()| {
-                    method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
                         reg.call_no_params(
-                            &reg.m.activate, )
+                            &reg.activate, )
                         .await?;
                         Ok(())
                     })
@@ -216,9 +205,9 @@ impl RegisteredMonitor {
                 ("device",),
                 (),
                 |ctx, cr, (addr,):(dbus::Path<'static>,) | {
-                    method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
+                    method_call(ctx, cr, |reg: Arc<Monitor>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
-                        reg.call(&reg.m.device_found, DeviceFound { adapter, addr },)
+                        reg.call(&reg.device_found, DeviceFound { adapter, addr },)
                         .await?;
                         Ok(())
                     })
@@ -229,10 +218,10 @@ impl RegisteredMonitor {
                 ("device",),
                 (),
                 |ctx, cr, (addr,): (dbus::Path<'static>,) | {
-                    method_call(ctx, cr, move |reg: Arc<RegisteredMonitor>| async move {
+                    method_call(ctx, cr, move |reg: Arc<Monitor>| async move {
                         let (adapter, addr) = Self::parse_device_path(&addr)?;
                         reg.call(
-                            &reg.m.device_lost,
+                            &reg.device_lost,
                             DeviceLost { adapter, addr },
                         )
                         .await?;
@@ -241,31 +230,31 @@ impl RegisteredMonitor {
                 },
             );
             cr_property!(ib,"Type",r => {
-                Some(r.m.monitor_type.to_string())
+                Some(r.monitor_type.to_string())
             });
 
             cr_property!(ib,"RSSILowThreshold",r => {
-                r.m.rssi_low_threshold
+                r.rssi_low_threshold
             });
 
             cr_property!(ib,"RSSIHighThreshold",r => {
-                r.m.rssi_high_threshold
+                r.rssi_high_threshold
             });
 
             cr_property!(ib,"RSSILowTimeout",r => {
-                r.m.rssi_low_timeout
+                r.rssi_low_timeout
             });
 
             cr_property!(ib,"RSSIHighTimeout",r => {
-                r.m.rssi_high_timeout
+                r.rssi_high_timeout
             });
 
             cr_property!(ib,"RSSISamplingPeriod",r => {
-                r.m.rssi_sampling_period
+                r.rssi_sampling_period
             });
 
             cr_property!(ib,"Patterns",r => {
-                r.m.patterns.as_ref().map(|patterns: &Vec<Pattern>| {
+                r.patterns.as_ref().map(|patterns: &Vec<Pattern>| {
                     patterns
                         .iter()
                         .map(|p| (p.start_position, p.ad_data_type, p.content_of_pattern.clone()))
@@ -274,30 +263,41 @@ impl RegisteredMonitor {
             });
         })
     }    
+}
 
-    pub(crate) async fn register(self, inner: Arc<SessionInner>, adapter_name: &str) -> Result<MonitorHandle> {
+pub(crate) struct RegisteredMonitor {
+    monitors: Arc<Mutex<HashMap<dbus::Path<'static>, Arc<Monitor>>>>,
+    inner: Arc<SessionInner>
+}
+
+impl RegisteredMonitor {
+    pub(crate) fn new(inner: Arc<SessionInner>) -> Self {
+        Self {monitors: Arc::new(Mutex::new(HashMap::new())), inner: inner.clone()}
+    }
+
+    pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let uuid = Uuid::new_v4().as_simple().to_string();
-        let root = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,uuid)).unwrap();
-        let name = dbus::Path::new(format!("{}/{}/app",MONITOR_PREFIX,uuid)).unwrap();
+        let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
 
-        log::trace!("Publishing monitor at {}", &name);
+        log::trace!("Publishing monitor at {}", &root);
 
         {
-            let mut cr = inner.crossroads.lock().await;
+            let mut cr = self.inner.crossroads.lock().await;
             let object_manager_token = cr.object_manager();
             let introspectable_token = cr.introspectable();
             let properties_token = cr.properties();
             cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], {});
-            cr.insert(name.clone(), [&inner.monitor_token], Arc::new(self));
         }
 
-        log::trace!("Registering monitor at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
+        log::trace!("Registering monitor at {}", &root);
+        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, self.inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = root.clone();
+
+        let r = Arc::new(Mutex::new(self));
+        let s = r.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
@@ -306,11 +306,30 @@ impl RegisteredMonitor {
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing monitor at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
+            let sl = s.lock().await;
+            let mut cr = sl.inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
+
+            let m = sl.monitors.clone();
+            let ml = m.lock().await;
+            for (path,_) in ml.iter() {
+                let _: Option<Self> = cr.remove(&path);
+            }
         });
 
-        Ok(MonitorHandle { name, _drop_tx: drop_tx })
+        Ok(MonitorHandle { name: root, r: r, _drop_tx: drop_tx })
+    }
+
+    pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
+        let name = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
+
+        log::trace!("Publishing monitor rule at {}", &name);
+
+        let mut m = self.monitors.lock().await;
+        m.insert(name.clone(), monitor.clone());
+
+        let mut cr = self.inner.crossroads.lock().await;
+        cr.insert(name.clone(), [&self.inner.monitor_token], monitor.clone());
     }
 }
 
@@ -319,7 +338,15 @@ impl RegisteredMonitor {
 /// Drop to unregister monitor.
 pub struct MonitorHandle {
     name: dbus::Path<'static>,
+    r: Arc<Mutex<RegisteredMonitor>>,
     _drop_tx: oneshot::Sender<()>,
+}
+
+impl MonitorHandle {
+    pub async fn add_monitor(&mut self, monitor: Monitor) {
+        let mut r = self.r.lock().await;
+        r.add_monitor(Arc::new(monitor)).await;
+    }
 }
 
 impl Drop for MonitorHandle {
