@@ -313,6 +313,7 @@ impl RegisteredMonitor {
             let m = sl.monitors.clone();
             let ml = m.lock().await;
             for (path,_) in ml.iter() {
+                let _ = ml.remove(&path);
                 let _: Option<Self> = cr.remove(&path);
             }
         });
@@ -336,10 +337,10 @@ impl RegisteredMonitor {
 
     pub async fn del_monitor(&mut self, path: dbus::Path<'static>) {
         let mut cr = self.inner.crossroads.lock().await;
-        cr.remove(&path);
+        let _: Option<Self> = cr.remove(&path);
 
         let mut m = self.monitors.lock().await;
-        m.remove(path.to_string());
+        let _ = m.remove(&path);
 
         Ok(MonitorHandle {path: name.clone()})
     }
