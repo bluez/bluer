@@ -340,8 +340,6 @@ impl RegisteredMonitor {
 
         let mut m = self.monitors.lock().await;
         let _ = m.remove(&path);
-
-        Ok(MonitorHandle {path: name.clone()})
     }
 }
 
