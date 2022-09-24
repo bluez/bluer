@@ -334,7 +334,7 @@ impl RegisteredMonitor {
         Ok(MonitorHandle {path: name.clone()})
     }
 
-    pub async fn del_monitor(&mut self, path: dbus::Path<'static>>) {
+    pub async fn del_monitor(&mut self, path: dbus::Path<'static>) {
         let mut cr = self.inner.crossroads.lock().await;
         cr.remove(&path);
 
