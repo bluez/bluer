@@ -27,7 +27,7 @@ use crate::{
     device::Device,
     gatt, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
     SingleSessionToken, SERVICE_NAME, TIMEOUT,
-    monitor::{Monitor, RegisteredMonitor, MonitorHandle},
+    monitor::{Monitor, RegisteredMonitor, RegisteredMonitorHandle},
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -110,7 +110,7 @@ impl Adapter {
         Ok(addrs)
     }
 
-    pub async fn register_monitor(&self) -> Result<MonitorHandle> {
+    pub async fn register_monitor(&self) -> Result<RegisteredMonitorHandle> {
         let reg_monitor = RegisteredMonitor::new(self.inner.clone());
         reg_monitor.register(self.name()).await
     }

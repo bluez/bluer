@@ -275,7 +275,7 @@ impl RegisteredMonitor {
         Self {monitors: Arc::new(Mutex::new(HashMap::new())), inner: inner.clone()}
     }
 
-    pub(crate) async fn register(self, adapter_name: &str) -> Result<MonitorHandle> {
+    pub(crate) async fn register(self, adapter_name: &str) -> Result<RegisteredMonitorHandle> {
         let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
         let root = dbus::Path::new(MONITOR_PREFIX).unwrap();
 
@@ -317,10 +317,10 @@ impl RegisteredMonitor {
             }
         });
 
-        Ok(MonitorHandle { name: root, r: r, _drop_tx: drop_tx })
+        Ok(RegisteredMonitorHandle { name: root, r: r, _drop_tx: drop_tx })
     }
 
-    pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) {
+    pub async fn add_monitor(&mut self, monitor: Arc<Monitor>) -> Result<MonitorHandle> {
         let name = dbus::Path::new(format!("{}/{}",MONITOR_PREFIX,Uuid::new_v4().as_simple())).unwrap();
 
         log::trace!("Publishing monitor rule at {}", &name);
@@ -330,32 +330,51 @@ impl RegisteredMonitor {
 
         let mut cr = self.inner.crossroads.lock().await;
         cr.insert(name.clone(), [&self.inner.monitor_token], monitor.clone());
+
+        Ok(MonitorHandle {path: name.clone()})
     }
+
+    pub async fn del_monitor(&mut self, path: dbus::Path<'static>) {
+        let mut cr = self.inner.crossroads.lock().await;
+        let _: Option<Self> = cr.remove(&path);
+
+        let mut m = self.monitors.lock().await;
+        let _ = m.remove(&path);
+    }
+}
+
+pub struct MonitorHandle {
+    path: dbus::Path<'static>,
 }
 
 /// Handle to registered monitor.
 ///
 /// Drop to unregister monitor.
-pub struct MonitorHandle {
+pub struct RegisteredMonitorHandle {
     name: dbus::Path<'static>,
     r: Arc<Mutex<RegisteredMonitor>>,
     _drop_tx: oneshot::Sender<()>,
 }
 
-impl MonitorHandle {
-    pub async fn add_monitor(&mut self, monitor: Monitor) {
+impl RegisteredMonitorHandle {
+    pub async fn add_monitor(&mut self, monitor: Monitor) -> Result<MonitorHandle> {
         let mut r = self.r.lock().await;
-        r.add_monitor(Arc::new(monitor)).await;
+        r.add_monitor(Arc::new(monitor)).await
+    }
+
+    pub async fn del_monitor(&mut self, monitorHandle: MonitorHandle) {
+        let mut r = self.r.lock().await;
+        r.del_monitor(monitorHandle.path).await;
     }
 }
 
-impl Drop for MonitorHandle {
+impl Drop for RegisteredMonitorHandle {
     fn drop(&mut self) {
         // required for drop order
     }
 }
 
-impl fmt::Debug for MonitorHandle {
+impl fmt::Debug for RegisteredMonitorHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "MonitorHandle {{ {} }}", &self.name)
     }
