@@ -247,21 +247,20 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    /// This registers a Bluetooth authorization agent handler.
+    /// Registers a Bluetooth authorization agent handler.
     ///
-    /// Every application can register its own agent and
-    /// for all actions triggered by that application its
-    /// agent is used.
+    /// Every application can register its own agent to use
+    /// that agent for all actions triggered by that application.
     ///
     /// It is not required by an application to register
-    /// an agent. If an application does chooses to not
+    /// an agent. If an application chooses not to
     /// register an agent, the default agent is used. This
-    /// is on most cases a good idea. Only application
+    /// is in most cases a good idea. Only applications
     /// like a pairing wizard should register their own
     /// agent.
     ///
     /// An application can only register one agent. Multiple
-    /// agents per application is not supported.
+    /// agents per application are not supported.
     ///
     /// Drop the returned [AgentHandle] to unregister the agent.
     pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
