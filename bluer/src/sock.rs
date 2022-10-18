@@ -1,6 +1,6 @@
 //! System socket base.
 
-use libc::{c_int, c_ulong, sockaddr, socklen_t, SOCK_CLOEXEC, SOCK_NONBLOCK};
+use libc::{c_int, sockaddr, socklen_t, Ioctl, SOCK_CLOEXEC, SOCK_NONBLOCK};
 use std::{
     io::{Error, ErrorKind, Result},
     mem::{size_of, MaybeUninit},
@@ -298,7 +298,7 @@ pub fn setsockopt<T>(socket: &OwnedFd, level: c_int, optname: i32, optval: &T) -
 }
 
 /// Perform an IOCTL that reads a single value.
-pub fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
+pub fn ioctl_read<T>(socket: &OwnedFd, request: Ioctl) -> Result<T> {
     let mut value: MaybeUninit<T> = MaybeUninit::uninit();
     let ret = unsafe { libc::ioctl(socket.as_raw_fd(), request, value.as_mut_ptr()) };
     if ret == -1 {
@@ -310,7 +310,7 @@ pub fn ioctl_read<T>(socket: &OwnedFd, request: c_ulong) -> Result<T> {
 
 /// Perform an IOCTL that writes a single value.
 #[allow(dead_code)]
-pub fn ioctl_write<T>(socket: &OwnedFd, request: c_ulong, value: &T) -> Result<c_int> {
+pub fn ioctl_write<T>(socket: &OwnedFd, request: Ioctl, value: &T) -> Result<c_int> {
     let ret = unsafe { libc::ioctl(socket.as_raw_fd(), request, value as *const _) };
     if ret == -1 {
         return Err(Error::last_os_error());
