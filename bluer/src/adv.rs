@@ -166,7 +166,11 @@ pub struct Advertisement {
     /// will override adapter Discoverable property.
     ///
     /// Note: This property shall not be set when Type is set
-    /// to broadcast.
+    /// to broadcast. Additionally, Types that are official
+    /// Bluetooth assigned numbers cannot be used. So for
+    /// example the Type value of 0x0a cannot be used because
+	/// it is assigned as the TX Power Level Type. But,
+	/// currently the Type 0x0c is unassigned and can be used.
     pub discoverable: Option<bool>,
     /// The discoverable timeout in seconds.
     ///
@@ -250,7 +254,7 @@ impl Advertisement {
                 Some(la.service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Data", la => {
-                Some(la.advertisting_data.clone().into_iter().collect::<HashMap<_, _>>())
+                Some(la.advertisting_data.iter().map(|(k, v)| (k.clone(), Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Discoverable", la => {
                 la.discoverable
