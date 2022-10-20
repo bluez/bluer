@@ -169,8 +169,8 @@ pub struct Advertisement {
     /// to broadcast. Additionally, Types that are official
     /// Bluetooth assigned numbers cannot be used. So for
     /// example the Type value of 0x0a cannot be used because
-	/// it is assigned as the TX Power Level Type. But,
-	/// currently the Type 0x0c is unassigned and can be used.
+    /// it is assigned as the TX Power Level Type. But,
+    /// currently the Type 0x0c is unassigned and can be used.
     pub discoverable: Option<bool>,
     /// The discoverable timeout in seconds.
     ///
