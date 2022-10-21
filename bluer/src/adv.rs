@@ -254,7 +254,7 @@ impl Advertisement {
                 Some(la.service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Data", la => {
-                Some(la.advertisting_data.iter().map(|(k, v)| (k.clone(), Variant(v.clone()))).collect::<HashMap<_, _>>())
+                Some(la.advertisting_data.iter().map(|(k, v)| (*k, Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Discoverable", la => {
                 la.discoverable
