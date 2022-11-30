@@ -912,6 +912,7 @@ impl FromStr for Modalias {
         fn do_parse(m: &str) -> Option<Modalias> {
             let ids: Vec<&str> = m.split(':').collect();
 
+            #[allow(clippy::get_first)]
             let source = ids.get(0)?;
             let vendor = Vec::from_hex(ids.get(1)?.get(1..5)?).ok()?;
             let product = Vec::from_hex(ids.get(1)?.get(6..10)?).ok()?;

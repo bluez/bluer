@@ -138,7 +138,7 @@ impl OwnedReadHalf {
 
 impl AsRef<Stream> for OwnedReadHalf {
     fn as_ref(&self) -> &Stream {
-        &*self.stream
+        &self.stream
     }
 }
 
@@ -171,7 +171,7 @@ pub struct OwnedWriteHalf {
 }
 
 impl OwnedWriteHalf {
-    /// Attempts to put the two halves of a stream back together.     
+    /// Attempts to put the two halves of a stream back together.
     pub fn reunite(self, other: OwnedReadHalf) -> std::result::Result<Stream, ReuniteError> {
         reunite(other, self)
     }
@@ -186,7 +186,7 @@ impl OwnedWriteHalf {
 
 impl AsRef<Stream> for OwnedWriteHalf {
     fn as_ref(&self) -> &Stream {
-        &*self.stream
+        &self.stream
     }
 }
 

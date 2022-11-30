@@ -1283,7 +1283,7 @@ impl Application {
 
         log::trace!("Registering application at {}", &app_path);
         let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterApplication", (app_path.clone(), PropMap::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -1370,7 +1370,7 @@ impl Profile {
 
         log::trace!("Registering profile at {}", &profile_path);
         let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy
             .method_call(MANAGER_INTERFACE, "RegisterApplication", (profile_path.clone(), PropMap::new()))
             .await?;

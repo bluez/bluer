@@ -231,7 +231,7 @@ impl Session {
     /// Enumerate connected Bluetooth adapters and return their names.
     pub async fn adapter_names(&self) -> Result<Vec<String>> {
         let mut names = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Adapter::parse_dbus_path(&path) {
                 Some(name) if interfaces.contains_key(adapter::INTERFACE) => {
                     names.push(name.to_string());

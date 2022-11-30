@@ -51,7 +51,7 @@ impl Service {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, id)?,
             adapter_name,
             device_address,
             id,
@@ -110,7 +110,7 @@ impl Service {
     /// GATT characteristics belonging to this service.
     pub async fn characteristics(&self) -> Result<Vec<Characteristic>> {
         let mut chars = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Characteristic::parse_dbus_path(&path) {
                 Some((adapter, device_address, service_id, id))
                     if adapter == *self.adapter_name
@@ -207,7 +207,7 @@ impl Characteristic {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, service_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -275,7 +275,7 @@ impl Characteristic {
     /// GATT descriptors belonging to this characteristic.
     pub async fn descriptors(&self) -> Result<Vec<Descriptor>> {
         let mut chars = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Descriptor::parse_dbus_path(&path) {
                 Some((adapter, device_address, service_id, char_id, id))
                     if adapter == *self.adapter_name
@@ -330,7 +330,7 @@ impl Characteristic {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &CharacteristicWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 
@@ -551,7 +551,7 @@ impl Descriptor {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, characteristic_id, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, service_id, characteristic_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -653,7 +653,7 @@ impl Descriptor {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &DescriptorWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 }

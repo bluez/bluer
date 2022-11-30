@@ -98,7 +98,7 @@ impl Adapter {
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Device::parse_dbus_path(&path) {
                 Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(device::INTERFACE) => {
                     addrs.push(addr)

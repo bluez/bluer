@@ -177,7 +177,6 @@ impl AsyncRead for CharacteristicReader {
             let mut mtu_read_buf = ReadBuf::uninit(&mut mtu_buf);
             ready!(this.stream.poll_read(cx, &mut mtu_read_buf))?;
             let n = mtu_read_buf.filled().len();
-            drop(mtu_read_buf);
             mtu_buf.truncate(n);
             let mut mtu_buf: Vec<u8> = mtu_buf.into_iter().map(|v| unsafe { v.assume_init() }).collect();
 

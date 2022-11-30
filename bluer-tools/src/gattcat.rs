@@ -732,7 +732,7 @@ impl DisconnectDeviceOpts {
             None => {
                 for addr in adapter.device_addresses().await? {
                     let dev = adapter.device(addr)?;
-                    let _ = dev.disconnect().await?;
+                    dev.disconnect().await?;
                 }
             }
         }
