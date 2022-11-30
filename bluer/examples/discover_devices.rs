@@ -40,7 +40,7 @@ async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
-    println!("Discovering devices using Bluetooth adapater {}\n", adapter.name());
+    println!("Discovering devices using Bluetooth adapter {}\n", adapter.name());
     adapter.set_powered(true).await?;
 
     let device_events = adapter.discover_devices().await?;
