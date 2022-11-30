@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.15.1"
+version = "0.15.2"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
