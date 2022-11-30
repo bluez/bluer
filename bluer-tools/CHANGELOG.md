@@ -4,6 +4,10 @@ All notable changes to BlueR tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.15.3 - 2022-11-30
+### Changed
+- update to BlueR 0.15.3
+
 ## 0.15.2 - 2022-11-30
 ### Changed
 - update to BlueR 0.15.2
