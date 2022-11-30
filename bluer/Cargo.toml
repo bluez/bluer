@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.15.2"
+version = "0.15.3-pre1"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
@@ -78,7 +78,7 @@ rand = "0.8"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples=examples"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [[example]]
 name = "discover_devices"
