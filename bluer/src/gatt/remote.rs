@@ -356,7 +356,12 @@ impl Characteristic {
         let stream = UnixStream::from_std(stream)?;
         // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
         let mtu = mtu.saturating_sub(5).into();
-        Ok(CharacteristicWriter { mtu, stream })
+        Ok(CharacteristicWriter {
+            adapter_name: self.adapter_name().to_string(),
+            device_address: self.device_address,
+            mtu,
+            stream,
+        })
     }
 
     /// Starts a notification or indication session from this characteristic
@@ -430,7 +435,13 @@ impl Characteristic {
         let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) };
         stream.set_nonblocking(true)?;
         let stream = UnixStream::from_std(stream)?;
-        Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
+        Ok(CharacteristicReader {
+            adapter_name: self.adapter_name().to_string(),
+            device_address: self.device_address,
+            mtu: mtu.into(),
+            stream,
+            buf: Vec::new(),
+        })
     }
 
     dbus_interface!();

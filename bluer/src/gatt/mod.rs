@@ -16,6 +16,8 @@ use tokio::{
     net::UnixStream,
 };
 
+use crate::Address;
+
 pub mod local;
 pub mod remote;
 
@@ -106,6 +108,8 @@ impl Default for WriteOp {
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicReader {
+    adapter_name: String,
+    device_address: Address,
     mtu: usize,
     #[pin]
     stream: UnixStream,
@@ -113,6 +117,16 @@ pub struct CharacteristicReader {
 }
 
 impl CharacteristicReader {
+    /// Name of adapter.
+    pub fn adapter_name(&self) -> &str {
+        &self.adapter_name
+    }
+
+    /// Address of remote device.
+    pub fn device_address(&self) -> Address {
+        self.device_address
+    }
+
     /// Maximum transmission unit.
     pub fn mtu(&self) -> usize {
         self.mtu
@@ -208,12 +222,24 @@ impl IntoRawFd for CharacteristicReader {
 #[pin_project]
 #[derive(Debug)]
 pub struct CharacteristicWriter {
+    adapter_name: String,
+    device_address: Address,
     mtu: usize,
     #[pin]
     stream: UnixStream,
 }
 
 impl CharacteristicWriter {
+    /// Name of adapter.
+    pub fn adapter_name(&self) -> &str {
+        &self.adapter_name
+    }
+
+    /// Address of remote device.
+    pub fn device_address(&self) -> Address {
+        self.device_address
+    }
+
     /// Maximum transmission unit.
     pub fn mtu(&self) -> usize {
         self.mtu
