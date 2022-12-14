@@ -507,8 +507,16 @@ define_properties!(
         /// application are exposed.
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
-            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Vec<u8>>, OPTIONAL),
-            get: (advertising_data, v => {v.to_owned()}),
+            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            get: (advertising_data, m => {
+                let mut mt: HashMap<u8, Vec<u8>> = HashMap::new();
+                for (k, v) in m {
+                    if let Some(v) = dbus::arg::cast(&v.0).cloned() {
+                        mt.insert(*k, v);
+                    }
+                }
+                mt
+            }),
         );
     }
 );
