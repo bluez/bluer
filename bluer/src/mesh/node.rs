@@ -27,6 +27,8 @@ use btmesh_models::{
     Message, Model,
 };
 
+use super::element::ElementControlHandle;
+
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";
 
 /// Interface to a Bluetooth mesh node.
@@ -65,8 +67,9 @@ impl Node {
 
     /// Send a publication originated by a local model.
     pub async fn send<'m, M: Message>(
-        &self, message: &M, path: Path<'m>, destination: u16, app_key: u16,
+        &self, message: &M, element: ElementControlHandle, destination: u16, app_key: u16,
     ) -> Result<()> {
+        let path = element.path.ok_or(Error::new(ErrorKind::Failed))?;
         let mut data: heapless::Vec<u8, 384> = heapless::Vec::new();
         message.opcode().emit(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;
         message.emit_parameters(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;

@@ -5,10 +5,10 @@
 //! [bluer/bluer]$ sudo /usr/libexec/bluetooth/bluetooth-meshd --config ${PWD}/meshd/config --storage ${PWD}/meshd/lib --debug
 //!
 //! Example send
-//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --example mesh_sensor_server -- --token dae519a06e504bd3
+//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --features=mesh --example mesh_sensor_server -- --token dae519a06e504bd3
 //!
 //! Example receive
-//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --example mesh_sensor_client -- --token 7eb48c91911361da
+//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --features=mesh --example mesh_sensor_client -- --token 7eb48c91911361da
 
 use bluer::mesh::{
     application::{Application, ApplicationMessage},
@@ -21,7 +21,6 @@ use btmesh_models::{
     Message, Model,
 };
 use clap::Parser;
-use dbus::Path;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::{
@@ -50,14 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_element_control, element_handle) = element_control(5);
     let (app_tx, app_rx) = mpsc::channel(1);
 
-    let root_path = Path::from("/mesh_server");
-    let app_path = Path::from(format!("{}/{}", root_path.clone(), "application"));
-    let element_path = Path::from(format!("{}/{}", root_path.clone(), "ele00"));
-
     let sim = Application {
-        path: app_path,
         elements: vec![Element {
-            path: element_path.clone(),
             location: None,
             models: vec![Arc::new(FromDrogue::new(BoardSensor::new()))],
             control_handle: Some(element_handle),
@@ -68,25 +61,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         properties: Default::default(),
     };
 
-    let registered = mesh.application(root_path.clone(), sim.clone()).await?;
-
     let mut node: Option<Node> = None;
+
     let (messages_tx, mut messages_rx) = mpsc::channel(10);
     let mut app_stream = ReceiverStream::new(app_rx);
 
-    match args.token {
+    let registered = match args.token {
         Some(token) => {
             println!("Attaching with token {}", token);
-            node = Some(mesh.attach(root_path.clone(), &token).await?);
+            let (registered, n) = mesh.attach(sim.clone(), &token).await?;
             start_sending(messages_tx.clone());
+            node = Some(n);
+            registered
         }
         None => {
             let device_id = Uuid::new_v4();
             println!("Joining device: {}", device_id.as_simple());
 
-            mesh.join(root_path.clone(), device_id).await?;
+            mesh.join(sim.clone(), device_id).await?
         }
-    }
+    };
 
     println!("Sensor server ready. Press enter to send a message. Press Ctrl+C to quit");
 
@@ -97,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             Some(message) = messages_rx.recv() => {
                 if let Some(ref n) = node {
-                    n.send::<BoardSensorMessage>(&message, element_path.clone(), 0x00bc as u16, 0 as u16).await?;
+                    n.send::<BoardSensorMessage>(&message, registered.elements[0].clone(), 0x00bc as u16, 0 as u16).await?;
                 }
             },
             app_evt = app_stream.next() => {
@@ -109,7 +103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 //wait a bit for configuration to take effect
                                 sleep(Duration::from_secs(5)).await;
                                 println!("Attaching");
-                                node = Some(mesh.attach(root_path.clone(), &format!("{:016x}", token)).await?);
+                                let (_, n) = mesh.attach(sim.clone(), &format!("{:016x}", token)).await?;
+                                node = Some(n);
                                 start_sending(messages_tx.clone());
                             },
                             ApplicationMessage::JoinFailed(reason) => {

@@ -35,30 +35,36 @@ impl Network {
     }
 
     /// Create mesh application
-    pub async fn application(&self, root_path: Path<'static>, app: Application) -> Result<ApplicationHandle> {
+    async fn application(&self, app: Application) -> Result<ApplicationHandle> {
         let reg = RegisteredApplication::new(self.inner.clone(), app);
 
-        reg.register(root_path, self.inner.clone()).await
+        reg.register(self.inner.clone()).await
     }
 
     /// Join mesh network
-    pub async fn join(&self, path: Path<'_>, uuid: Uuid) -> Result<()> {
-        self.call_method("Join", (path, uuid.as_bytes().to_vec())).await
+    pub async fn join(&self, app: Application, uuid: Uuid) -> Result<ApplicationHandle> {
+        let handle = self.application(app).await?;
+
+        self.call_method("Join", (handle.name.clone(), uuid.as_bytes().to_vec())).await?;
+
+        Ok(handle)
     }
 
     /// Attach to mesh network
-    pub async fn attach(&self, path: Path<'_>, token: &str) -> Result<Node> {
+    pub async fn attach(&self, app: Application, token: &str) -> Result<(ApplicationHandle, Node)> {
         let token_int = u64::from_str_radix(token, 16)
             .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidValue)))?;
 
+        let handle = self.application(app).await?;
+
         let (node_path, config): (Path<'static>, Vec<(u8, Vec<(u16, ElementConfig)>)>) =
-            self.call_method("Attach", (path, token_int)).await?;
+            self.call_method("Attach", (handle.name.clone(), token_int)).await?;
 
         log::info!("Attached app to {:?} with elements config {:?}", node_path, config);
 
         let node = Node::new(node_path.clone(), self.inner.clone()).await?;
 
-        Ok(node)
+        Ok((handle, node))
     }
 
     /// Cancel provisioning request
@@ -74,7 +80,7 @@ impl Network {
         self.call_method("Leave", (token_int,)).await
     }
 
-    /// Temprorary debug method to print the state of mesh
+    /// Temporary debug method to print the state of mesh
     pub async fn print_dbus_objects(&self) -> Result<()> {
         for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
             println!("{}", path);
