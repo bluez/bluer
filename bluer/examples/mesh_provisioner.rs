@@ -5,10 +5,10 @@
 //! [bluer/bluer]$ sudo /usr/libexec/bluetooth/bluetooth-meshd --config ${PWD}/meshd/config --storage ${PWD}/meshd/lib --debug
 //!
 //! To demo device join, run client or server without a token
-//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --example mesh_sensor_client
+//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --features=mesh --example mesh_sensor_client
 //!
 //! Example provisioner
-//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --example mesh_provisioner -- --token 84783e12f11c4dcd --uuid 4bd9876a3e4844bbb4339ef42f614f1f
+//! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --features=mesh --example mesh_provisioner -- --token 84783e12f11c4dcd --uuid 4bd9876a3e4844bbb4339ef42f614f1f
 
 use bluer::{
     mesh::{
@@ -25,7 +25,6 @@ use btmesh_models::{
     Message, Model,
 };
 use clap::Parser;
-use dbus::Path;
 use futures::{pin_mut, StreamExt};
 use std::{sync::Arc, time::Duration};
 use tokio::{signal, sync::mpsc, time::sleep};
@@ -51,16 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (element_control, element_handle) = element_control(5);
     let (app_tx, _app_rx) = mpsc::channel(1);
 
-    let root_path = Path::from("/mesh/cfgclient");
-    let app_path = Path::from(format!("{}/{}", root_path.clone(), "application"));
-    let element_path = Path::from(format!("{}/{}", root_path.clone(), "ele00"));
-
     let (prov_tx, prov_rx) = mpsc::channel(1);
 
     let sim = Application {
-        path: app_path,
         elements: vec![Element {
-            path: element_path.clone(),
             location: None,
             models: vec![
                 Arc::new(FromDrogue::new(ConfigurationServer::default())),
@@ -77,9 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         properties: Default::default(),
     };
 
-    let registered = mesh.application(root_path.clone(), sim).await?;
-
-    let node = mesh.attach(root_path.clone(), &args.token).await?;
+    let (registered, node) = mesh.attach(sim.clone(), &args.token).await?;
 
     node.management.add_node(Uuid::parse_str(&args.uuid)?).await?;
 
@@ -97,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Successfully added node {:?} to the address {:#04x} with {:?} elements", uuid, unicast, count);
 
                                 sleep(Duration::from_secs(1)).await;
-                                node.add_app_key(element_path.clone(), unicast, 0, 0, false).await?;
+                                node.add_app_key(registered.elements[0].clone(), unicast, 0, 0, false).await?;
 
                                 // example composition get
                                 // let message = ConfigurationMessage::CompositionData(CompositionDataMessage::Get(0));
@@ -159,6 +150,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         }
     }
+
+    // Example agent function
+    // pub fn display_numeric(req: DisplayNumeric) -> ReqResult<()> {
+    //     println!("Enter '{:?}' on the remote device!", req.number);
+    //     Ok(())
+    // }
 
     println!("Shutting down");
     drop(registered);

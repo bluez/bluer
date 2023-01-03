@@ -113,8 +113,9 @@ impl Node {
 
     /// Send add or update network key originated by the local configuration client to a remote configuration server.
     pub async fn add_app_key<'m>(
-        &self, path: Path<'m>, destination: u16, app_key: u16, net_key: u16, update: bool,
+        &self, element: ElementControlHandle, destination: u16, app_key: u16, net_key: u16, update: bool,
     ) -> Result<()> {
+        let path = element.path.ok_or(Error::new(ErrorKind::Failed))?;
         log::trace!("Adding app key: {:?} {:?} {:?} {:?} {:?}", path, destination, app_key, net_key, update);
         self.call_method("AddAppKey", (path, destination, app_key, net_key, update)).await?;
         Ok(())
