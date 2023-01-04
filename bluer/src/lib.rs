@@ -1,6 +1,4 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(feature = "mesh", feature(type_alias_impl_trait))]
-#![cfg_attr(feature = "mesh", feature(associated_type_defaults))]
 
 //! # BlueR — Official BlueZ Bindings for Rust
 //!
