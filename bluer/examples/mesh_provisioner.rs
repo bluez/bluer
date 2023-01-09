@@ -56,8 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         elements: vec![Element {
             location: None,
             models: vec![
-                Arc::new(FromDrogue::new(ConfigurationServer::default())),
-                Arc::new(FromDrogue::new(ConfigurationClient::default())),
+                Arc::new(BluetoothMeshModel::new(ConfigurationServer::default())),
+                Arc::new(BluetoothMeshModel::new(ConfigurationClient::default())),
             ],
             control_handle: Some(element_handle),
         }],

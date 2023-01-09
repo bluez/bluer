@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sim = Application {
         elements: vec![Element {
             location: None,
-            models: vec![Arc::new(FromDrogue::new(BoardSensor::new()))],
+            models: vec![Arc::new(BluetoothMeshModel::new(BoardSensor::new()))],
             control_handle: Some(element_handle),
         }],
         events_tx: app_tx,

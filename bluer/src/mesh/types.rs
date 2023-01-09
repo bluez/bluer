@@ -51,24 +51,24 @@ where
 
 /// Converting Drogue to local types
 #[derive(Debug)]
-pub struct FromDrogue<M>
+pub struct BluetoothMeshModel<M>
 where
     M: Debug,
 {
     _m: core::marker::PhantomData<M>,
 }
 
-impl<M: Debug> FromDrogue<M> {
+impl<M: Debug> BluetoothMeshModel<M> {
     /// New model
     pub fn new(_m: M) -> Self {
         Self { _m: core::marker::PhantomData }
     }
 }
 
-unsafe impl<M> Sync for FromDrogue<M> where M: Debug {}
-unsafe impl<M> Send for FromDrogue<M> where M: Debug {}
+unsafe impl<M> Sync for BluetoothMeshModel<M> where M: Debug {}
+unsafe impl<M> Send for BluetoothMeshModel<M> where M: Debug {}
 
-impl<M> Model for FromDrogue<M>
+impl<M> Model for BluetoothMeshModel<M>
 where
     M: ConcreteModel + Debug,
 {
