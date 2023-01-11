@@ -64,6 +64,7 @@ custom_debug = { version = "0.5", optional = true }
 displaydoc = { version = "0.2", optional = true }
 log = "0.4"
 serde = { version = "1", features = ["derive"], optional = true }
+macaddr = "1"
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }

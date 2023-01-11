@@ -92,6 +92,7 @@ use dbus_crossroads::{Context, Crossroads};
 use futures::Future;
 #[cfg(feature = "bluetoothd")]
 use hex::FromHex;
+use macaddr::MacAddr6;
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
@@ -805,6 +806,18 @@ impl From<Address> for sys::bdaddr_t {
     fn from(mut addr: Address) -> Self {
         addr.0.reverse();
         sys::bdaddr_t { b: addr.0 }
+    }
+}
+
+impl From<MacAddr6> for Address {
+    fn from(addr: MacAddr6) -> Self {
+        Self(addr.into_array())
+    }
+}
+
+impl From<Address> for MacAddr6 {
+    fn from(addr: Address) -> Self {
+        addr.0.into()
     }
 }
 
