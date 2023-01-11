@@ -4,6 +4,10 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.15.5 - 2023-01-11
+### Added
+- Convert Bluetooth address to and from MacAddr6.
+
 ## 0.15.4 - 2022-12-14
 ### Added
 - expose device making request in GATT server
