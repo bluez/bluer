@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (app_tx, app_rx) = mpsc::channel(1);
 
     let sim = Application {
+        device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
             models: vec![Arc::new(BluetoothMeshModel::new(SensorClient::<SensorModel, 1, 1>::new()))],
@@ -56,17 +57,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         properties: Default::default(),
     };
 
-    let registered = match args.token {
+    let registered = mesh.application(sim.clone()).await?;
+
+    match args.token {
         Some(token) => {
             println!("Attaching with {}", token);
-            let (registered, _node) = mesh.attach(sim.clone(), &token).await?;
-            registered
+            Some(mesh.attach(sim.clone(), &token).await?);
         }
         None => {
-            let device_id = Uuid::new_v4();
-            println!("Joining device: {}", device_id.as_simple());
+            println!("Joining device: {}", sim.device_id.as_simple());
 
-            mesh.join(sim.clone(), device_id).await?
+            mesh.join(sim.clone()).await?;
         }
     };
 

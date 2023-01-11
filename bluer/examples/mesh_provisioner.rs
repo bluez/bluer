@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (prov_tx, prov_rx) = mpsc::channel(1);
 
     let sim = Application {
+        device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
             models: vec![
@@ -70,7 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         properties: Default::default(),
     };
 
-    let (registered, node) = mesh.attach(sim.clone(), &args.token).await?;
+    let registered = mesh.application(sim.clone()).await?;
+    let node = mesh.attach(sim.clone(), &args.token).await?;
 
     node.management.add_node(Uuid::parse_str(&args.uuid)?).await?;
 
@@ -88,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Successfully added node {:?} to the address {:#04x} with {:?} elements", uuid, unicast, count);
 
                                 sleep(Duration::from_secs(1)).await;
-                                node.add_app_key(registered.elements[0].clone(), unicast, 0, 0, false).await?;
+                                node.add_app_key(0, unicast, 0, 0, false).await?;
 
                                 // example composition get
                                 // let message = ConfigurationMessage::CompositionData(CompositionDataMessage::Get(0));

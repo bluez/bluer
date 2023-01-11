@@ -11,7 +11,7 @@ use dbus::{
 };
 
 use crate::{
-    mesh::{management::Management, SERVICE_NAME, TIMEOUT},
+    mesh::{application::Application, management::Management, SERVICE_NAME, TIMEOUT},
     Error, ErrorKind,
 };
 use btmesh_models::{
@@ -27,8 +27,6 @@ use btmesh_models::{
     Message, Model,
 };
 
-use super::element::ElementControlHandle;
-
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";
 
 /// Interface to a Bluetooth mesh node.
@@ -36,18 +34,21 @@ pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";
 pub struct Node {
     inner: Arc<SessionInner>,
     path: Path<'static>,
-    /// Management interface for the node
+    /// Management interface for the node.
     pub management: Management,
+    /// Application that this node represents.
+    app: Application,
 }
 
 impl Node {
-    pub(crate) async fn new(path: Path<'static>, inner: Arc<SessionInner>) -> Result<Self> {
+    pub(crate) async fn new(path: Path<'static>, app: Application, inner: Arc<SessionInner>) -> Result<Self> {
         let management = Management::new(path.clone(), inner.clone()).await?;
-        Ok(Self { inner, path, management })
+        Ok(Self { inner, path, management, app })
     }
 
     /// Publish message to the mesh
-    pub async fn publish<'m, M: Model>(&self, message: M::Message, path: Path<'m>) -> Result<()> {
+    pub async fn publish<'m, M: Model>(&self, message: M::Message, element_idx: usize) -> Result<()> {
+        let path = self.app.element_dbus_path(element_idx)?;
         let model_id = match M::IDENTIFIER {
             ModelIdentifier::SIG(id) => id,
             ModelIdentifier::Vendor(_, id) => id,
@@ -67,9 +68,10 @@ impl Node {
 
     /// Send a publication originated by a local model.
     pub async fn send<'m, M: Message>(
-        &self, message: &M, element: ElementControlHandle, destination: u16, app_key: u16,
+        &self, message: &M, element_idx: usize, destination: u16, app_key: u16,
     ) -> Result<()> {
-        let path = element.path.ok_or(Error::new(ErrorKind::Failed))?;
+        //let path = element.path.ok_or(Error::new(ErrorKind::Failed))?;
+        let path = self.app.element_dbus_path(element_idx)?;
         let mut data: heapless::Vec<u8, 384> = heapless::Vec::new();
         message.opcode().emit(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;
         message.emit_parameters(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;
@@ -90,8 +92,9 @@ impl Node {
 
     /// Send a message originated by a local model encoded with the device key of the remote node.
     pub async fn dev_key_send<'m, M: Message>(
-        &self, message: &M, path: Path<'m>, destination: u16, remote: bool, app_key: u16,
+        &self, message: &M, element_idx: usize, destination: u16, remote: bool, app_key: u16,
     ) -> Result<()> {
+        let path = self.app.element_dbus_path(element_idx)?;
         let mut data: heapless::Vec<u8, 384> = heapless::Vec::new();
         message.opcode().emit(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;
         message.emit_parameters(&mut data).map_err(|_| Error::new(ErrorKind::Failed))?;
@@ -113,9 +116,9 @@ impl Node {
 
     /// Send add or update network key originated by the local configuration client to a remote configuration server.
     pub async fn add_app_key<'m>(
-        &self, element: ElementControlHandle, destination: u16, app_key: u16, net_key: u16, update: bool,
+        &self, element_idx: usize, destination: u16, app_key: u16, net_key: u16, update: bool,
     ) -> Result<()> {
-        let path = element.path.ok_or(Error::new(ErrorKind::Failed))?;
+        let path = self.app.element_dbus_path(element_idx)?;
         log::trace!("Adding app key: {:?} {:?} {:?} {:?} {:?}", path, destination, app_key, net_key, update);
         self.call_method("AddAppKey", (path, destination, app_key, net_key, update)).await?;
         Ok(())
@@ -134,17 +137,17 @@ impl Node {
 
     /// Binds application key to the model.
     pub async fn bind<'m>(
-        &self, element_path: Path<'m>, address: u16, app_key: u16, model: ModelIdentifier,
+        &self, element_idx: usize, address: u16, app_key: u16, model: ModelIdentifier,
     ) -> Result<()> {
         let message = Self::bind_create(address, app_key, model)?;
-        self.dev_key_send(&message, element_path.clone(), address, true, 0 as u16).await?;
+        self.dev_key_send(&message, element_idx, address, true, 0 as u16).await?;
         Ok(())
     }
 
     /// Reset a node.
-    pub async fn reset<'m>(&self, element_path: Path<'m>, address: u16) -> Result<()> {
+    pub async fn reset<'m>(&self, element_idx: usize, address: u16) -> Result<()> {
         let message = ConfigurationMessage::from(NodeResetMessage::Reset);
-        self.dev_key_send(&message, element_path.clone(), address, true, 0 as u16).await?;
+        self.dev_key_send(&message, element_idx, address, true, 0 as u16).await?;
         Ok(())
     }
 
@@ -168,11 +171,11 @@ impl Node {
 
     /// Sets publication to the model.
     pub async fn pub_set<'m>(
-        &self, element_path: Path<'m>, address: u16, pub_address: PublishAddress, app_key: u16,
+        &self, element_idx: usize, address: u16, pub_address: PublishAddress, app_key: u16,
         publish_period: PublishPeriod, rxt: PublishRetransmit, model: ModelIdentifier,
     ) -> Result<()> {
         let message = Self::pub_set_create(address, pub_address, app_key, publish_period, rxt, model)?;
-        self.dev_key_send(&message, element_path.clone(), address, true, 0 as u16).await?;
+        self.dev_key_send(&message, element_idx, address, true, 0 as u16).await?;
         Ok(())
     }
 

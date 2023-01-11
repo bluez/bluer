@@ -50,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (app_tx, app_rx) = mpsc::channel(1);
 
     let sim = Application {
+        device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
             models: vec![Arc::new(BluetoothMeshModel::new(BoardSensor::new()))],
@@ -61,24 +62,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         properties: Default::default(),
     };
 
+    let registered = mesh.application(sim.clone()).await?;
     let mut node: Option<Node> = None;
 
     let (messages_tx, mut messages_rx) = mpsc::channel(10);
     let mut app_stream = ReceiverStream::new(app_rx);
 
-    let registered = match args.token {
+    match args.token {
         Some(token) => {
             println!("Attaching with token {}", token);
-            let (registered, n) = mesh.attach(sim.clone(), &token).await?;
+            node = Some(mesh.attach(sim.clone(), &token).await?);
             start_sending(messages_tx.clone());
-            node = Some(n);
-            registered
         }
         None => {
-            let device_id = Uuid::new_v4();
-            println!("Joining device: {}", device_id.as_simple());
+            println!("Joining device: {}", sim.device_id.as_simple());
 
-            mesh.join(sim.clone(), device_id).await?
+            mesh.join(sim.clone()).await?;
         }
     };
 
@@ -91,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             Some(message) = messages_rx.recv() => {
                 if let Some(ref n) = node {
-                    n.send::<BoardSensorMessage>(&message, registered.elements[0].clone(), 0x00bc as u16, 0 as u16).await?;
+                    n.send::<BoardSensorMessage>(&message, 0, 0x00bc as u16, 0 as u16).await?;
                 }
             },
             app_evt = app_stream.next() => {
@@ -103,8 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 //wait a bit for configuration to take effect
                                 sleep(Duration::from_secs(5)).await;
                                 println!("Attaching");
-                                let (_, n) = mesh.attach(sim.clone(), &format!("{:016x}", token)).await?;
-                                node = Some(n);
+                                node = Some(mesh.attach(sim.clone(), &format!("{:016x}", token)).await?);
                                 start_sending(messages_tx.clone());
                             },
                             ApplicationMessage::JoinFailed(reason) => {

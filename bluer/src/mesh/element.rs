@@ -27,8 +27,6 @@ pub(crate) type ElementConfig = HashMap<String, Variant<Box<dyn RefArg + 'static
 /// Interface to a Bluetooth mesh element interface.
 #[derive(Debug, Clone)]
 pub struct Element {
-    /// Element d-bus path
-    // pub path: Path<'static>,
     /// Element location
     pub location: Option<u16>,
     /// Element models
@@ -214,12 +212,11 @@ impl Stream for ElementControl {
 #[derive(Clone)]
 pub struct ElementControlHandle {
     messages_tx: mpsc::Sender<ElementMessage>,
-    pub(crate) path: Option<dbus::Path<'static>>,
 }
 
 impl Default for ElementControlHandle {
     fn default() -> Self {
-        Self { messages_tx: mpsc::channel(1).0, path: None }
+        Self { messages_tx: mpsc::channel(1).0 }
     }
 }
 
@@ -236,7 +233,7 @@ pub fn element_control(size: usize) -> (ElementControl, ElementControlHandle) {
     let (messages_tx, messages_rx) = mpsc::channel(size);
     (
         ElementControl { messages_rx: ReceiverStream::new(messages_rx) },
-        ElementControlHandle { messages_tx, path: None },
+        ElementControlHandle { messages_tx },
     )
 }
 

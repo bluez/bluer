@@ -18,8 +18,8 @@ use futures::channel::oneshot;
 use std::{fmt, mem::take};
 
 use super::{
-    agent::{RegisteredProvisionAgent, ProvisionAgent},
-    provisioner::{Provisioner, RegisteredProvisioner}, element::ElementControlHandle,
+    agent::{ProvisionAgent, RegisteredProvisionAgent},
+    provisioner::{Provisioner, RegisteredProvisioner},
 };
 use uuid::Uuid;
 
@@ -29,6 +29,8 @@ pub(crate) const MESH_APP_PREFIX: &str = publish_path!("mesh/app/");
 /// Definition of mesh application.
 #[derive(Clone)]
 pub struct Application {
+    /// Device ID
+    pub device_id: Uuid,
     /// Application elements
     pub elements: Vec<Element>,
     /// Provisioner
@@ -39,6 +41,29 @@ pub struct Application {
     pub agent: ProvisionAgent,
     /// Application properties
     pub properties: Properties,
+}
+
+impl Application {
+
+    fn root_path(&self) -> String {
+        format!("{}{}", MESH_APP_PREFIX, self.device_id.as_simple())
+    }
+
+    pub(crate) fn dbus_path(&self) -> Result<Path<'static>> {
+        Ok(Path::new(self.root_path()).unwrap())
+    }
+
+    pub(crate) fn app_dbus_path(&self) -> Result<Path<'static>> {
+        let app_path = format!("{}/application", self.root_path());
+        Ok(Path::new(app_path).unwrap())
+    }
+
+
+    pub(crate) fn element_dbus_path(&self, element_idx: usize) -> Result<Path<'static>> {
+        let element_path = format!("{}/ele{}", self.root_path(), element_idx);
+        Ok(Path::new(element_path).unwrap())
+    }
+
 }
 
 /// Application properties
@@ -55,7 +80,7 @@ pub struct Properties {
 impl Default for Properties {
     fn default() -> Self {
         Self {
-            company: 0x05f1 as u16, /// The Linux Foundation
+            company: 0x05f1 as u16, // The Linux Foundation
             product: 0x0001 as u16,
             version: 0x0001 as u16,
         }
@@ -128,16 +153,11 @@ impl RegisteredApplication {
         })
     }
 
-    pub(crate) async fn register(
-        mut self, inner: Arc<SessionInner>,
-    ) -> Result<ApplicationHandle> {
-        let root_path = format!("{}{}", MESH_APP_PREFIX, Uuid::new_v4().as_simple());
-        let root_path = Path::new(root_path).unwrap();
+    pub(crate) async fn register(mut self, inner: Arc<SessionInner>) -> Result<ApplicationHandle> {
+        let root_path = self.app.dbus_path()?;
         log::trace!("Publishing application at {}", &root_path);
-        let mut handles = vec![];
 
         {
-
             let mut cr = inner.crossroads.lock().await;
 
             let elements = take(&mut self.app.elements);
@@ -154,8 +174,7 @@ impl RegisteredApplication {
             );
 
             // register application
-            let app_path = format!("{}/application", &root_path);
-            let app_path = dbus::Path::new(app_path).unwrap();
+            let app_path = self.app.app_dbus_path()?;
             match self.clone().provisioner {
                 Some(_) => cr.insert(
                     app_path.clone(),
@@ -166,17 +185,9 @@ impl RegisteredApplication {
             }
 
             for (element_idx, element) in elements.into_iter().enumerate() {
-                let element_path = format!("{}/ele{}", root_path.clone(), element_idx);
-                let element_path = Path::new(element_path).unwrap();
+                let element_path = self.app.element_dbus_path(element_idx)?;
                 let reg_element = RegisteredElement::new(inner.clone(), element.clone(), element_idx as u8);
                 cr.insert(element_path.clone(), &[inner.element_token], Arc::new(reg_element));
-                match element.control_handle {
-                    Some(mut handle) => {
-                        handle.path = Some(element_path);
-                        handles.push(handle);
-                    },
-                    None => {}
-                }
             }
         }
 
@@ -190,7 +201,7 @@ impl RegisteredApplication {
             let _: Option<Self> = cr.remove(&path_unreg);
         });
 
-        Ok(ApplicationHandle { name: root_path, elements: handles, _drop_tx: drop_tx })
+        Ok(ApplicationHandle { name: root_path, _drop_tx: drop_tx })
     }
 }
 
@@ -199,8 +210,6 @@ impl RegisteredApplication {
 /// Drop this handle to unpublish.
 pub struct ApplicationHandle {
     pub(crate) name: dbus::Path<'static>,
-    /// Handles of application elements
-    pub elements: Vec<ElementControlHandle>,
     _drop_tx: oneshot::Sender<()>,
 }
 
@@ -219,7 +228,7 @@ impl fmt::Debug for ApplicationHandle {
 #[derive(Clone, Debug)]
 ///Messages sent by provisioner
 pub enum ApplicationMessage {
-    /// Join node succeded
+    /// Join node succeeded
     JoinComplete(u64),
     /// Join node failed
     JoinFailed(String),

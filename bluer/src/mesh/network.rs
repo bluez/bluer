@@ -15,7 +15,6 @@ use crate::mesh::{
     node::Node,
     PATH, SERVICE_NAME, TIMEOUT,
 };
-use uuid::Uuid;
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
 
@@ -35,36 +34,30 @@ impl Network {
     }
 
     /// Create mesh application
-    async fn application(&self, app: Application) -> Result<ApplicationHandle> {
+    pub async fn application(&self, app: Application) -> Result<ApplicationHandle> {
         let reg = RegisteredApplication::new(self.inner.clone(), app);
 
         reg.register(self.inner.clone()).await
     }
 
     /// Join mesh network
-    pub async fn join(&self, app: Application, uuid: Uuid) -> Result<ApplicationHandle> {
-        let handle = self.application(app).await?;
-
-        self.call_method("Join", (handle.name.clone(), uuid.as_bytes().to_vec())).await?;
-
-        Ok(handle)
+    pub async fn join(&self, app: Application) -> Result<()> {
+        self.call_method("Join", (app.dbus_path().unwrap(), app.device_id.as_bytes().to_vec())).await
     }
 
     /// Attach to mesh network
-    pub async fn attach(&self, app: Application, token: &str) -> Result<(ApplicationHandle, Node)> {
+    pub async fn attach(&self, app: Application, token: &str) -> Result<Node> {
         let token_int = u64::from_str_radix(token, 16)
             .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidValue)))?;
 
-        let handle = self.application(app).await?;
-
         let (node_path, config): (Path<'static>, Vec<(u8, Vec<(u16, ElementConfig)>)>) =
-            self.call_method("Attach", (handle.name.clone(), token_int)).await?;
+            self.call_method("Attach", (app.dbus_path().unwrap(), token_int)).await?;
 
         log::info!("Attached app to {:?} with elements config {:?}", node_path, config);
 
-        let node = Node::new(node_path.clone(), self.inner.clone()).await?;
+        let node = Node::new(node_path.clone(), app, self.inner.clone()).await?;
 
-        Ok((handle, node))
+        Ok(node)
     }
 
     /// Cancel provisioning request
