@@ -875,7 +875,7 @@ impl<'de> serde::Deserialize<'de> for Address {
     {
         use serde::de::Error;
         let s = String::deserialize(deserializer)?;
-        s.parse().map_err(|err| D::Error::custom(&err))
+        s.parse().map_err(D::Error::custom)
     }
 }
 

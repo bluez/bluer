@@ -409,7 +409,7 @@ impl Event {
                                     if let Some(parent_subs) = subs.get_mut(&*parent) {
                                         let evt = Self::ObjectAdded {
                                             object,
-                                            interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                                            interfaces: interfaces.into_keys().collect(),
                                         };
                                         log::trace!("Event: {:?}", &evt);
                                         parent_subs.retain(|sub| {

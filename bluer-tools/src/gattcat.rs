@@ -1140,8 +1140,8 @@ async fn io_loop(
             (_, Some(wh)) => wh.mtu(),
             _ => 100,
         };
-        let mut recv_buf = BytesMut::with_capacity(mtu as usize);
-        let mut pin_buf = BytesMut::with_capacity(mtu as usize);
+        let mut recv_buf = BytesMut::with_capacity(mtu);
+        let mut pin_buf = BytesMut::with_capacity(mtu);
 
         select! {
             res = async {
@@ -1520,8 +1520,8 @@ async fn io_loop_serve(
             (_, Some(wh)) => wh.mtu(),
             _ => 100,
         };
-        let mut recv_buf = BytesMut::with_capacity(mtu as usize);
-        let mut pin_buf = BytesMut::with_capacity(mtu as usize);
+        let mut recv_buf = BytesMut::with_capacity(mtu);
+        let mut pin_buf = BytesMut::with_capacity(mtu);
 
         let wh_present = wh.is_some();
         select! {
