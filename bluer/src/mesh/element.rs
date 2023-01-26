@@ -5,6 +5,7 @@ use btmesh_common::{
     address::{Address, UnicastAddress},
     crypto::application::Aid,
     opcode::Opcode,
+    ModelIdentifier,
 };
 use dbus::{
     arg::{ArgType, RefArg, Variant},
@@ -12,7 +13,6 @@ use dbus::{
 };
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 
-pub use super::types::*;
 use crate::mesh::{ReqError, PATH, SERVICE_NAME, TIMEOUT};
 use futures::Stream;
 use pin_project::pin_project;
@@ -30,7 +30,7 @@ pub struct Element {
     /// Element location
     pub location: Option<u16>,
     /// Element models
-    pub models: Vec<Arc<dyn Model + 'static>>,
+    pub models: Vec<ModelIdentifier>,
     /// Control handle for element once it has been registered.
     pub control_handle: Option<ElementControlHandle>,
 }
@@ -166,8 +166,8 @@ impl RegisteredElement {
             cr_property!(ib, "Models", reg => {
                 let mut mt: Vec<(u16, ElementConfig)> = vec![];
                 for model in &reg.element.models {
-                    if let ModelIdentifier::SIG(id) = model.identifier() {
-                        mt.push((id, HashMap::new()));
+                    if let ModelIdentifier::SIG(id) = model {
+                        mt.push((*id, HashMap::new()));
                     }
                 }
                 Some(mt)
@@ -175,8 +175,8 @@ impl RegisteredElement {
             cr_property!(ib, "VendorModels", reg => {
                 let mut mt: Vec<(u16, u16, ElementConfig)> = vec![];
                 for model in &reg.element.models {
-                    if let ModelIdentifier::Vendor(vid, id) = model.identifier() {
-                        mt.push((vid.0, id, HashMap::new()));
+                    if let ModelIdentifier::Vendor(vid, id) = model {
+                        mt.push((vid.0, *id, HashMap::new()));
                     }
                 }
                 Some(mt)
@@ -231,10 +231,7 @@ impl fmt::Debug for ElementControlHandle {
 /// Keep the [ElementControl] and store the [ElementControlHandle] in [Element::control_handle].
 pub fn element_control(size: usize) -> (ElementControl, ElementControlHandle) {
     let (messages_tx, messages_rx) = mpsc::channel(size);
-    (
-        ElementControl { messages_rx: ReceiverStream::new(messages_rx) },
-        ElementControlHandle { messages_tx },
-    )
+    (ElementControl { messages_rx: ReceiverStream::new(messages_rx) }, ElementControlHandle { messages_tx })
 }
 
 #[derive(Clone, Debug)]

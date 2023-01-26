@@ -1,4 +1,3 @@
-#![feature(generic_associated_types)]
 //! Attach and send/receive BT Mesh messages
 //!
 //! Example meshd
@@ -14,14 +13,16 @@ use bluer::mesh::{
     application::{Application, ApplicationMessage},
     element::*,
 };
-use btmesh_common::{opcode::Opcode, CompanyIdentifier, ParseError};
+use btmesh_common::{opcode::Opcode, CompanyIdentifier, InsufficientBuffer, ModelIdentifier, ParseError};
 use btmesh_models::{
-    sensor::{PropertyId, SensorClient, SensorConfig, SensorData, SensorDescriptor, SensorMessage},
+    sensor::{
+        PropertyId, SensorClient, SensorConfig, SensorData, SensorDescriptor, SensorMessage, SENSOR_CLIENT,
+    },
     Message, Model,
 };
 use clap::Parser;
 use futures::{pin_mut, StreamExt};
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use tokio::{signal, sync::mpsc, time::sleep};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
@@ -48,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
-            models: vec![Arc::new(BluetoothMeshModel::new(SensorClient::<SensorModel, 1, 1>::new()))],
+            models: vec![SENSOR_CLIENT],
             control_handle: Some(element_handle),
         }],
         events_tx: app_tx,

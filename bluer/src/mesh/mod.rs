@@ -7,8 +7,6 @@ pub mod management;
 pub mod network;
 pub mod node;
 pub mod provisioner;
-mod types;
-pub use types::*;
 
 use crate::{Result, ERR_PREFIX};
 use dbus::{
