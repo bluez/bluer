@@ -20,13 +20,13 @@ use bluer::{
 };
 use btmesh_models::{
     foundation::configuration::{
-        app_key::AppKeyMessage, ConfigurationClient, ConfigurationMessage, ConfigurationServer,
+        app_key::AppKeyMessage, ConfigurationMessage, ConfigurationServer, CONFIGURATION_SERVER, CONFIGURATION_CLIENT,
     },
     Message, Model,
 };
 use clap::Parser;
 use futures::{pin_mut, StreamExt};
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use tokio::{signal, sync::mpsc, time::sleep};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -57,8 +57,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         elements: vec![Element {
             location: None,
             models: vec![
-                Arc::new(BluetoothMeshModel::new(ConfigurationServer::default())),
-                Arc::new(BluetoothMeshModel::new(ConfigurationClient::default())),
+                CONFIGURATION_SERVER,
+                CONFIGURATION_CLIENT,
             ],
             control_handle: Some(element_handle),
         }],

@@ -15,14 +15,13 @@ use bluer::mesh::{
     element::*,
     node::Node,
 };
-use btmesh_common::{opcode::Opcode, CompanyIdentifier, ParseError};
+use btmesh_common::{opcode::Opcode, CompanyIdentifier, InsufficientBuffer, ModelIdentifier, ParseError};
 use btmesh_models::{
-    sensor::{PropertyId, SensorConfig, SensorData, SensorDescriptor, SensorMessage, SensorServer, SensorStatus},
+    sensor::{PropertyId, SensorConfig, SensorData, SensorDescriptor, SensorMessage, SensorStatus, SENSOR_SERVER},
     Message, Model,
 };
 use clap::Parser;
 use futures::StreamExt;
-use std::sync::Arc;
 use tokio::{
     signal,
     sync::{mpsc, mpsc::Sender},
@@ -53,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
-            models: vec![Arc::new(BluetoothMeshModel::new(BoardSensor::new()))],
+            models: vec![SENSOR_SERVER],
             control_handle: Some(element_handle),
         }],
         events_tx: app_tx,
@@ -180,7 +179,6 @@ impl SensorData for Temperature {
     }
 }
 
-type BoardSensor = SensorServer<SensorModel, 1, 1>;
 type BoardSensorMessage = SensorMessage<SensorModel, 1, 1>;
 
 const COMPANY_IDENTIFIER: CompanyIdentifier = CompanyIdentifier(0x05F1);
