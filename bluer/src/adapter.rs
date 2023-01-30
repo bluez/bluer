@@ -67,7 +67,7 @@ impl Adapter {
     }
 
     pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
-        Path::new(format!("{}{}", PREFIX, adapter_name,))
+        Path::new(format!("{PREFIX}{adapter_name}",))
             .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
     }
 

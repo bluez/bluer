@@ -57,7 +57,7 @@ async fn main() -> bluer::Result<()> {
                             continue;
                         }
 
-                        println!("Device added: {}", addr);
+                        println!("Device added: {addr}");
                         let res = if all_properties {
                             query_all_device_properties(&adapter, addr).await
                         } else {
@@ -74,15 +74,15 @@ async fn main() -> bluer::Result<()> {
                         }
                     }
                     AdapterEvent::DeviceRemoved(addr) => {
-                        println!("Device removed: {}", addr);
+                        println!("Device removed: {addr}");
                     }
                     _ => (),
                 }
                 println!();
             }
             Some((addr, DeviceEvent::PropertyChanged(property))) = all_change_events.next() => {
-                println!("Device changed: {}", addr);
-                println!("    {:?}", property);
+                println!("Device changed: {addr}");
+                println!("    {property:?}");
             }
             else => break
         }

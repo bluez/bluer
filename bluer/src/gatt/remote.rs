@@ -64,7 +64,7 @@ impl Service {
 
     pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<Path<'static>> {
         let device_path = Device::dbus_path(adapter_name, device_address)?;
-        Ok(Path::new(format!("{}/service{:04x}", device_path, id)).unwrap())
+        Ok(Path::new(format!("{device_path}/service{id:04x}")).unwrap())
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16), &'a str)> {
@@ -223,7 +223,7 @@ impl Characteristic {
         adapter_name: &str, device_address: Address, service_id: u16, id: u16,
     ) -> Result<Path<'static>> {
         let service_path = Service::dbus_path(adapter_name, device_address, service_id)?;
-        Ok(Path::new(format!("{}/char{:04x}", service_path, id)).unwrap())
+        Ok(Path::new(format!("{service_path}/char{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]
@@ -579,7 +579,7 @@ impl Descriptor {
         adapter_name: &str, device_address: Address, service_id: u16, characteristic_id: u16, id: u16,
     ) -> Result<Path<'static>> {
         let char_path = Characteristic::dbus_path(adapter_name, device_address, service_id, characteristic_id)?;
-        Ok(Path::new(format!("{}/desc{:04x}", char_path, id)).unwrap())
+        Ok(Path::new(format!("{char_path}/desc{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]

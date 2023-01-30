@@ -432,7 +432,7 @@ impl SpeedClientOpts {
         println!("Connected with {:?} and {:?} and PHYs {:#016b}", &opts, &conn_info, phy);
 
         let recv_mtu = conn.as_ref().recv_mtu()?;
-        println!("Receive MTU is {} bytes", recv_mtu);
+        println!("Receive MTU is {recv_mtu} bytes");
 
         let done = async {
             match self.time {
@@ -531,7 +531,7 @@ impl SpeedServerOpts {
                     );
 
                     let send_mtu = conn.as_ref().send_mtu()?;
-                    println!("Send MTU is {} bytes", send_mtu);
+                    println!("Send MTU is {send_mtu} bytes");
 
                     loop {
                         let mut rng = rand::thread_rng();
@@ -539,12 +539,12 @@ impl SpeedServerOpts {
                         rng.fill_bytes(&mut buf);
 
                         if let Err(err) = conn.write_all(&buf).await {
-                            println!("Disconnected: {}", err);
+                            println!("Disconnected: {err}");
                             break;
                         }
                     }
                 }
-                Err(err) => println!("Connection failed: {}", err),
+                Err(err) => println!("Connection failed: {err}"),
             }
 
             if self.once {

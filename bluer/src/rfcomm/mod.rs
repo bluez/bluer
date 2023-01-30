@@ -105,7 +105,7 @@ impl FromStr for SocketAddr {
         let err = || InvalidSocketAddr(s.to_string());
 
         let (addr, channel) = s.rsplit_once(':').ok_or_else(err)?;
-        let addr = addr.strip_prefix("[").and_then(|s| s.strip_suffix("]")).ok_or_else(err)?;
+        let addr = addr.strip_prefix('[').and_then(|s| s.strip_suffix(']')).ok_or_else(err)?;
 
         Ok(Self { addr: addr.parse().map_err(|_| err())?, channel: channel.parse().map_err(|_| err())? })
     }

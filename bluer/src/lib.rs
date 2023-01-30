@@ -794,7 +794,7 @@ impl Display for Address {
 
 impl Debug for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -996,7 +996,7 @@ fn method_call<
             let mut args = Vec::new();
             let mut arg_iter = ctx.message().iter_init();
             while let Some(value) = arg_iter.get_refarg() {
-                args.push(format!("{:?}", value));
+                args.push(format!("{value:?}"));
                 arg_iter.next();
             }
             log::trace!(

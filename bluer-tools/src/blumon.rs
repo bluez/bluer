@@ -117,7 +117,7 @@ impl DeviceMonitor {
         const MAX_RSSI: i16 = -30;
         const MAX_BAR_LEN: i16 = 15;
         let bar_len = if let Some(rssi) = device.rssi().await? {
-            write!(&mut line, "{} dBm [", format!("{:4}", rssi).red())?;
+            write!(&mut line, "{} dBm [", format!("{rssi:4}").red())?;
             (rssi.clamp(MIN_RSSI, MAX_RSSI) - MIN_RSSI) * MAX_BAR_LEN / (MAX_RSSI - MIN_RSSI)
         } else {
             write!(&mut line, "---- dBm [")?;
@@ -130,7 +130,7 @@ impl DeviceMonitor {
         const MAX_AGO_BAR_LEN: u64 = 10;
         let seen_ago = data.last_seen.elapsed().as_secs();
         let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
-        write!(&mut line, "{} s ago [", format!("{:3}", seen_ago).green())?;
+        write!(&mut line, "{} s ago [", format!("{seen_ago:3}").green())?;
         write!(&mut line, "{}", "#".repeat(ago_bar_len as _).black().on_green())?;
         write!(&mut line, "{}", " ".repeat((MAX_AGO_BAR_LEN - ago_bar_len) as _))?;
         write!(&mut line, "]")?;

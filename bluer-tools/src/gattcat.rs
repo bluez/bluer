@@ -79,7 +79,7 @@ impl From<Uuid> for UuidOrShort {
 impl fmt::Display for UuidOrShort {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(s) = self.0.as_u16() {
-            write!(f, "{:04x}", s)
+            write!(f, "{s:04x}")
         } else {
             write!(f, "{}", self.0)
         }
@@ -515,7 +515,7 @@ impl DiscoverOpts {
             if let Ok(Some(_)) = dev.rssi().await {
                 // If RSSI is available, device is present.
                 if let Err(err) = Self::handle_device(&dev, self.no_connect).await {
-                    println!("  Error: {}", err);
+                    println!("  Error: {err}");
                 }
                 let _ = dev.disconnect().await;
                 println!();
@@ -568,16 +568,16 @@ impl DiscoverOpts {
                 Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
                 Err(_) => format!("{}", UuidOrShort(uuid)),
             };
-            print_list(2, &format!("Service data {}", id), lines);
+            print_list(2, &format!("Service data {id}"), lines);
         }
 
         for (id, data) in dev.manufacturer_data().await?.unwrap_or_default() {
             let lines = iter::once(String::new()).chain(to_hex(&data));
             let id = match id::Manufacturer::try_from(id) {
-                Ok(name) => format!("{} ({:04x})", name, id),
-                Err(_) => format!("{:04x}", id),
+                Ok(name) => format!("{name} ({id:04x})"),
+                Err(_) => format!("{id:04x}"),
             };
-            print_list(2, &format!("Manufacturer data from {}", id), lines);
+            print_list(2, &format!("Manufacturer data from {id}"), lines);
         }
 
         Ok(())
@@ -609,9 +609,9 @@ impl DiscoverOpts {
                 Err(_) => format!("{}", UuidOrShort(uuid)),
             };
             if service.primary().await? {
-                println!("  Primary service {}", service_id);
+                println!("  Primary service {service_id}");
             } else {
-                println!("  Secondary service {}", service_id);
+                println!("  Secondary service {service_id}");
             }
 
             let mut includes = Vec::new();
@@ -639,7 +639,7 @@ impl DiscoverOpts {
                     Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
                     Err(_) => format!("{}", UuidOrShort(uuid)),
                 };
-                println!("    Characteristic {}", char_id);
+                println!("    Characteristic {char_id}");
 
                 let flags = char.flags().await?;
                 print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
@@ -669,7 +669,7 @@ impl DiscoverOpts {
                         Ok(name) => format!("{} ({})", name, UuidOrShort(uuid)),
                         Err(_) => format!("{}", UuidOrShort(uuid)),
                     };
-                    println!("      Descriptor {}", desc_id);
+                    println!("      Descriptor {desc_id}");
 
                     if let Ok(value) = desc.read().await {
                         print_list(8, "Read", to_hex(&value));
@@ -875,7 +875,7 @@ impl ReadOpts {
         } else {
             let mut hex = String::new();
             pretty_hex::pretty_hex_write(&mut hex, &value).unwrap();
-            println!("{}", hex);
+            println!("{hex}");
         }
 
         Ok(())
@@ -944,7 +944,7 @@ impl NotifyOpts {
                             } else {
                                 let mut hex = String::new();
                                 pretty_hex::pretty_hex_write(&mut hex, &value).unwrap();
-                                println!("{}", hex);
+                                println!("{hex}");
                                 println!();
                             }
                         },
@@ -1342,7 +1342,7 @@ impl ServeOpts {
             }
 
             if self.verbose {
-                eprintln!("Connected with MTU {} bytes", mtu);
+                eprintln!("Connected with MTU {mtu} bytes");
             }
 
             if self.pty {
