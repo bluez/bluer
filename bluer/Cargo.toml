@@ -84,6 +84,7 @@ cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 [[example]]
 name = "discover_devices"
 required-features = ["bluetoothd"]
+doc-scrape-examples = true
 
 [[example]]
 name = "gatt_client"
