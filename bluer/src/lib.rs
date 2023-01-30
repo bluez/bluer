@@ -80,6 +80,9 @@
 
 #![warn(missing_docs)]
 
+#[cfg(not(target_os = "linux"))]
+compile_error!("BlueR only supports the Linux operating system.");
+
 #[cfg(feature = "bluetoothd")]
 use dbus::{
     arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
