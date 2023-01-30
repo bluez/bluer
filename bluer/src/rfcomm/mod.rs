@@ -26,6 +26,7 @@ use std::{
     net::Shutdown,
     os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     pin::Pin,
+    str::FromStr,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -50,6 +51,11 @@ use crate::{
 pub use crate::sys::rfcomm_conninfo as ConnInfo;
 
 /// An RFCOMM socket address.
+///
+/// ## String representation
+/// The string representation is of the form
+/// `[01:23:45:67:89:0a]:75` where `01:23:45:67:89:0a` is the Bluetooth address
+/// and `75` is the channel number.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SocketAddr {
@@ -71,6 +77,37 @@ impl SocketAddr {
     /// and a dynamically allocated channel.
     pub const fn any() -> Self {
         Self { addr: Address::any(), channel: 0 }
+    }
+}
+
+impl fmt::Display for SocketAddr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}]:{}", self.addr, self.channel)
+    }
+}
+
+/// Invalid RFCOMM socket address error.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct InvalidSocketAddr(pub String);
+
+impl fmt::Display for InvalidSocketAddr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid RFCOMM socket address: {}", &self.0)
+    }
+}
+
+impl std::error::Error for InvalidSocketAddr {}
+
+impl FromStr for SocketAddr {
+    type Err = InvalidSocketAddr;
+    fn from_str(s: &str) -> std::result::Result<Self, InvalidSocketAddr> {
+        let err = || InvalidSocketAddr(s.to_string());
+
+        let (addr, channel) = s.rsplit_once(':').ok_or_else(err)?;
+        let addr = addr.strip_prefix("[").and_then(|s| s.strip_suffix("]")).ok_or_else(err)?;
+
+        Ok(Self { addr: addr.parse().map_err(|_| err())?, channel: channel.parse().map_err(|_| err())? })
     }
 }
 
