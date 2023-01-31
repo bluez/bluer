@@ -230,7 +230,12 @@ impl ConnectRequest {
     pub fn accept(self) -> Result<Stream> {
         let Self { fd, tx, .. } = self;
 
-        let socket = unsafe { Socket::from_raw_fd(fd.into_raw_fd()) }?;
+        let fd = fd.into_raw_fd();
+        if unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        let socket = unsafe { Socket::from_raw_fd(fd) }?;
         let stream = Stream::from_socket(socket)?;
         let _ = tx.send(Ok(()));
 
