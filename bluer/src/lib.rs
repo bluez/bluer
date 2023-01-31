@@ -723,6 +723,43 @@ impl From<InvalidAddress> for Error {
     }
 }
 
+#[cfg(feature = "bluetoothd")]
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        use std::io::ErrorKind as E;
+        let kind = match err.kind {
+            ErrorKind::AlreadyConnected => E::AlreadyExists,
+            ErrorKind::AlreadyExists => E::AlreadyExists,
+            ErrorKind::AuthenticationCanceled => E::PermissionDenied,
+            ErrorKind::AuthenticationFailed => E::PermissionDenied,
+            ErrorKind::AuthenticationRejected => E::PermissionDenied,
+            ErrorKind::AuthenticationTimeout => E::PermissionDenied,
+            ErrorKind::ConnectionAttemptFailed => E::ConnectionRefused,
+            ErrorKind::DoesNotExist => E::NotFound,
+            ErrorKind::Failed => E::Other,
+            ErrorKind::InProgress => E::Other,
+            ErrorKind::InvalidArguments => E::InvalidInput,
+            ErrorKind::InvalidLength => E::InvalidData,
+            ErrorKind::NotAvailable => E::NotFound,
+            ErrorKind::NotAuthorized => E::PermissionDenied,
+            ErrorKind::NotReady => E::Other,
+            ErrorKind::NotSupported => E::Unsupported,
+            ErrorKind::NotPermitted => E::PermissionDenied,
+            ErrorKind::InvalidOffset => E::InvalidInput,
+            ErrorKind::InvalidAddress(_) => E::InvalidInput,
+            ErrorKind::InvalidName(_) => E::InvalidInput,
+            ErrorKind::ServicesUnresolved => E::Other,
+            ErrorKind::NotRegistered => E::Other,
+            ErrorKind::NotificationSessionStopped => E::ConnectionReset,
+            ErrorKind::IndicationUnconfirmed => E::TimedOut,
+            ErrorKind::NotFound => E::NotFound,
+            ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
+            ErrorKind::Internal(_) => E::Other,
+        };
+        std::io::Error::new(kind, err)
+    }
+}
+
 #[cfg(all(feature = "bluetoothd", feature = "serde"))]
 mod io_errorkind_serde {
     pub fn serialize<S>(_kind: &std::io::ErrorKind, ser: S) -> Result<S::Ok, S::Error>
