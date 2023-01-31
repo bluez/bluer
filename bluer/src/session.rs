@@ -69,9 +69,14 @@ impl SessionInner {
 
         if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
             match term_tx_weak.upgrade() {
-                Some(term_tx) => return Ok(SingleSessionToken(term_tx)),
+                Some(term_tx) => {
+                    log::trace!("Using existing single session for {}", &path);
+                    return Ok(SingleSessionToken(term_tx));
+                }
                 None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
                     let _ = termed_rx.await;
+                    single_sessions.remove(path);
                 }
             }
         }
@@ -87,6 +92,7 @@ impl SessionInner {
         let path = path.clone();
         tokio::spawn(async move {
             let _ = term_rx.await;
+            log::trace!("Terminating single session for {}", &path);
             stop_fn.await;
             let _ = termed_tx.send(());
             log::trace!("Terminated single session for {}", &path);
