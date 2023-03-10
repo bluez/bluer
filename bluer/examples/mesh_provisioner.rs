@@ -1,8 +1,7 @@
-#![feature(generic_associated_types)]
 //! Attach and send/receive BT Mesh messages
 //!
 //! Example meshd
-//! [bluer/bluer]$ sudo /usr/libexec/bluetooth/bluetooth-meshd --config ${PWD}/example/meshd/config --storage ${PWD}/meshd/lib --debug
+//! [bluer/bluer]$ sudo /usr/libexec/bluetooth/bluetooth-meshd --config ${PWD}/examples/meshd/config --storage ${PWD}/meshd/lib --debug
 //!
 //! To demo device join, run client or server without a token
 //! [bluer/bluer]$ RUST_LOG=TRACE cargo +nightly run --features=mesh --example mesh_sensor_client
