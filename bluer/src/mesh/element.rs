@@ -234,39 +234,41 @@ pub fn element_control(size: usize) -> (ElementControl, ElementControlHandle) {
     (ElementControl { messages_rx: ReceiverStream::new(messages_rx) }, ElementControlHandle { messages_tx })
 }
 
-#[derive(Clone, Debug)]
-///Messages sent by the element.
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Bluetooth mesh messages received by the element of the application.
 pub enum ElementMessage {
-    /// Received Message
+    /// A message arrived addressed to the application element.
     Received(ReceivedMessage),
-    /// DevKey Message
+    /// A message arrived addressed to the application element, which was sent with the remote node's device key.
     DevKey(DevKeyMessage),
 }
 
-/// Element message received from dbus
-#[derive(Clone, Debug)]
+/// A message addressed to the application element.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct ReceivedMessage {
-    /// Index
+    /// Indicates which application key has been used to decode the incoming message.
     pub index: u8,
-    /// Location
+    /// Location of the element in the application.
     pub location: Option<u16>,
-    /// Application key
+    /// Application key.
     pub key: Aid,
-    /// Message source
+    /// Unicast address of the remote node-element that sent the message.
     pub src: UnicastAddress,
-    /// Message destination
+    /// The destination address of received message.
     pub dest: Address,
-    /// Message opcode
+    /// Message opcode.
     pub opcode: Opcode,
-    /// Message data
+    /// Payload of the message.
     pub parameters: Vec<u8>,
 }
 
-/// DevKey message
-#[derive(Clone, Debug)]
+/// Message originated by a local model encoded with the device key of the remote node.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct DevKeyMessage {
-    /// Message opcode
+    /// Message opcode.
     pub opcode: Opcode,
-    /// Message data
+    /// Payload of the message.
     pub parameters: Vec<u8>,
 }

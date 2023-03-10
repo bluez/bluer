@@ -226,10 +226,12 @@ impl fmt::Debug for ApplicationHandle {
 }
 
 #[derive(Clone, Debug)]
-///Messages sent by provisioner
+/// Messages corresponding to provisioner method calls during the process of joining the node to the network.
 pub enum ApplicationMessage {
-    /// Join node succeeded
+    /// This method is called when the node provisioning initiated by a Join() method call successfully completed.
+    /// The token parameter serves as a unique identifier of the particular node.
     JoinComplete(u64),
-    /// Join node failed
+    ///	This method is called when the node provisioning initiated by Join() has failed.
+    /// The reason parameter identifies the reason for provisioning failure.
     JoinFailed(String),
 }
