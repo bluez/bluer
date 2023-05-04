@@ -43,6 +43,7 @@ pub struct Adapter {
     inner: Arc<SessionInner>,
     dbus_path: Path<'static>,
     name: Arc<String>,
+    filter: Option<DiscoveryFilter>
 }
 
 impl Debug for Adapter {
@@ -59,7 +60,12 @@ impl Adapter {
             dbus_path: Path::new(PREFIX.to_string() + name)
                 .map_err(|_| Error::new(ErrorKind::InvalidName(name.to_string())))?,
             name: Arc::new(name.to_string()),
+            filter: None
         })
+    }
+
+    pub(crate) fn set_filter(&mut self, filter: DiscoveryFilter) {
+        self.filter = Some(filter)
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
@@ -200,10 +206,13 @@ impl Adapter {
             .single_session(
                 &self.dbus_path,
                 async move {
-                    let filter = DiscoveryFilter {
-                        duplicate_data: false,
-                        transport: DiscoveryTransport::Auto,
-                        ..Default::default()
+                    let filter = match &self.filter{
+                        Some(filter)=> filter.clone(),
+                        None=>DiscoveryFilter {
+                            duplicate_data: false,
+                            transport: DiscoveryTransport::Auto,
+                            ..Default::default()
+                        }
                     };
                     self.call_method("SetDiscoveryFilter", (filter.into_dict(),)).await?;
                     self.call_method("StartDiscovery", ()).await?;
