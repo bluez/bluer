@@ -63,8 +63,8 @@ impl Adapter {
             filter: None
         })
     }
-
-    pub(crate) fn set_filter(&mut self, filter: DiscoveryFilter) {
+    /// Set a custom DiscoveryFilter
+    pub fn set_filter(&mut self, filter: DiscoveryFilter) {
         self.filter = Some(filter)
     }
 
@@ -636,7 +636,7 @@ pub enum AdapterEvent {
 
 /// Transport parameter determines the type of scan.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
-pub(crate) enum DiscoveryTransport {
+pub enum DiscoveryTransport {
     /// interleaved scan
     #[strum(serialize = "auto")]
     Auto,
@@ -656,7 +656,7 @@ impl Default for DiscoveryTransport {
 
 /// Bluetooth device discovery filter.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct DiscoveryFilter {
+pub struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match
     ///  _any_ UUID.
     ///
