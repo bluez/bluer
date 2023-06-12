@@ -47,7 +47,7 @@ pub struct Adapter {
 
 impl Debug for Adapter {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Adapter {{ name: {} }}", self.name())
+        f.debug_struct("Adapter").field("name", &self.name()).finish()
     }
 }
 
