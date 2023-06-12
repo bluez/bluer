@@ -620,6 +620,9 @@ pub enum ErrorKind {
     /// the target object was either not present or removed
     #[strum(disabled)]
     NotFound,
+    /// the discovery filter cannot be changed while a discovery session is active
+    #[strum(disabled)]
+    DiscoveryActive,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
@@ -753,6 +756,7 @@ impl From<Error> for std::io::Error {
             ErrorKind::NotificationSessionStopped => E::ConnectionReset,
             ErrorKind::IndicationUnconfirmed => E::TimedOut,
             ErrorKind::NotFound => E::NotFound,
+            ErrorKind::DiscoveryActive => E::PermissionDenied,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };

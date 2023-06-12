@@ -34,7 +34,8 @@ use crate::{
     adapter,
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    all_dbus_objects, gatt, parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result,
+    SERVICE_NAME,
 };
 
 #[cfg(feature = "rfcomm")]
@@ -58,6 +59,7 @@ pub(crate) struct SessionInner {
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
     dbus_task: JoinHandle<connection::IOResourceError>,
+    pub adapter_discovery_filter: Mutex<HashMap<String, DiscoveryFilter>>,
 }
 
 impl SessionInner {
@@ -99,6 +101,24 @@ impl SessionInner {
         });
 
         Ok(SingleSessionToken(term_tx))
+    }
+
+    pub async fn is_single_session_active(&self, path: &dbus::Path<'static>) -> bool {
+        let mut single_sessions = self.single_sessions.lock().await;
+
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
+            match term_tx_weak.upgrade() {
+                Some(_) => true,
+                None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
+                    let _ = termed_rx.await;
+                    single_sessions.remove(path);
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     pub async fn events(
@@ -195,6 +215,7 @@ impl Session {
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
             dbus_task,
+            adapter_discovery_filter: Mutex::new(HashMap::new()),
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;
