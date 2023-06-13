@@ -763,6 +763,7 @@ impl From<Error> for std::io::Error {
             ErrorKind::IndicationUnconfirmed => E::TimedOut,
             ErrorKind::NotFound => E::NotFound,
             ErrorKind::DiscoveryActive => E::PermissionDenied,
+            ErrorKind::AdvertisementMonitorRejected => E::InvalidInput,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };

@@ -36,7 +36,7 @@ use crate::{
     agent::{Agent, AgentHandle, RegisteredAgent},
     all_dbus_objects, gatt,
     monitor::RegisteredMonitor,
-    parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 #[cfg(feature = "rfcomm")]
