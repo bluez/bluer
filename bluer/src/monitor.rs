@@ -176,7 +176,7 @@ pub struct Monitor {
     /// out-of-range (lost).
     ///
     /// Valid range is 1 to 300 (seconds).
-    pub rssi_low_timeout: Option<u16>,
+    pub rssi_low_timeout: Option<Duration>,
 
     /// The time it takes to consider a device as in-range.
     ///
@@ -186,7 +186,7 @@ pub struct Monitor {
     /// in-range (found).
     ///
     /// Valid range is 1 to 300 (seconds).
-    pub rssi_high_timeout: Option<u16>,
+    pub rssi_high_timeout: Option<Duration>,
 
     /// Grouping rules on how to propagate the received
     /// advertisement packets to the client.
@@ -305,11 +305,11 @@ impl RegisteredMonitor {
             });
 
             cr_property!(ib, "RSSILowTimeout", r => {
-                r.am.rssi_low_timeout
+                r.am.rssi_low_timeout.map(|t| t.as_secs().clamp(1, 300) as u16)
             });
 
             cr_property!(ib, "RSSIHighTimeout", r => {
-                r.am.rssi_high_timeout
+                r.am.rssi_high_timeout.map(|t| t.as_secs().clamp(1, 300) as u16)
             });
 
             cr_property!(ib, "RSSISamplingPeriod", r => {
