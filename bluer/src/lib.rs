@@ -80,6 +80,9 @@
 
 #![warn(missing_docs)]
 
+#[cfg(not(target_os = "linux"))]
+compile_error!("BlueR only supports the Linux operating system.");
+
 #[cfg(feature = "bluetoothd")]
 use dbus::{
     arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
@@ -92,6 +95,7 @@ use dbus_crossroads::{Context, Crossroads};
 use futures::Future;
 #[cfg(feature = "bluetoothd")]
 use hex::FromHex;
+use macaddr::MacAddr6;
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
@@ -622,6 +626,9 @@ pub enum ErrorKind {
     /// advertisement monitor could not be activated
     #[strum(disabled)]
     AdvertisementMonitorRejected,
+    /// the discovery filter cannot be changed while a discovery session is active
+    #[strum(disabled)]
+    DiscoveryActive,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
@@ -725,6 +732,44 @@ impl From<InvalidAddress> for Error {
     }
 }
 
+#[cfg(feature = "bluetoothd")]
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        use std::io::ErrorKind as E;
+        let kind = match err.kind {
+            ErrorKind::AlreadyConnected => E::AlreadyExists,
+            ErrorKind::AlreadyExists => E::AlreadyExists,
+            ErrorKind::AuthenticationCanceled => E::PermissionDenied,
+            ErrorKind::AuthenticationFailed => E::PermissionDenied,
+            ErrorKind::AuthenticationRejected => E::PermissionDenied,
+            ErrorKind::AuthenticationTimeout => E::PermissionDenied,
+            ErrorKind::ConnectionAttemptFailed => E::ConnectionRefused,
+            ErrorKind::DoesNotExist => E::NotFound,
+            ErrorKind::Failed => E::Other,
+            ErrorKind::InProgress => E::Other,
+            ErrorKind::InvalidArguments => E::InvalidInput,
+            ErrorKind::InvalidLength => E::InvalidData,
+            ErrorKind::NotAvailable => E::NotFound,
+            ErrorKind::NotAuthorized => E::PermissionDenied,
+            ErrorKind::NotReady => E::Other,
+            ErrorKind::NotSupported => E::Unsupported,
+            ErrorKind::NotPermitted => E::PermissionDenied,
+            ErrorKind::InvalidOffset => E::InvalidInput,
+            ErrorKind::InvalidAddress(_) => E::InvalidInput,
+            ErrorKind::InvalidName(_) => E::InvalidInput,
+            ErrorKind::ServicesUnresolved => E::Other,
+            ErrorKind::NotRegistered => E::Other,
+            ErrorKind::NotificationSessionStopped => E::ConnectionReset,
+            ErrorKind::IndicationUnconfirmed => E::TimedOut,
+            ErrorKind::NotFound => E::NotFound,
+            ErrorKind::DiscoveryActive => E::PermissionDenied,
+            ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
+            ErrorKind::Internal(_) => E::Other,
+        };
+        std::io::Error::new(kind, err)
+    }
+}
+
 #[cfg(all(feature = "bluetoothd", feature = "serde"))]
 mod io_errorkind_serde {
     pub fn serialize<S>(_kind: &std::io::ErrorKind, ser: S) -> Result<S::Ok, S::Error>
@@ -796,7 +841,7 @@ impl Display for Address {
 
 impl Debug for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -811,6 +856,18 @@ impl From<Address> for sys::bdaddr_t {
     fn from(mut addr: Address) -> Self {
         addr.0.reverse();
         sys::bdaddr_t { b: addr.0 }
+    }
+}
+
+impl From<MacAddr6> for Address {
+    fn from(addr: MacAddr6) -> Self {
+        Self(addr.into_array())
+    }
+}
+
+impl From<Address> for MacAddr6 {
+    fn from(addr: Address) -> Self {
+        addr.0.into()
     }
 }
 
@@ -868,7 +925,7 @@ impl<'de> serde::Deserialize<'de> for Address {
     {
         use serde::de::Error;
         let s = String::deserialize(deserializer)?;
-        s.parse().map_err(|err| D::Error::custom(&err))
+        s.parse().map_err(D::Error::custom)
     }
 }
 
@@ -918,6 +975,7 @@ impl FromStr for Modalias {
         fn do_parse(m: &str) -> Option<Modalias> {
             let ids: Vec<&str> = m.split(':').collect();
 
+            #[allow(clippy::get_first)]
             let source = ids.get(0)?;
             let vendor = Vec::from_hex(ids.get(1)?.get(1..5)?).ok()?;
             let product = Vec::from_hex(ids.get(1)?.get(6..10)?).ok()?;
@@ -985,7 +1043,7 @@ fn method_call<
             let mut args = Vec::new();
             let mut arg_iter = ctx.message().iter_init();
             while let Some(value) = arg_iter.get_refarg() {
-                args.push(format!("{:?}", value));
+                args.push(format!("{value:?}"));
                 arg_iter.next();
             }
             log::trace!(

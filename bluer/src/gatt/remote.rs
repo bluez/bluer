@@ -51,7 +51,7 @@ impl Service {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, id)?,
             adapter_name,
             device_address,
             id,
@@ -64,7 +64,7 @@ impl Service {
 
     pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<Path<'static>> {
         let device_path = Device::dbus_path(adapter_name, device_address)?;
-        Ok(Path::new(format!("{}/service{:04x}", device_path, id)).unwrap())
+        Ok(Path::new(format!("{device_path}/service{id:04x}")).unwrap())
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16), &'a str)> {
@@ -110,7 +110,7 @@ impl Service {
     /// GATT characteristics belonging to this service.
     pub async fn characteristics(&self) -> Result<Vec<Characteristic>> {
         let mut chars = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Characteristic::parse_dbus_path(&path) {
                 Some((adapter, device_address, service_id, id))
                     if adapter == *self.adapter_name
@@ -207,7 +207,7 @@ impl Characteristic {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, service_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -223,7 +223,7 @@ impl Characteristic {
         adapter_name: &str, device_address: Address, service_id: u16, id: u16,
     ) -> Result<Path<'static>> {
         let service_path = Service::dbus_path(adapter_name, device_address, service_id)?;
-        Ok(Path::new(format!("{}/char{:04x}", service_path, id)).unwrap())
+        Ok(Path::new(format!("{service_path}/char{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]
@@ -275,7 +275,7 @@ impl Characteristic {
     /// GATT descriptors belonging to this characteristic.
     pub async fn descriptors(&self) -> Result<Vec<Descriptor>> {
         let mut chars = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Descriptor::parse_dbus_path(&path) {
                 Some((adapter, device_address, service_id, char_id, id))
                     if adapter == *self.adapter_name
@@ -330,7 +330,7 @@ impl Characteristic {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &CharacteristicWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 
@@ -356,7 +356,12 @@ impl Characteristic {
         let stream = UnixStream::from_std(stream)?;
         // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
         let mtu = mtu.saturating_sub(5).into();
-        Ok(CharacteristicWriter { mtu, stream })
+        Ok(CharacteristicWriter {
+            adapter_name: self.adapter_name().to_string(),
+            device_address: self.device_address,
+            mtu,
+            stream,
+        })
     }
 
     /// Starts a notification or indication session from this characteristic
@@ -430,7 +435,13 @@ impl Characteristic {
         let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) };
         stream.set_nonblocking(true)?;
         let stream = UnixStream::from_std(stream)?;
-        Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
+        Ok(CharacteristicReader {
+            adapter_name: self.adapter_name().to_string(),
+            device_address: self.device_address,
+            mtu: mtu.into(),
+            stream,
+            buf: Vec::new(),
+        })
     }
 
     dbus_interface!();
@@ -488,11 +499,14 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
-        ///	True, if notifications or indications on this
-        ///	characteristic are currently enabled.
+        ///	Whether notifications or indications on this
+        ///	characteristic are supported and currently enabled.
+        ///
+        /// Returns `Some(true)` if enabled and `Some(false)` if disabled.
+        /// When notifications are unsupported this returns `None`.
         property(
             Notifying, bool,
-            dbus: (CHARACTERISTIC_INTERFACE, "Notifying", bool, MANDATORY),
+            dbus: (CHARACTERISTIC_INTERFACE, "Notifying", bool, OPTIONAL),
             get: (notifying, v => {v.to_owned()}),
         );
 
@@ -551,7 +565,7 @@ impl Descriptor {
     ) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Self::dbus_path(&*adapter_name, device_address, service_id, characteristic_id, id)?,
+            dbus_path: Self::dbus_path(&adapter_name, device_address, service_id, characteristic_id, id)?,
             adapter_name,
             device_address,
             service_id,
@@ -568,7 +582,7 @@ impl Descriptor {
         adapter_name: &str, device_address: Address, service_id: u16, characteristic_id: u16, id: u16,
     ) -> Result<Path<'static>> {
         let char_path = Characteristic::dbus_path(adapter_name, device_address, service_id, characteristic_id)?;
-        Ok(Path::new(format!("{}/desc{:04x}", char_path, id)).unwrap())
+        Ok(Path::new(format!("{char_path}/desc{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]
@@ -653,7 +667,7 @@ impl Descriptor {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &DescriptorWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 }

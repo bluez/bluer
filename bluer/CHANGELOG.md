@@ -4,6 +4,43 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.15.7 - 2023-01-31
+### Added
+- conversion from Error to std::io::Error
+
+## 0.15.6 - 2023-01-30
+### Added
+- string representation for RFCOMM socket address
+
+## 0.15.5 - 2023-01-11
+### Added
+- Convert Bluetooth address to and from MacAddr6.
+
+## 0.15.4 - 2022-12-14
+### Added
+- expose device making request in GATT server
+### Fixed
+- fix AdvertisingData handling by jaqchen
+
+## 0.15.3 - 2022-11-30
+### Fixed
+- documentation build on docs.rs
+
+## 0.15.2 - 2022-11-30
+### Fixed
+- use proper D-Bus type for advertising_data by Paul Otto
+- fix musl libc build by Luca Barbato
+- fix register_agent documentation by Patrick Flakus
+- fix a typo by Mariusz Białończyk
+### Changed
+- update dependencies
+
+## 0.15.1 - 2022-10-02
+### Fixed
+- correct D-Bus AuthorizeService name by hugmanrique
+### Changed
+- limit nix features by rtzoeller
+
 ## 0.15.0 - 2022-04-21
 ### Changed
 - Update uuid crate to 1.0.

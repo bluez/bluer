@@ -59,17 +59,14 @@ However, pull requests and contributions are welcome!
 [GATT services]: https://www.oreilly.com/library/view/getting-started-with/9781491900550/ch04.html
 [Tokio]: https://tokio.rs/
 
-History
--------
+Usage
+-----
 
-This project started as a fork of [blurz] but has since then become a full rewrite.
-It was published under the name `blez` before it was designated the official Rust
-interface to BlueZ and renamed to BlueR.
-Documentation has been mostly copied from the [BlueZ API specification], but
-also adapted where it makes sense.
+To use BlueR as a library, run the following command in your project directory:
 
-[blurz]: https://github.com/szeged/blurz
-[BlueZ API specification]: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/
+    cargo add -F full bluer
+
+This will add the latest version of BlueR with all features enabled as a dependency to your `Cargo.toml`.
 
 Crate features
 --------------
@@ -175,3 +172,15 @@ Tools
 See the [BlueR tools] crate for tools that build on this library.
 
 [BlueR tools]: https://crates.io/crates/bluer-tools
+
+History
+-------
+
+This project started as a fork of [blurz] but has since then become a full rewrite.
+It was published under the name `blez` before it was designated the official Rust
+interface to BlueZ and renamed to BlueR.
+Documentation has been mostly copied from the [BlueZ API specification], but
+also adapted where it makes sense.
+
+[blurz]: https://github.com/szeged/blurz
+[BlueZ API specification]: https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/

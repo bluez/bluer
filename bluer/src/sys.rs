@@ -1,8 +1,8 @@
 //! System native types and constants.
 #![allow(dead_code)]
 
-use libc::{c_int, c_ulong, c_ushort, sa_family_t};
-use nix::request_code_write;
+use libc::{c_int, c_ushort, sa_family_t};
+use nix::{request_code_write, sys::ioctl::ioctl_num_type};
 use std::mem::size_of;
 
 pub const SOL_L2CAP: i32 = 6;
@@ -185,8 +185,8 @@ pub struct rfcomm_conninfo {
 pub const RFCOMM_REUSE_DLC: u32 = 1 << 0;
 pub const RFCOMM_RELEASE_ONHUP: u32 = 1 << 1;
 
-pub const RFCOMMCREATEDEV: c_ulong = request_code_write!('R', 200, size_of::<c_int>());
-pub const RFCOMMRELEASEDEV: c_ulong = request_code_write!('R', 201, size_of::<c_int>());
+pub const RFCOMMCREATEDEV: ioctl_num_type = request_code_write!('R', 200, size_of::<c_int>());
+pub const RFCOMMRELEASEDEV: ioctl_num_type = request_code_write!('R', 201, size_of::<c_int>());
 
 /// RFCOMM TTY device request.
 #[repr(C)]

@@ -88,7 +88,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
         // Thus small packet can arrive before big packet.
         // The solution is to disable EATT in /etc/bluetooth/main.conf.
 
-        println!("    Test iteration {} with data size {}", i, len);
+        println!("    Test iteration {i} with data size {len}");
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         // We must read back the data while sending, otherwise the connection
@@ -185,7 +185,7 @@ async fn main() -> bluer::Result<()> {
                     println!();
                 }
                 AdapterEvent::DeviceRemoved(addr) => {
-                    println!("Device removed {}", addr);
+                    println!("Device removed {addr}");
                 }
                 _ => (),
             }

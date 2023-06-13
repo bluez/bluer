@@ -89,12 +89,12 @@ async fn main() -> bluer::Result<()> {
             evt = char_control.next() => {
                 match evt {
                     Some(CharacteristicControlEvent::Write(req)) => {
-                        println!("Accepting write event with MTU {}", req.mtu());
+                        println!("Accepting write event with MTU {} from {}", req.mtu(), req.device_address());
                         read_buf = vec![0; req.mtu()];
                         reader_opt = Some(req.accept()?);
                     },
                     Some(CharacteristicControlEvent::Notify(notifier)) => {
-                        println!("Accepting notify request event with MTU {}", notifier.mtu());
+                        println!("Accepting notify request event with MTU {} from {}", notifier.mtu(), notifier.device_address());
                         writer_opt = Some(notifier);
                     },
                     None => break,

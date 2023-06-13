@@ -92,7 +92,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Writing characteristic value {:x?} five times using IO", &data);
     for _ in 0..5u8 {
         let written = write_io.write(&data).await?;
-        println!("    {} bytes written", written);
+        println!("    {written} bytes written");
     }
     println!("    Closing write IO");
     drop(write_io);
@@ -185,7 +185,7 @@ async fn main() -> bluer::Result<()> {
                     println!();
                 }
                 AdapterEvent::DeviceRemoved(addr) => {
-                    println!("Device removed {}", addr);
+                    println!("Device removed {addr}");
                 }
                 _ => (),
             }

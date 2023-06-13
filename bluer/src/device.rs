@@ -42,7 +42,7 @@ impl fmt::Debug for Device {
 impl Device {
     /// Create Bluetooth device interface for device of specified address connected to specified adapter.
     pub(crate) fn new(inner: Arc<SessionInner>, adapter_name: Arc<String>, address: Address) -> Result<Self> {
-        Ok(Self { inner, dbus_path: Self::dbus_path(&*adapter_name, address)?, adapter_name, address })
+        Ok(Self { inner, dbus_path: Self::dbus_path(&adapter_name, address)?, adapter_name, address })
     }
 
     fn proxy(&self) -> Proxy<'_, &SyncConnection> {
@@ -142,7 +142,7 @@ impl Device {
         self.wait_for_services_resolved().await?;
 
         let mut services = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Service::parse_dbus_path(&path) {
                 Some((adapter, device_address, id))
                     if adapter == *self.adapter_name
@@ -351,7 +351,7 @@ define_properties!(
             get: (is_paired, v => {v.to_owned()}),
         );
 
-        ///	Indicates if the remote device is paired.
+        ///	Indicates if the remote device is connected.
         property(
             Connected, bool,
             dbus: (INTERFACE, "Connected", bool, MANDATORY),
@@ -507,8 +507,16 @@ define_properties!(
         /// application are exposed.
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
-            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Vec<u8>>, OPTIONAL),
-            get: (advertising_data, v => {v.to_owned()}),
+            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            get: (advertising_data, m => {
+                let mut mt: HashMap<u8, Vec<u8>> = HashMap::new();
+                for (k, v) in m {
+                    if let Some(v) = dbus::arg::cast(&v.0).cloned() {
+                        mt.insert(*k, v);
+                    }
+                }
+                mt
+            }),
         );
     }
 );

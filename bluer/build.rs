@@ -94,20 +94,20 @@ fn uniquify_names(entries: &mut [UuidEntry]) {
 }
 
 fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str) -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed={}", src);
+    println!("cargo:rerun-if-changed={src}");
 
     let input = File::open(src)?;
     let mut entries: Vec<UuidEntry> = serde_json::from_reader(input)?;
     uniquify_names(&mut entries);
     let mut out = File::create(Path::new(&env::var("OUT_DIR")?).join(dest))?;
 
-    writeln!(out, "/// Assigned identifiers for {}.", doc_name)?;
+    writeln!(out, "/// Assigned identifiers for {doc_name}.")?;
     writeln!(out, "///")?;
     writeln!(out, "/// Can be converted to and from UUIDs.")?;
     writeln!(out, "#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]")?;
     writeln!(out, "#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]")?;
     writeln!(out, "#[non_exhaustive]")?;
-    writeln!(out, "pub enum {} {{", name)?;
+    writeln!(out, "pub enum {name} {{")?;
     for entry in &entries {
         writeln!(out, "    /// {}", &entry.name)?;
         if !entry.source.is_empty() {
@@ -119,8 +119,8 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     }
     writeln!(out, "}}")?;
 
-    writeln!(out, "impl From<{}> for Uuid {{", name)?;
-    writeln!(out, "    fn from(s: {}) -> Uuid {{", name)?;
+    writeln!(out, "impl From<{name}> for Uuid {{")?;
+    writeln!(out, "    fn from(s: {name}) -> Uuid {{")?;
     writeln!(out, "        match s {{")?;
     for entry in &entries {
         writeln!(out, "            {}::{} => {},", name, entry.rust_id(prefix), entry.uuid()?)?;
@@ -130,7 +130,7 @@ fn convert_uuids(src: &str, dest: &str, name: &str, doc_name: &str, prefix: &str
     writeln!(out, "}}")?;
     writeln!(out)?;
 
-    writeln!(out, "impl TryFrom<Uuid> for {} {{", name)?;
+    writeln!(out, "impl TryFrom<Uuid> for {name} {{")?;
     writeln!(out, "    type Error = Uuid;")?;
     writeln!(out, "    fn try_from(uuid: Uuid) -> Result<Self, Uuid> {{")?;
     writeln!(out, "        #[allow(unreachable_patterns)]")?;
@@ -179,7 +179,7 @@ impl CodeEntry {
 }
 
 fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed={}", src);
+    println!("cargo:rerun-if-changed={src}");
 
     let input = File::open(src)?;
     let mut entries: Vec<CodeEntry> = serde_json::from_reader(input)?;
@@ -194,13 +194,13 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
         *s += 1;
     }
 
-    writeln!(out, "/// Assigned identifiers for {}.", doc_name)?;
+    writeln!(out, "/// Assigned identifiers for {doc_name}.")?;
     writeln!(out, "///")?;
     writeln!(out, "/// Can be converted to and from ids.")?;
     writeln!(out, "#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]")?;
     writeln!(out, "#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]")?;
     writeln!(out, "#[non_exhaustive]")?;
-    writeln!(out, "pub enum {} {{", name)?;
+    writeln!(out, "pub enum {name} {{")?;
     for service in &entries {
         writeln!(out, "    /// {}", &service.name)?;
         writeln!(out, "    #[strum(serialize = \"{}\")]", &service.name.replace('"', "\\\""))?;
@@ -208,8 +208,8 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
     }
     writeln!(out, "}}")?;
 
-    writeln!(out, "impl From<{}> for u16 {{", name)?;
-    writeln!(out, "    fn from(s: {}) -> u16 {{", name)?;
+    writeln!(out, "impl From<{name}> for u16 {{")?;
+    writeln!(out, "    fn from(s: {name}) -> u16 {{")?;
     writeln!(out, "        match s {{")?;
     for entry in &entries {
         writeln!(out, "            {}::{} => {},", name, entry.rust_id(), entry.code)?;
@@ -219,7 +219,7 @@ fn convert_ids(src: &str, dest: &str, name: &str, doc_name: &str) -> Result<(), 
     writeln!(out, "}}")?;
     writeln!(out)?;
 
-    writeln!(out, "impl TryFrom<u16> for {} {{", name)?;
+    writeln!(out, "impl TryFrom<u16> for {name} {{")?;
     writeln!(out, "    type Error = u16;")?;
     writeln!(out, "    fn try_from(code: u16) -> Result<Self, u16> {{")?;
     writeln!(out, "        #[allow(unreachable_patterns)]")?;

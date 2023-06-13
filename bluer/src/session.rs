@@ -61,6 +61,7 @@ pub(crate) struct SessionInner {
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
     dbus_task: JoinHandle<connection::IOResourceError>,
+    pub adapter_discovery_filter: Mutex<HashMap<String, DiscoveryFilter>>,
 }
 
 impl SessionInner {
@@ -72,9 +73,14 @@ impl SessionInner {
 
         if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
             match term_tx_weak.upgrade() {
-                Some(term_tx) => return Ok(SingleSessionToken(term_tx)),
+                Some(term_tx) => {
+                    log::trace!("Using existing single session for {}", &path);
+                    return Ok(SingleSessionToken(term_tx));
+                }
                 None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
                     let _ = termed_rx.await;
+                    single_sessions.remove(path);
                 }
             }
         }
@@ -90,12 +96,31 @@ impl SessionInner {
         let path = path.clone();
         tokio::spawn(async move {
             let _ = term_rx.await;
+            log::trace!("Terminating single session for {}", &path);
             stop_fn.await;
             let _ = termed_tx.send(());
             log::trace!("Terminated single session for {}", &path);
         });
 
         Ok(SingleSessionToken(term_tx))
+    }
+
+    pub async fn is_single_session_active(&self, path: &dbus::Path<'static>) -> bool {
+        let mut single_sessions = self.single_sessions.lock().await;
+
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
+            match term_tx_weak.upgrade() {
+                Some(_) => true,
+                None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
+                    let _ = termed_rx.await;
+                    single_sessions.remove(path);
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     pub async fn events(
@@ -196,6 +221,7 @@ impl Session {
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
             dbus_task,
+            adapter_discovery_filter: Mutex::new(HashMap::new()),
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;
@@ -238,7 +264,7 @@ impl Session {
     /// Enumerate connected Bluetooth adapters and return their names.
     pub async fn adapter_names(&self) -> Result<Vec<String>> {
         let mut names = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Adapter::parse_dbus_path(&path) {
                 Some(name) if interfaces.contains_key(adapter::INTERFACE) => {
                     names.push(name.to_string());
@@ -254,21 +280,20 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    /// This registers a Bluetooth authorization agent handler.
+    /// Registers a Bluetooth authorization agent handler.
     ///
-    /// Every application can register its own agent and
-    /// for all actions triggered by that application its
-    /// agent is used.
+    /// Every application can register its own agent to use
+    /// that agent for all actions triggered by that application.
     ///
     /// It is not required by an application to register
-    /// an agent. If an application does chooses to not
+    /// an agent. If an application chooses not to
     /// register an agent, the default agent is used. This
-    /// is on most cases a good idea. Only application
+    /// is in most cases a good idea. Only applications
     /// like a pairing wizard should register their own
     /// agent.
     ///
     /// An application can only register one agent. Multiple
-    /// agents per application is not supported.
+    /// agents per application are not supported.
     ///
     /// Drop the returned [AgentHandle] to unregister the agent.
     pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
@@ -417,7 +442,7 @@ impl Event {
                                     if let Some(parent_subs) = subs.get_mut(&*parent) {
                                         let evt = Self::ObjectAdded {
                                             object,
-                                            interfaces: interfaces.into_iter().map(|(interface, _)| interface).collect(),
+                                            interfaces: interfaces.into_keys().collect(),
                                         };
                                         log::trace!("Event: {:?}", &evt);
                                         parent_subs.retain(|sub| {

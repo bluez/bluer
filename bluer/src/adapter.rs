@@ -49,7 +49,7 @@ pub struct Adapter {
 
 impl Debug for Adapter {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "Adapter {{ name: {} }}", self.name())
+        f.debug_struct("Adapter").field("name", &self.name()).finish()
     }
 }
 
@@ -69,7 +69,7 @@ impl Adapter {
     }
 
     pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
-        Path::new(format!("{}{}", PREFIX, adapter_name,))
+        Path::new(format!("{PREFIX}{adapter_name}",))
             .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
     }
 
@@ -100,7 +100,7 @@ impl Adapter {
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
-        for (path, interfaces) in all_dbus_objects(&*self.inner.connection).await? {
+        for (path, interfaces) in all_dbus_objects(&self.inner.connection).await? {
             match Device::parse_dbus_path(&path) {
                 Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(device::INTERFACE) => {
                     addrs.push(addr)
@@ -128,6 +128,28 @@ impl Adapter {
         Device::new(self.inner.clone(), self.name.clone(), address)
     }
 
+    /// Gets the filter used for device discovery.
+    pub async fn discovery_filter(&self) -> DiscoveryFilter {
+        self.inner.adapter_discovery_filter.lock().await.get(self.name()).cloned().unwrap_or_default()
+    }
+
+    /// Sets the filter used for device discovery.
+    ///
+    /// Setting a discovery filter does not guarantee that all its filters will be applied.
+    /// A discovery session from another program might be active, leading to merging of
+    /// the discovery filters by the Bluetooth daemon.
+    ///
+    /// The discovery filter can only be changed when no device discovery is currently active.
+    /// Otherwise a [DiscoveryActive error](ErrorKind::DiscoveryActive) will be returned.
+    pub async fn set_discovery_filter(&self, discovery_filter: DiscoveryFilter) -> Result<()> {
+        if self.inner.is_single_session_active(&self.dbus_path).await {
+            return Err(Error::new(ErrorKind::DiscoveryActive));
+        }
+
+        self.inner.adapter_discovery_filter.lock().await.insert(self.name().to_string(), discovery_filter);
+        Ok(())
+    }
+
     /// This method starts the device discovery session.
     ///
     /// This includes an inquiry procedure and remote device name resolving.
@@ -143,6 +165,8 @@ impl Adapter {
     /// yet when a [DeviceAdded event](AdapterEvent::DeviceAdded) occurs.
     /// Use [discover_devices_with_changes](Self::discover_devices_with_changes)
     /// when you want to be notified when the device properties change.
+    ///
+    /// The discovery filter can be configured using [set_discovery_filter](Self::set_discovery_filter).
     pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let token = self.discovery_session().await?;
         let change_events = self.events().await?.map(move |evt| {
@@ -169,6 +193,8 @@ impl Adapter {
     /// All already known devices are also included in the device stream.
     /// This may include devices that are currently not in range.
     /// Check the [Device::rssi] property to see if the device is currently present.
+    ///
+    /// The discovery filter can be configured using [set_discovery_filter](Self::set_discovery_filter).
     pub async fn discover_devices_with_changes(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let (tx, rx) = mpsc::channel(1);
         let mut discovery = self.discover_devices().await?;
@@ -210,16 +236,12 @@ impl Adapter {
     async fn discovery_session(&self) -> Result<SingleSessionToken> {
         let dbus_path = self.dbus_path.clone();
         let connection = self.inner.connection.clone();
-        self.inner
+        let token = self
+            .inner
             .single_session(
                 &self.dbus_path,
                 async move {
-                    let filter = DiscoveryFilter {
-                        duplicate_data: false,
-                        transport: DiscoveryTransport::Auto,
-                        ..Default::default()
-                    };
-                    self.call_method("SetDiscoveryFilter", (filter.into_dict(),)).await?;
+                    self.call_method("SetDiscoveryFilter", (self.discovery_filter().await.into_dict(),)).await?;
                     self.call_method("StartDiscovery", ()).await?;
                     Ok(())
                 },
@@ -231,7 +253,8 @@ impl Adapter {
                     log::trace!("{}: {}.StopDiscovery () -> {:?}", &dbus_path, SERVICE_NAME, &result);
                 },
             )
-            .await
+            .await?;
+        Ok(token)
     }
 
     dbus_interface!();
@@ -641,7 +664,8 @@ pub enum AdapterEvent {
 
 /// Transport parameter determines the type of scan.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
-pub(crate) enum DiscoveryTransport {
+#[non_exhaustive]
+pub enum DiscoveryTransport {
     /// interleaved scan
     #[strum(serialize = "auto")]
     Auto,
@@ -660,8 +684,11 @@ impl Default for DiscoveryTransport {
 }
 
 /// Bluetooth device discovery filter.
+///
+/// The default discovery filter does not restrict any devices and provides
+/// [duplicate data](Self::duplicate_data).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct DiscoveryFilter {
+pub struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match
     ///  _any_ UUID.
     ///
@@ -729,6 +756,8 @@ pub(crate) struct DiscoveryFilter {
     /// it work as a logical OR, also setting empty
     /// string "" pattern will match any device found.
     pub pattern: Option<String>,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 impl Default for DiscoveryFilter {
@@ -741,6 +770,7 @@ impl Default for DiscoveryFilter {
             duplicate_data: true,
             discoverable: false,
             pattern: Default::default(),
+            _non_exhaustive: (),
         }
     }
 }
@@ -748,7 +778,8 @@ impl Default for DiscoveryFilter {
 impl DiscoveryFilter {
     fn into_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
         let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
-        let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern } = self;
+        let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern, _non_exhaustive } =
+            self;
         hm.insert("UUIDs", Variant(Box::new(uuids.into_iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())));
         if let Some(rssi) = rssi {
             hm.insert("RSSI", Variant(Box::new(rssi)));

@@ -29,8 +29,8 @@ use super::{
     CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    method_call, parent_path, Adapter, DbusResult, Error, ErrorKind, Result, SessionInner, ERR_PREFIX,
-    SERVICE_NAME, TIMEOUT,
+    method_call, parent_path, Adapter, Address, DbusResult, Device, Error, ErrorKind, Result, SessionInner,
+    ERR_PREFIX, SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
@@ -430,10 +430,24 @@ impl Characteristic {
 // Callback interface
 // ------------------
 
+/// Parse the `device` option.
+fn parse_device(dict: &PropMap) -> DbusResult<(String, Address)> {
+    let path = read_prop!(dict, "device", Path);
+    let (adapter, addr) = Device::parse_dbus_path(&path).ok_or_else(|| {
+        log::warn!("cannot parse device path: {}", path);
+        MethodErr::invalid_arg("device")
+    })?;
+    Ok((adapter.to_string(), addr))
+}
+
 /// Read value request.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct CharacteristicReadRequest {
+    /// Name of adapter making this request.
+    pub adapter_name: String,
+    /// Address of device making this request.
+    pub device_address: Address,
     /// Offset.
     pub offset: u16,
     /// Exchanged MTU.
@@ -444,7 +458,10 @@ pub struct CharacteristicReadRequest {
 
 impl CharacteristicReadRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+        let (adapter_name, device_address) = parse_device(dict)?;
         Ok(Self {
+            adapter_name,
+            device_address,
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             mtu: read_prop!(dict, "mtu", u16),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
@@ -456,6 +473,10 @@ impl CharacteristicReadRequest {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct CharacteristicWriteRequest {
+    /// Name of adapter making this request.
+    pub adapter_name: String,
+    /// Address of device making this request.
+    pub device_address: Address,
     /// Start offset.
     pub offset: u16,
     /// Write operation type.
@@ -470,7 +491,10 @@ pub struct CharacteristicWriteRequest {
 
 impl CharacteristicWriteRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+        let (adapter_name, device_address) = parse_device(dict)?;
         Ok(Self {
+            adapter_name,
+            device_address,
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             op_type: read_opt_prop!(dict, "type", String)
                 .map(|s| s.parse().map_err(|_| MethodErr::invalid_arg("type")))
@@ -563,12 +587,24 @@ impl CharacteristicNotifier {
 
 /// A remote request to start writing to a characteristic via IO.
 pub struct CharacteristicWriteIoRequest {
+    adapter_name: String,
+    device_address: Address,
     mtu: u16,
     link: Option<LinkType>,
     tx: oneshot::Sender<ReqResult<OwnedFd>>,
 }
 
 impl CharacteristicWriteIoRequest {
+    /// Name of adapter making this request.
+    pub fn adapter_name(&self) -> &str {
+        &self.adapter_name
+    }
+
+    /// Address of device making this request.
+    pub fn device_address(&self) -> Address {
+        self.device_address
+    }
+
     /// Maximum transmission unit.
     pub fn mtu(&self) -> usize {
         self.mtu.into()
@@ -581,10 +617,10 @@ impl CharacteristicWriteIoRequest {
 
     /// Accept the write request.
     pub fn accept(self) -> Result<CharacteristicReader> {
-        let CharacteristicWriteIoRequest { mtu, tx, .. } = self;
+        let CharacteristicWriteIoRequest { adapter_name, device_address, mtu, tx, .. } = self;
         let (fd, stream) = make_socket_pair(false)?;
         let _ = tx.send(Ok(fd));
-        Ok(CharacteristicReader { mtu: mtu.into(), stream, buf: Vec::new() })
+        Ok(CharacteristicReader { adapter_name, device_address, mtu: mtu.into(), stream, buf: Vec::new() })
     }
 
     /// Reject the write request.
@@ -696,6 +732,10 @@ pub fn characteristic_control() -> (CharacteristicControl, CharacteristicControl
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 struct CharacteristicAcquireRequest {
+    /// Name of adapter making this request.
+    pub adapter_name: String,
+    /// Address of device making this request.
+    pub device_address: Address,
     /// Exchanged MTU.
     pub mtu: u16,
     /// Link type.
@@ -704,7 +744,10 @@ struct CharacteristicAcquireRequest {
 
 impl CharacteristicAcquireRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+        let (adapter, device) = parse_device(dict)?;
         Ok(Self {
+            adapter_name: adapter,
+            device_address: device,
             mtu: read_prop!(dict, "mtu", u16),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
         })
@@ -866,8 +909,13 @@ impl RegisteredCharacteristic {
                         match &reg.c.write {
                             Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
                                 let (tx, rx) = oneshot::channel();
-                                let req =
-                                    CharacteristicWriteIoRequest { mtu: options.mtu, link: options.link, tx };
+                                let req = CharacteristicWriteIoRequest {
+                                    adapter_name: options.adapter_name.clone(),
+                                    device_address: options.device_address,
+                                    mtu: options.mtu,
+                                    link: options.link,
+                                    tx,
+                                };
                                 reg.c
                                     .control_handle
                                     .events_tx
@@ -896,7 +944,12 @@ impl RegisteredCharacteristic {
                                 let (fd, stream) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
                                 // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
                                 let mtu = options.mtu.saturating_sub(5).into();
-                                let writer = CharacteristicWriter { mtu, stream };
+                                let writer = CharacteristicWriter {
+                                    adapter_name: options.adapter_name.clone(),
+                                    device_address: options.device_address,
+                                    mtu,
+                                    stream,
+                                };
                                 let _ = reg
                                     .c
                                     .control_handle
@@ -1046,6 +1099,10 @@ impl Descriptor {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct DescriptorReadRequest {
+    /// Name of adapter making this request.
+    pub adapter_name: String,
+    /// Address of device making this request.
+    pub device_address: Address,
     /// Offset.
     pub offset: u16,
     /// Link type.
@@ -1054,7 +1111,10 @@ pub struct DescriptorReadRequest {
 
 impl DescriptorReadRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+        let (adapter_name, device_address) = parse_device(dict)?;
         Ok(Self {
+            adapter_name,
+            device_address,
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
         })
@@ -1065,6 +1125,10 @@ impl DescriptorReadRequest {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct DescriptorWriteRequest {
+    /// Name of adapter making this request.
+    pub adapter_name: String,
+    /// Address of device making this request.
+    pub device_address: Address,
     /// Offset.
     pub offset: u16,
     /// Link type.
@@ -1075,7 +1139,10 @@ pub struct DescriptorWriteRequest {
 
 impl DescriptorWriteRequest {
     fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+        let (adapter_name, device_address) = parse_device(dict)?;
         Ok(Self {
+            adapter_name,
+            device_address,
             offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
             link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
             prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
@@ -1283,7 +1350,7 @@ impl Application {
 
         log::trace!("Registering application at {}", &app_path);
         let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy.method_call(MANAGER_INTERFACE, "RegisterApplication", (app_path.clone(), PropMap::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -1370,7 +1437,7 @@ impl Profile {
 
         log::trace!("Registering profile at {}", &profile_path);
         let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&*adapter_name)?, TIMEOUT, inner.connection.clone());
+            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
         proxy
             .method_call(MANAGER_INTERFACE, "RegisterApplication", (profile_path.clone(), PropMap::new()))
             .await?;

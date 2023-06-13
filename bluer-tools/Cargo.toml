@@ -1,6 +1,6 @@
 [package]
 name = "bluer-tools"
-version = "0.14.0"
+version = "0.15.4"
 description = "BlueR tools: swiss army knife for GATT services, L2CAP and RFCOMM sockets on Linux"
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>", "BlueR contributors"]
@@ -27,7 +27,7 @@ name = "rfcat"
 path = "src/rfcat.rs"
 
 [dependencies]
-bluer = { version = "0.15.0", path = "../bluer", features = ["full"] }
+bluer = { version = "0.15.4", path = "../bluer", features = ["full"] }
 futures = "0.3"
 tokio = { version = "1", features = [
     "io-std",
@@ -36,12 +36,12 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
 ] }
 clap = { version = "3", features = ["derive"] }
-crossterm = "0.23"
+crossterm = "0.25"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
 pretty-hex = "0.3"
 bytes = "1"
-env_logger = "0.9"
+env_logger = "0.10"
 libc = "0.2"
 log = "0.4"
 hex = { version = "0.4" }

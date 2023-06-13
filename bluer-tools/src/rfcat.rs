@@ -133,7 +133,7 @@ impl ConnectOpts {
                             dev.connect_profile(&uuid).await
                         } => {
                             if let Err(err) = res {
-                                eprintln!("Connect profile failed: {}", err);
+                                eprintln!("Connect profile failed: {err}");
                             }
                             sleep(Duration::from_secs(3)).await;
                         },
@@ -158,7 +158,7 @@ impl ConnectOpts {
 
         if self.tty {
             let tty = stream.as_ref().create_tty(-1)?;
-            println!("Allocated TTY {}", tty);
+            println!("Allocated TTY {tty}");
 
             println!("Press enter to release TTY and exit");
             let stdin = BufReader::new(tokio::io::stdin());
@@ -637,12 +637,12 @@ impl SpeedServerOpts {
                         rng.fill_bytes(&mut buf);
 
                         if let Err(err) = conn.write_all(&buf).await {
-                            println!("Disconnected: {}", err);
+                            println!("Disconnected: {err}");
                             break;
                         }
                     }
                 }
-                Err(err) => println!("Connection failed: {}", err),
+                Err(err) => println!("Connection failed: {err}"),
             }
 
             if self.once {

@@ -49,7 +49,7 @@ async fn main() -> bluer::Result<()> {
         let len = rng.gen_range(0..50000);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
-        println!("\nTest iteration {} with data size {}", i, len);
+        println!("\nTest iteration {i} with data size {len}");
 
         // We must read back the data while sending, otherwise the connection
         // buffer will overrun and we will lose data.
