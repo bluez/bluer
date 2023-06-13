@@ -513,7 +513,6 @@ pub mod adv;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod agent;
-pub mod monitor;
 #[cfg(feature = "bluetoothd")]
 mod device;
 #[cfg(feature = "bluetoothd")]
@@ -522,6 +521,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
 pub mod rfcomm;
@@ -617,6 +619,9 @@ pub enum ErrorKind {
     /// the target object was either not present or removed
     #[strum(disabled)]
     NotFound,
+    /// advertisement monitor could not be activated
+    #[strum(disabled)]
+    AdvertisementMonitorRejected,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),

@@ -34,8 +34,9 @@ use crate::{
     adapter,
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    monitor::{Monitor, MonitorHandle, RegisteredMonitor},
-    all_dbus_objects, gatt, parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    all_dbus_objects, gatt,
+    monitor::RegisteredMonitor,
+    parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 #[cfg(feature = "rfcomm")]
@@ -54,7 +55,7 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
-    pub monitor_token: IfaceToken<Arc<Monitor>>,
+    pub monitor_token: IfaceToken<Arc<RegisteredMonitor>>,
     #[cfg(feature = "rfcomm")]
     pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
@@ -173,7 +174,7 @@ impl Session {
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
         let agent_token = RegisteredAgent::register_interface(&mut crossroads);
-        let monitor_token = Monitor::register_interface(&mut crossroads);
+        let monitor_token = RegisteredMonitor::register_interface(&mut crossroads);
         #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
 

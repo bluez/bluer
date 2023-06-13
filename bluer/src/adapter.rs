@@ -25,9 +25,10 @@ use crate::{
     adv::{Advertisement, AdvertisementHandle, Capabilities, Feature, PlatformFeature, SecondaryChannel},
     all_dbus_objects, device,
     device::Device,
-    gatt, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
+    gatt,
+    monitor::MonitorManager,
+    Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
     SingleSessionToken, SERVICE_NAME, TIMEOUT,
-    monitor::{Monitor, RegisteredMonitor, RegisteredMonitorHandle},
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -110,9 +111,16 @@ impl Adapter {
         Ok(addrs)
     }
 
-    pub async fn register_monitor(&self) -> Result<RegisteredMonitorHandle> {
-        let reg_monitor = RegisteredMonitor::new(self.inner.clone());
-        reg_monitor.register(self.name()).await
+    /// Starts monitoring of advertisements.
+    ///
+    /// Once a monitoring job is activated by BlueZ, the client can expect to get
+    /// notified on the targeted advertisements no matter if there is an ongoing
+    /// discovery session.
+    ///
+    /// Use the returned [`MonitorManager`] to target advertisements
+    /// and drop it to stop monitoring advertisements.
+    pub async fn monitor(&self) -> Result<MonitorManager> {
+        MonitorManager::new(self.inner.clone(), self.name()).await
     }
 
     /// Get interface to Bluetooth device of specified address.
