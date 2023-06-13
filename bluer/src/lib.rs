@@ -525,6 +525,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
 pub mod rfcomm;
@@ -620,6 +623,9 @@ pub enum ErrorKind {
     /// the target object was either not present or removed
     #[strum(disabled)]
     NotFound,
+    /// advertisement monitor could not be activated
+    #[strum(disabled)]
+    AdvertisementMonitorRejected,
     /// the discovery filter cannot be changed while a discovery session is active
     #[strum(disabled)]
     DiscoveryActive,
