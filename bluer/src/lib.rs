@@ -15,11 +15,12 @@
 //!     * configuration of power, discoverability, name, etc.
 //!     * hot-plug support through change events stream
 //! * [Bluetooth devices](Device)
-//!     * [discovery](Adapter::discover_devices)
+//!     * [discovery](Adapter::discover_devices) with custom filters
 //!     * querying of address, name, class, signal strength (RSSI), etc.
 //!     * Bluetooth Low Energy advertisements
 //!     * [change events stream](Adapter::events)
 //!     * connecting and pairing
+//!     * [passive LE advertisement monitoring](Adapter::monitor)
 //! * [consumption of remote GATT services](Device::services)
 //!     * GATT service discovery
 //!     * read, write and notify operations on characteristics
