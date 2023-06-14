@@ -35,15 +35,14 @@ use crate::{
     adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
     all_dbus_objects, gatt,
-    parent_path, Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    monitor::RegisteredMonitor,
+    parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 #[cfg(feature = "mesh")]
-use crate::{
-    mesh::{
-        agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement, network::Network,
-        provisioner::RegisteredProvisioner,
-    },
+use crate::mesh::{
+    agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
+    network::Network, provisioner::RegisteredProvisioner,
 };
 
 #[cfg(feature = "rfcomm")]
@@ -70,11 +69,13 @@ pub(crate) struct SessionInner {
     pub provisioner_token: IfaceToken<Arc<RegisteredApplication>>,
     #[cfg(feature = "mesh")]
     pub provision_agent_token: IfaceToken<Arc<RegisteredProvisionAgent>>,
+    pub monitor_token: IfaceToken<Arc<RegisteredMonitor>>,
     #[cfg(feature = "rfcomm")]
     pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
     dbus_task: JoinHandle<connection::IOResourceError>,
+    pub adapter_discovery_filter: Mutex<HashMap<String, DiscoveryFilter>>,
 }
 
 impl SessionInner {
@@ -116,6 +117,24 @@ impl SessionInner {
         });
 
         Ok(SingleSessionToken(term_tx))
+    }
+
+    pub async fn is_single_session_active(&self, path: &dbus::Path<'static>) -> bool {
+        let mut single_sessions = self.single_sessions.lock().await;
+
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
+            match term_tx_weak.upgrade() {
+                Some(_) => true,
+                None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
+                    let _ = termed_rx.await;
+                    single_sessions.remove(path);
+                    false
+                }
+            }
+        } else {
+            false
+        }
     }
 
     pub async fn events(
@@ -184,6 +203,8 @@ impl Session {
             }),
         )));
 
+        crossroads.set_object_manager_support(Some(connection.clone()));
+
         let le_advertisment_token = Advertisement::register_interface(&mut crossroads);
         let gatt_service_token = gatt::local::RegisteredService::register_interface(&mut crossroads);
         let gatt_reg_characteristic_token =
@@ -192,6 +213,7 @@ impl Session {
             gatt::local::RegisteredDescriptor::register_interface(&mut crossroads);
         let gatt_profile_token = gatt::local::Profile::register_interface(&mut crossroads);
         let agent_token = RegisteredAgent::register_interface(&mut crossroads);
+        let monitor_token = RegisteredMonitor::register_interface(&mut crossroads);
         #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
         #[cfg(feature = "mesh")]
@@ -223,11 +245,13 @@ impl Session {
             provisioner_token,
             #[cfg(feature = "mesh")]
             provision_agent_token,
+            monitor_token,
             #[cfg(feature = "rfcomm")]
             profile_token,
             single_sessions: Mutex::new(HashMap::new()),
             event_sub_tx,
             dbus_task,
+            adapter_discovery_filter: Mutex::new(HashMap::new()),
         });
 
         let mc_callback = connection.add_match(MatchRule::new_method_call()).await?;

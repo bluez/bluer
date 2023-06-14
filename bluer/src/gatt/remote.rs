@@ -499,11 +499,14 @@ define_properties!(
             get: (uuid, v => {v.parse().map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::InvalidUuid(v.to_string()))))?}),
         );
 
-        ///	True, if notifications or indications on this
-        ///	characteristic are currently enabled.
+        ///	Whether notifications or indications on this
+        ///	characteristic are supported and currently enabled.
+        ///
+        /// Returns `Some(true)` if enabled and `Some(false)` if disabled.
+        /// When notifications are unsupported this returns `None`.
         property(
             Notifying, bool,
-            dbus: (CHARACTERISTIC_INTERFACE, "Notifying", bool, MANDATORY),
+            dbus: (CHARACTERISTIC_INTERFACE, "Notifying", bool, OPTIONAL),
             get: (notifying, v => {v.to_owned()}),
         );
 

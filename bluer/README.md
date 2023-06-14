@@ -16,11 +16,12 @@ The following functionality is provided:
     * configuration of power, discoverability, name, etc.
     * hot-plug support through change events stream
 * Bluetooth devices
-    * discovery
+    * discovery with custom filters
     * querying of address, name, class, signal strength (RSSI), etc.
     * Bluetooth Low Energy advertisements
     * change events stream
     * connecting and pairing
+    * passive LE advertisement monitoring
 * consumption of remote GATT services
     * GATT service discovery
     * read, write and notify operations on characteristics

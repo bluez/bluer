@@ -1,6 +1,6 @@
 //! Discover Bluetooth devices and list them.
 
-use bluer::{Adapter, AdapterEvent, Address, DeviceEvent};
+use bluer::{Adapter, AdapterEvent, Address, DeviceEvent, DiscoveryFilter, DiscoveryTransport};
 use futures::{pin_mut, stream::SelectAll, StreamExt};
 use std::{collections::HashSet, env};
 
@@ -35,6 +35,8 @@ async fn query_all_device_properties(adapter: &Adapter, addr: Address) -> bluer:
 async fn main() -> bluer::Result<()> {
     let with_changes = env::args().any(|arg| arg == "--changes");
     let all_properties = env::args().any(|arg| arg == "--all-properties");
+    let le_only = env::args().any(|arg| arg == "--le");
+    let br_edr_only = env::args().any(|arg| arg == "--bredr");
     let filter_addr: HashSet<_> = env::args().filter_map(|arg| arg.parse::<Address>().ok()).collect();
 
     env_logger::init();
@@ -42,6 +44,19 @@ async fn main() -> bluer::Result<()> {
     let adapter = session.default_adapter().await?;
     println!("Discovering devices using Bluetooth adapter {}\n", adapter.name());
     adapter.set_powered(true).await?;
+
+    let filter = DiscoveryFilter {
+        transport: if le_only {
+            DiscoveryTransport::Le
+        } else if br_edr_only {
+            DiscoveryTransport::BrEdr
+        } else {
+            DiscoveryTransport::Auto
+        },
+        ..Default::default()
+    };
+    adapter.set_discovery_filter(filter).await?;
+    println!("Using discovery filter:\n{:#?}\n\n", adapter.discovery_filter().await);
 
     let device_events = adapter.discover_devices().await?;
     pin_mut!(device_events);

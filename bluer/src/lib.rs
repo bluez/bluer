@@ -15,11 +15,12 @@
 //!     * configuration of power, discoverability, name, etc.
 //!     * hot-plug support through change events stream
 //! * [Bluetooth devices](Device)
-//!     * [discovery](Adapter::discover_devices)
+//!     * [discovery](Adapter::discover_devices) with custom filters
 //!     * querying of address, name, class, signal strength (RSSI), etc.
 //!     * Bluetooth Low Energy advertisements
 //!     * [change events stream](Adapter::events)
 //!     * connecting and pairing
+//!     * [passive LE advertisement monitoring](Adapter::monitor)
 //! * [consumption of remote GATT services](Device::services)
 //!     * GATT service discovery
 //!     * read, write and notify operations on characteristics
@@ -525,6 +526,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
 pub mod rfcomm;
@@ -622,6 +626,12 @@ pub enum ErrorKind {
     /// the target object was either not present or removed
     #[strum(disabled)]
     NotFound,
+    /// advertisement monitor could not be activated
+    #[strum(disabled)]
+    AdvertisementMonitorRejected,
+    /// the discovery filter cannot be changed while a discovery session is active
+    #[strum(disabled)]
+    DiscoveryActive,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
@@ -755,6 +765,8 @@ impl From<Error> for std::io::Error {
             ErrorKind::NotificationSessionStopped => E::ConnectionReset,
             ErrorKind::IndicationUnconfirmed => E::TimedOut,
             ErrorKind::NotFound => E::NotFound,
+            ErrorKind::DiscoveryActive => E::PermissionDenied,
+            ErrorKind::AdvertisementMonitorRejected => E::InvalidInput,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };
