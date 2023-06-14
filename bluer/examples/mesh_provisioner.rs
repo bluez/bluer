@@ -19,7 +19,8 @@ use bluer::{
 };
 use btmesh_models::{
     foundation::configuration::{
-        app_key::AppKeyMessage, ConfigurationMessage, ConfigurationServer, CONFIGURATION_SERVER, CONFIGURATION_CLIENT,
+        app_key::AppKeyMessage, ConfigurationMessage, ConfigurationServer, CONFIGURATION_CLIENT,
+        CONFIGURATION_SERVER,
     },
     Message, Model,
 };
@@ -55,10 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         device_id: Uuid::new_v4(),
         elements: vec![Element {
             location: None,
-            models: vec![
-                CONFIGURATION_SERVER,
-                CONFIGURATION_CLIENT,
-            ],
+            models: vec![CONFIGURATION_SERVER, CONFIGURATION_CLIENT],
             control_handle: Some(element_handle),
         }],
         provisioner: Some(Provisioner {

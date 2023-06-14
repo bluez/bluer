@@ -44,7 +44,6 @@ pub struct Application {
 }
 
 impl Application {
-
     fn root_path(&self) -> String {
         format!("{}{}", MESH_APP_PREFIX, self.device_id.as_simple())
     }
@@ -58,12 +57,10 @@ impl Application {
         Ok(Path::new(app_path).unwrap())
     }
 
-
     pub(crate) fn element_dbus_path(&self, element_idx: usize) -> Result<Path<'static>> {
         let element_path = format!("{}/ele{}", self.root_path(), element_idx);
         Ok(Path::new(element_path).unwrap())
     }
-
 }
 
 /// Application properties

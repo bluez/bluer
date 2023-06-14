@@ -152,7 +152,10 @@ impl Node {
     }
 
     /// Create pub-set configuration message
-    pub fn pub_set_create<'m>( address: u16, pub_address: PublishAddress, app_key: u16, publish_period: PublishPeriod, rxt: PublishRetransmit, model: ModelIdentifier) -> Result<ConfigurationMessage> {
+    pub fn pub_set_create<'m>(
+        address: u16, pub_address: PublishAddress, app_key: u16, publish_period: PublishPeriod,
+        rxt: PublishRetransmit, model: ModelIdentifier,
+    ) -> Result<ConfigurationMessage> {
         let details = PublicationDetails {
             element_address: address.try_into().map_err(|_| InvalidAddress(address.to_string()))?,
             publish_address: pub_address,

@@ -1,4 +1,3 @@
-#![feature(generic_associated_types)]
 //! Attach and send/receive BT Mesh messages
 //!
 //! Example meshd
@@ -17,7 +16,9 @@ use bluer::mesh::{
 };
 use btmesh_common::{opcode::Opcode, CompanyIdentifier, InsufficientBuffer, ModelIdentifier, ParseError};
 use btmesh_models::{
-    sensor::{PropertyId, SensorConfig, SensorData, SensorDescriptor, SensorMessage, SensorStatus, SENSOR_SERVER},
+    sensor::{
+        PropertyId, SensorConfig, SensorData, SensorDescriptor, SensorMessage, SensorStatus, SENSOR_SERVER,
+    },
     Message, Model,
 };
 use clap::Parser;

@@ -1,6 +1,6 @@
 //! Implement Provisioner bluetooth provisoner agent
 
-use crate::{method_call, ERR_PREFIX, SessionInner};
+use crate::{method_call, SessionInner, ERR_PREFIX};
 use futures::Future;
 use std::{pin::Pin, sync::Arc};
 
@@ -9,7 +9,7 @@ use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use std::str::FromStr;
 
 use crate::mesh::{PATH, SERVICE_NAME, TIMEOUT};
-use strum::{IntoStaticStr, EnumString};
+use strum::{EnumString, IntoStaticStr};
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
 
@@ -50,7 +50,7 @@ pub enum StaticCapabilities {
     InAlpha,
     /// 16 octet array.
     #[strum(serialize = "static-oob")]
-    StaticOob
+    StaticOob,
 }
 
 /// Agent numeric capabilities.
@@ -89,13 +89,11 @@ pub struct DisplayNumeric {
 }
 
 /// Function handling displaying numeric values.
-pub type DisplayNumericFn = fn(DisplayNumeric) ->  Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>;
+pub type DisplayNumericFn = fn(DisplayNumeric) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>;
 
 /// Provision agent configuration.
 #[derive(Clone, Default)]
 pub struct ProvisionAgent {
-
-
     display_numeric: Option<DisplayNumericFn>,
     prompt_static: Option<PromptStaticFn>,
 
@@ -142,28 +140,32 @@ impl RegisteredProvisionAgent {
                 (),
                 |ctx, cr, (display_type, number): (String, u32)| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let res = reg.call(
-                            &reg.agent.display_numeric,
-                            DisplayNumeric {
-                                display_type: NumericCapabilities::from_str(&display_type).unwrap(),
-                                number
-                            },
-                        )
-                        .await?;
+                        let res = reg
+                            .call(
+                                &reg.agent.display_numeric,
+                                DisplayNumeric {
+                                    display_type: NumericCapabilities::from_str(&display_type).unwrap(),
+                                    number,
+                                },
+                            )
+                            .await?;
                         Ok(res)
                     })
                 },
             );
-            ib.method_with_cr_async("PromptStatic", ("type",), ("value",), |ctx, cr, (input_type,): (String,)| {
-                method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                    let hex = reg.call(
-                        &reg.agent.prompt_static,
-                        StaticCapabilities::from_str(&input_type).unwrap(),
-                    )
-                    .await?;
-                    Ok((hex,))
-                })
-            });
+            ib.method_with_cr_async(
+                "PromptStatic",
+                ("type",),
+                ("value",),
+                |ctx, cr, (input_type,): (String,)| {
+                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
+                        let hex = reg
+                            .call(&reg.agent.prompt_static, StaticCapabilities::from_str(&input_type).unwrap())
+                            .await?;
+                        Ok((hex,))
+                    })
+                },
+            );
             cr_property!(ib, "Capabilities", reg => {
                 Some(reg.agent.capabilities.clone())
             });

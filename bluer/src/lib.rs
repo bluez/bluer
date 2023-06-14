@@ -526,6 +526,8 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "mesh")]
+pub mod mesh;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod monitor;
@@ -535,8 +537,6 @@ pub mod rfcomm;
 #[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;
-#[cfg(feature = "mesh")]
-pub mod mesh;
 
 #[cfg(feature = "bluetoothd")]
 pub use crate::{adapter::*, device::*, session::*};
