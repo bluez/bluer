@@ -160,7 +160,7 @@ pub struct Advertisement {
     ///
     /// Note: Types already handled by other properties shall
     /// not be used.
-    pub advertisting_data: BTreeMap<u8, Vec<u8>>,
+    pub advertising_data: BTreeMap<u8, Vec<u8>>,
     /// Advertise as general discoverable.
     ///
     /// When present this
@@ -255,7 +255,7 @@ impl Advertisement {
                 Some(la.service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Data", la => {
-                Some(la.advertisting_data.iter().map(|(k, v)| (*k, Variant(v.clone()))).collect::<HashMap<_, _>>())
+                Some(la.advertising_data.iter().map(|(k, v)| (*k, Variant(v.clone()))).collect::<HashMap<_, _>>())
             });
             cr_property!(ib, "Discoverable", la => {
                 la.discoverable
