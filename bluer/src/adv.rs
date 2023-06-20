@@ -131,6 +131,7 @@ impl Capabilities {
 /// Use [Adapter::advertise] to register a new advertisement.
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct Advertisement {
     /// Determines the type of advertising packet requested.
     pub advertisement_type: Type,
