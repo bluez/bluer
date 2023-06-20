@@ -8,9 +8,10 @@ authors = [
     "BlueR contributors",
     "Attila Dusnoki <adusnoki@inf.u-szeged.hu>",
     "Ben Stern <bstern@fortian.com>",
+    "Dejan Bosanac <dbosanac@redhat.com>",
 ]
 repository = "https://github.com/bluez/bluer"
-keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm"]
+keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm", "mesh"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2021"
@@ -21,11 +22,12 @@ exclude = [
     "bluetooth-numbers-database/*.js",
     "bluetooth-numbers-database/*.json",
     "bluetooth-numbers-database/node_modules/*",
+    "meshd/*",
 ]
 
 [features]
 default = []
-full = ["bluetoothd", "id", "l2cap", "rfcomm", "serde"]
+full = ["bluetoothd", "id", "l2cap", "rfcomm", "mesh", "serde"]
 bluetoothd = [
     "dbus",
     "dbus-tokio",
@@ -42,6 +44,7 @@ bluetoothd = [
 id = []
 l2cap = []
 rfcomm = []
+mesh = ["bluetoothd"]
 serde = ["uuid/serde", "dep:serde"]
 
 [dependencies]
@@ -72,9 +75,15 @@ serde_json = "1"
 uuid = "1"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["io-std", "io-util", "rt-multi-thread"] }
+tokio = { version = "1", features = [
+    "io-std",
+    "io-util",
+    "rt-multi-thread",
+    "signal",
+] }
 env_logger = "0.10"
 rand = "0.8"
+clap = { version = "3", features = ["derive"] }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -121,3 +130,15 @@ required-features = ["bluetoothd"]
 [[example]]
 name = "list_adapters"
 required-features = ["bluetoothd"]
+
+[[example]]
+name = "mesh_sensor_server"
+required-features = ["mesh", "disabled"]
+
+[[example]]
+name = "mesh_sensor_client"
+required-features = ["mesh", "disabled"]
+
+[[example]]
+name = "mesh_provisioner"
+required-features = ["mesh", "disabled"]

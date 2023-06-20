@@ -47,6 +47,9 @@
 //!     * support for classic Bluetooth (BR/EDR)
 //!     * stream oriented
 //!     * async IO interface with [AsyncRead] and [AsyncWrite] support
+//! * [Bluetooth Mesh](mesh)
+//!     * provision and join networks
+//!     * send and receive messages
 //! * [database of assigned numbers](id)
 //!     * manufacturer ids
 //!     * services classes, GATT services, characteristics and descriptors
@@ -61,6 +64,7 @@
 //! * `id`: Enables database of assigned numbers.
 //! * `l2cap`: Enables L2CAP sockets.
 //! * `rfcomm`: Enables RFCOMM sockets.
+//! * `mesh`: Enables Bluetooth mesh functionality.
 //! * `serde`: Enables serialization and deserialization of some data types.
 //!
 //! To enable all crate features specify the `full` crate feature.
@@ -526,6 +530,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
+#[cfg(feature = "mesh")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+pub mod mesh;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod monitor;
@@ -630,6 +637,21 @@ pub enum ErrorKind {
     /// the discovery filter cannot be changed while a discovery session is active
     #[strum(disabled)]
     DiscoveryActive,
+    /// joining the mesh network failed: {0}
+    #[cfg(feature = "mesh")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    #[strum(disabled)]
+    MeshJoinFailed(mesh::application::JoinFailedReason),
+    /// adding a node to the mesh network failed: {0}
+    #[cfg(feature = "mesh")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    #[strum(disabled)]
+    MeshAddNodeFailed(mesh::management::AddNodeFailedReason),
+    /// mesh element is not published
+    #[cfg(feature = "mesh")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    #[strum(disabled)]
+    MeshElementUnpublished,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
@@ -765,6 +787,12 @@ impl From<Error> for std::io::Error {
             ErrorKind::NotFound => E::NotFound,
             ErrorKind::DiscoveryActive => E::PermissionDenied,
             ErrorKind::AdvertisementMonitorRejected => E::InvalidInput,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshJoinFailed(_) => E::ConnectionRefused,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshAddNodeFailed(_) => E::ConnectionRefused,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshElementUnpublished => E::InvalidInput,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };

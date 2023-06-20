@@ -39,6 +39,12 @@ use crate::{
     parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
+#[cfg(feature = "mesh")]
+use crate::mesh::{
+    agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
+    network::Network, provisioner::RegisteredProvisioner,
+};
+
 #[cfg(feature = "rfcomm")]
 use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
 
@@ -55,6 +61,14 @@ pub(crate) struct SessionInner {
     pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
     pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
     pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
+    #[cfg(feature = "mesh")]
+    pub application_token: IfaceToken<Arc<RegisteredApplication>>,
+    #[cfg(feature = "mesh")]
+    pub element_token: IfaceToken<Arc<RegisteredElement>>,
+    #[cfg(feature = "mesh")]
+    pub provisioner_token: IfaceToken<Arc<RegisteredApplication>>,
+    #[cfg(feature = "mesh")]
+    pub provision_agent_token: IfaceToken<Arc<RegisteredProvisionAgent>>,
     pub monitor_token: IfaceToken<Arc<RegisteredMonitor>>,
     #[cfg(feature = "rfcomm")]
     pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
@@ -202,6 +216,14 @@ impl Session {
         let monitor_token = RegisteredMonitor::register_interface(&mut crossroads);
         #[cfg(feature = "rfcomm")]
         let profile_token = RegisteredProfile::register_interface(&mut crossroads);
+        #[cfg(feature = "mesh")]
+        let application_token = RegisteredApplication::register_interface(&mut crossroads);
+        #[cfg(feature = "mesh")]
+        let element_token = RegisteredElement::register_interface(&mut crossroads);
+        #[cfg(feature = "mesh")]
+        let provisioner_token = RegisteredProvisioner::register_interface(&mut crossroads);
+        #[cfg(feature = "mesh")]
+        let provision_agent_token = RegisteredProvisionAgent::register_interface(&mut crossroads);
 
         let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
         Event::handle_connection(connection.clone(), event_sub_rx).await?;
@@ -215,6 +237,14 @@ impl Session {
             gatt_reg_characteristic_descriptor_token,
             gatt_profile_token,
             agent_token,
+            #[cfg(feature = "mesh")]
+            application_token,
+            #[cfg(feature = "mesh")]
+            element_token,
+            #[cfg(feature = "mesh")]
+            provisioner_token,
+            #[cfg(feature = "mesh")]
+            provision_agent_token,
             monitor_token,
             #[cfg(feature = "rfcomm")]
             profile_token,
@@ -278,6 +308,13 @@ impl Session {
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
         Adapter::new(self.inner.clone(), adapter_name)
+    }
+
+    /// Create an interface for the Bluetooth mesh network.
+    #[cfg(feature = "mesh")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    pub async fn mesh(&self) -> Result<Network> {
+        Network::new(self.inner.clone()).await
     }
 
     /// Registers a Bluetooth authorization agent handler.

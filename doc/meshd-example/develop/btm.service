@@ -1,0 +1,12 @@
+[Unit]
+Description=Bluetooth meshd service
+After=dbus.socket
+
+[Service]
+ExecStart=/opt/gateway/run_meshd.sh
+User=root
+Group=root
+Restart=always
+
+[Install]
+WantedBy=default.target

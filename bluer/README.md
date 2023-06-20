@@ -48,6 +48,9 @@ The following functionality is provided:
     * support for classic Bluetooth (BR/EDR)
     * stream oriented
     * async IO interface with `AsyncRead` and `AsyncWrite` support
+* Bluetooth Mesh
+    * provision and join networks
+    * send and receive messages
 * database of assigned numbers
     * manufacturer ids
     * service classes, GATT services, characteristics and descriptors
@@ -78,6 +81,7 @@ The following crate features are available.
 * `id`: Enables database of assigned numbers.
 * `l2cap`: Enables L2CAP sockets.
 * `rfcomm`: Enables RFCOMM sockets.
+* `mesh`: Enables Bluetooth mesh functionality.
 * `serde`: Enables serialization and deserialization of some data types.
 
 To enable all crate features specify the `full` crate feature.
@@ -93,6 +97,9 @@ Refer to the [official changelog] for details.
 
 If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
+
+For `mesh` feature Bluetooth mesh daemon must be running and configured for access over D-Bus. Also, Rust `nightly` 
+toolchain must be installed for compiling and running examples. 
 
 [BlueZ 5.60]: http://www.bluez.org/release-of-bluez-5-60/
 [official changelog]: https://github.com/bluez/bluez/blob/master/ChangeLog
@@ -161,6 +168,12 @@ The following example applications are provided.
   - **le_advertise**: Register Bluetooth LE advertisement.
 
   - **list_adapters**: List installed Bluetooth adapters and their properties.
+
+  - **mesh_sensor_client**: Simple Bluetooth mesh client sending sensor model messages
+
+  - **mesh_sensor_server**: Simple Bluetooth mesh server receiving sensor model messages
+
+  - **mesh_provisioner**: Simple Bluetooth mesh provisioner
 
 Use `cargo run --all-features --example <name>` to run a particular example application.
 

@@ -3,3 +3,8 @@ members = [
     "bluer",
     "bluer-tools",
 ]
+
+[patch.crates-io]
+# dbus = { path = "../dbus-rs/dbus/", features = ["futures"], optional = true }
+# dbus-tokio = { path = "../dbus-rs/dbus-tokio/", optional = true }
+# dbus-crossroads = { path = "../dbus-rs/dbus-crossroads/", optional = true }
