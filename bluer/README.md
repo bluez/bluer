@@ -89,7 +89,7 @@ To enable all crate features specify the `full` crate feature.
 Requirements
 ------------
 
-The minimum support Rust version (MSRV) is 1.60.
+The minimum support Rust version (MSRV) is 1.70.
 
 This library has been tested with [BlueZ 5.60].
 Older versions might work, but be aware that many bugs related to GATT handling exist.
@@ -98,8 +98,7 @@ Refer to the [official changelog] for details.
 If any `bluetoothd` feature is used the Bluetooth daemon must be running and configured for access over D-Bus.
 On most distributions this should work out of the box.
 
-For `mesh` feature Bluetooth mesh daemon must be running and configured for access over D-Bus. Also, Rust `nightly` 
-toolchain must be installed for compiling and running examples. 
+For `mesh` feature Bluetooth mesh daemon must be running and configured for access over D-Bus.
 
 [BlueZ 5.60]: http://www.bluez.org/release-of-bluez-5-60/
 [official changelog]: https://github.com/bluez/bluez/blob/master/ChangeLog
