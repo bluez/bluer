@@ -965,7 +965,7 @@ struct WriteOpts {
     bind: Option<Address>,
     /// Characteristic write operation.
     /// Can be command, request or reliable.
-    #[clap(long, short, parse(try_from_str=parse_write_op))]
+    #[clap(long, short, value_parser = parse_write_op)]
     op: Option<WriteOp>,
     /// Prepare authorize request.
     #[clap(long, short = 'a')]
