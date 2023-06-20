@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match evt {
                     Some(msg) => {
                         match msg {
-                            ElementMessage::Received(received) => {
+                            ElementEvent::MessageReceived(received) => {
                                 match SensorClient::<SensorModel, 1, 1>::parse(&received.opcode, &received.parameters).map_err(|_| std::fmt::Error)? {
                                     Some(message) => {
                                         match message {
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 None => todo!()
                             }
                         },
-                        ElementMessage::DevKey(_) => {
+                        ElementEvent::DevKeyMessageReceived(_) => {
                             todo!()
                         }
                     }

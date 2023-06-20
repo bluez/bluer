@@ -1,4 +1,7 @@
-//! Bluetooth Mesh module
+//! Bluetooth Mesh support.
+//!
+//! The current implementation is experimental, incomplete and subject to change.
+//!
 
 pub mod agent;
 pub mod application;
@@ -8,14 +11,10 @@ pub mod network;
 pub mod node;
 pub mod provisioner;
 
-use crate::{Result, ERR_PREFIX};
-use dbus::{
-    arg::PropMap,
-    nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
-    Path,
-};
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 use strum::IntoStaticStr;
+
+use crate::ERR_PREFIX;
 
 pub(crate) const SERVICE_NAME: &str = "org.bluez.mesh";
 pub(crate) const PATH: &str = "/org/bluez/mesh";
@@ -63,11 +62,3 @@ impl From<ReqError> for dbus::MethodErr {
 
 /// Result of a Bluetooth request to us.
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
-
-/// Gets all D-Bus objects from the BlueZ service.
-async fn all_dbus_objects(
-    connection: &SyncConnection,
-) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
-    let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
-    Ok(p.get_managed_objects().await?)
-}

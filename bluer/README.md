@@ -48,12 +48,12 @@ The following functionality is provided:
     * support for classic Bluetooth (BR/EDR)
     * stream oriented
     * async IO interface with `AsyncRead` and `AsyncWrite` support
+* Bluetooth Mesh
+    * provision and join networks
+    * send and receive messages
 * database of assigned numbers
     * manufacturer ids
     * service classes, GATT services, characteristics and descriptors
-* Bluetooth Mesh
-    * Provision and join networks
-    * Send and receive messages
 
 Currently, some classic Bluetooth (BR/EDR) functionality is missing.
 However, pull requests and contributions are welcome!
@@ -81,8 +81,8 @@ The following crate features are available.
 * `id`: Enables database of assigned numbers.
 * `l2cap`: Enables L2CAP sockets.
 * `rfcomm`: Enables RFCOMM sockets.
+* `mesh`: Enables Bluetooth mesh functionality.
 * `serde`: Enables serialization and deserialization of some data types.
-* `mesh`: Enables Bluetooth mesh functionality
 
 To enable all crate features specify the `full` crate feature.
 

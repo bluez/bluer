@@ -310,7 +310,7 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    /// Create an interface for the Bluetooth mesh network
+    /// Create an interface for the Bluetooth mesh network.
     #[cfg(feature = "mesh")]
     #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
     pub async fn mesh(&self) -> Result<Network> {

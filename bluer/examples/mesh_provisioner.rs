@@ -13,7 +13,7 @@ use bluer::{
     mesh::{
         application::Application,
         element::*,
-        provisioner::{Provisioner, ProvisionerControlHandle, ProvisionerMessage},
+        provisioner::{Provisioner, ProvisionerControlHandle, ProvisionerEvent},
     },
     Uuid,
 };
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match evt {
                     Some(msg) => {
                         match msg {
-                            ProvisionerMessage::AddNodeComplete(uuid, unicast, count) => {
+                            ProvisionerEvent::AddNodeComplete(uuid, unicast, count) => {
                                 println!("Successfully added node {:?} to the address {:#04x} with {:?} elements", uuid, unicast, count);
 
                                 sleep(Duration::from_secs(1)).await;
@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // let message = ConfigurationMessage::from(ModelAppMessage::Bind(payload));
                                 // node.dev_key_send::<ConfigurationServer>(message, element_path.clone(), unicast, true, 0 as u16).await?;
                             },
-                            ProvisionerMessage::AddNodeFailed(uuid, reason) => {
+                            ProvisionerEvent::AddNodeFailed(uuid, reason) => {
                                 println!("Failed to add node {:?}: '{:?}'", uuid, reason);
                                 break;
                             }
@@ -116,10 +116,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match evt {
                     Some(msg) => {
                         match msg {
-                            ElementMessage::Received(received) => {
+                            ElementEvent::MessageReceived(received) => {
                                 println!("Received element message: {:?}", received);
                             },
-                            ElementMessage::DevKey(received) => {
+                            ElementEvent::DevKeyMessageReceived(received) => {
                                 println!("Received dev key message: {:?}", received);
                                 match ConfigurationServer::parse(&received.opcode, &received.parameters).map_err(|_| std::fmt::Error)? {
                                     Some(message) => {

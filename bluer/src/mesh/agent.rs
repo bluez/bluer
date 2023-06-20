@@ -1,15 +1,16 @@
-//! Implement Provisioner bluetooth provisoner agent
+//! Bluetooth mesh provisoner agent.
 
-use crate::{method_call, SessionInner, ERR_PREFIX};
-use futures::Future;
-use std::{pin::Pin, sync::Arc};
-
+use core::fmt;
 use dbus::nonblock::{Proxy, SyncConnection};
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
-use std::str::FromStr;
-
-use crate::mesh::{PATH, SERVICE_NAME, TIMEOUT};
+use futures::Future;
+use std::{fmt::Debug, pin::Pin, str::FromStr, sync::Arc};
 use strum::{EnumString, IntoStaticStr};
+
+use crate::{
+    mesh::{PATH, SERVICE_NAME, TIMEOUT},
+    method_call, SessionInner, ERR_PREFIX,
+};
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
 
@@ -43,8 +44,9 @@ impl From<ReqError> for dbus::MethodErr {
 pub type ReqResult<T> = std::result::Result<T, ReqError>;
 
 /// Agent static capabilities.
-#[derive(Debug, PartialEq, EnumString)]
-pub enum StaticCapabilities {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString)]
+#[non_exhaustive]
+pub enum StaticCapability {
     /// 16 octet alpha array.
     #[strum(serialize = "in-alpha")]
     InAlpha,
@@ -54,8 +56,9 @@ pub enum StaticCapabilities {
 }
 
 /// Agent numeric capabilities.
-#[derive(Debug, PartialEq, EnumString)]
-pub enum NumericCapabilities {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString)]
+#[non_exhaustive]
+pub enum NumericCapability {
     /// LED blinks.
     #[strum(serialize = "blink")]
     Blink,
@@ -76,36 +79,80 @@ pub enum NumericCapabilities {
     Twist,
 }
 
+/// Agent capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Capability {
+    /// Static capability.
+    Static(StaticCapability),
+    /// Numeric capability.
+    Numeric(NumericCapability),
+}
+
+impl fmt::Display for Capability {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Static(c) => c.fmt(f),
+            Self::Numeric(c) => c.fmt(f),
+        }
+    }
+}
+
 /// Function handling a static OOB authentication.
-pub type PromptStaticFn = fn(StaticCapabilities) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>>;
+///
+/// The Static data returned must be 16 octets in size, or the
+/// Provisioning procedure will fail and be canceled. If input type
+/// is "in-alpha", the printable characters should be
+/// left-justified, with trailing 0x00 octets filling the remaining
+/// bytes.
+pub type PromptStaticFn =
+    Box<dyn (Fn(StaticCapability) -> Pin<Box<dyn Future<Output = ReqResult<[u8; 16]>> + Send>>) + Send + Sync>;
 
 /// Arguments for display numeric function.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct DisplayNumeric {
     /// Type of a display.
-    pub display_type: NumericCapabilities,
+    pub display_type: NumericCapability,
     /// The value to display.
     pub number: u32,
 }
 
 /// Function handling displaying numeric values.
-pub type DisplayNumericFn = fn(DisplayNumeric) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>;
+pub type DisplayNumericFn =
+    Box<dyn (Fn(DisplayNumeric) -> Pin<Box<dyn Future<Output = ReqResult<()>> + Send>>) + Send + Sync>;
 
-/// Provision agent configuration.
-#[derive(Clone, Default)]
+/// Mesh provision agent configuration.
+#[derive(Default)]
 pub struct ProvisionAgent {
-    display_numeric: Option<DisplayNumericFn>,
-    prompt_static: Option<PromptStaticFn>,
+    /// This method is called when the Daemon has something important
+    /// for the Agent to Display, but does not require any additional
+    /// input locally.
+    ///
+    /// For instance: "Enter 14939264 on remote device".
+    pub display_numeric: Option<DisplayNumericFn>,
+
+    /// This method is called when the Daemon requires a 16 octet byte
+    /// array, as an Out-of-Band authentication.
+    pub prompt_static: Option<PromptStaticFn>,
 
     /// Capabilities of provisioning agent.
+    ///
     /// Default is empty, meaning no method will be used for provisioning
-    /// Change it with something like, vec!["out-numeric".into(), "static-oob".into()]
-    capabilities: Vec<String>,
+    pub capabilities: Vec<Capability>,
+
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
-#[derive(Clone)]
+impl fmt::Debug for ProvisionAgent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ProvisionAgent").finish()
+    }
+}
+
 /// Implements org.bluez.mesh.ProvisionAgent1 interface
-pub struct RegisteredProvisionAgent {
+pub(crate) struct RegisteredProvisionAgent {
     agent: ProvisionAgent,
     inner: Arc<SessionInner>,
 }
@@ -144,7 +191,7 @@ impl RegisteredProvisionAgent {
                             .call(
                                 &reg.agent.display_numeric,
                                 DisplayNumeric {
-                                    display_type: NumericCapabilities::from_str(&display_type).unwrap(),
+                                    display_type: NumericCapability::from_str(&display_type).unwrap(),
                                     number,
                                 },
                             )
@@ -159,15 +206,16 @@ impl RegisteredProvisionAgent {
                 ("value",),
                 |ctx, cr, (input_type,): (String,)| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let hex = reg
-                            .call(&reg.agent.prompt_static, StaticCapabilities::from_str(&input_type).unwrap())
+                        let data = reg
+                            .call(&reg.agent.prompt_static, StaticCapability::from_str(&input_type).unwrap())
                             .await?;
-                        Ok((hex,))
+                        Ok((Vec::from(data),))
                     })
                 },
             );
+
             cr_property!(ib, "Capabilities", reg => {
-                Some(reg.agent.capabilities.clone())
+                Some(reg.agent.capabilities.iter().map(|c| c.to_string()).collect::<Vec<_>>())
             });
         })
     }

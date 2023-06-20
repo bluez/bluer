@@ -1,49 +1,133 @@
-//! Implement Element bluetooth mesh interface
+//! Bluetooth mesh element.
 
-use crate::{method_call, SessionInner};
-use btmesh_common::{
-    address::{Address, UnicastAddress},
-    crypto::application::Aid,
-    opcode::Opcode,
-    ModelIdentifier,
-};
 use dbus::{
     arg::{ArgType, RefArg, Variant},
     nonblock::{Proxy, SyncConnection},
 };
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
-
-use crate::mesh::{ReqError, PATH, SERVICE_NAME, TIMEOUT};
-use futures::Stream;
-use pin_project::pin_project;
-use std::{collections::HashMap, fmt, pin::Pin, sync::Arc, task::Poll};
+use futures::{Stream, StreamExt};
+use std::{
+    collections::HashMap,
+    fmt,
+    pin::Pin,
+    sync::{Arc, Weak},
+    task::{Context, Poll},
+};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+
+use crate::{
+    mesh::{ReqError, PATH, SERVICE_NAME, TIMEOUT},
+    method_call, Error, ErrorKind, Result, SessionInner,
+};
 
 pub(crate) const ELEMENT_INTERFACE: &str = "org.bluez.mesh.Element1";
 
 pub(crate) type ElementConfig = HashMap<String, Variant<Box<dyn RefArg + 'static>>>;
+pub(crate) type ElementConfigs = HashMap<usize, HashMap<u16, ElementConfig>>;
 
 /// Interface to a Bluetooth mesh element interface.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Element {
-    /// Element location
+    /// Location descriptor as defined in the GATT Bluetooth Namespace
+    /// Descriptors section of the Bluetooth SIG Assigned Numbers.
     pub location: Option<u16>,
-    /// Element models
-    pub models: Vec<ModelIdentifier>,
+    /// Element SIG models.
+    pub models: Vec<Model>,
+    /// Vendor models.
+    pub vendor_models: Vec<VendorModel>,
     /// Control handle for element once it has been registered.
-    pub control_handle: Option<ElementControlHandle>,
+    pub control_handle: ElementControlHandle,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+/// SIG model information.
+#[derive(Debug, Clone)]
+pub struct Model {
+    /// SIG model identifier.
+    pub id: u16,
+    /// Indicates whether the model supports publication mechanism.
+    ///
+    /// By default this is true.
+    pub publish: bool,
+    /// Indicates whether the model supports subscription mechanism.
+    ///
+    /// By default this is true.
+    pub subscribe: bool,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+impl Model {
+    /// Creates a new model with the specified SIG model identifier.
+    pub fn new(id: u16) -> Self {
+        Self { id, ..Default::default() }
+    }
+
+    fn as_tuple(&self) -> (u16, HashMap<String, Variant<Box<dyn RefArg>>>) {
+        let mut opts: HashMap<String, Variant<Box<dyn RefArg>>> = HashMap::new();
+        opts.insert("Publish".to_string(), Variant(Box::new(self.publish)));
+        opts.insert("Subscribe".to_string(), Variant(Box::new(self.subscribe)));
+        (self.id, opts)
+    }
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self { id: 0, publish: true, subscribe: true, _non_exhaustive: Default::default() }
+    }
+}
+
+/// Vendor model information.
+#[derive(Debug, Clone)]
+pub struct VendorModel {
+    /// Company id.
+    pub vendor: u16,
+    /// Vendor-assigned model identifier.
+    pub id: u16,
+    /// Indicates whether the model supports publication mechanism.
+    ///
+    /// By default this is true.
+    pub publish: bool,
+    /// Indicates whether the model supports subscription mechanism.
+    ///
+    /// By default this is true.
+    pub subscribe: bool,
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
+}
+
+impl VendorModel {
+    /// Creates a new model with the vendor and model identifiers.
+    pub fn new(vendor: u16, id: u16) -> Self {
+        Self { vendor, id, ..Default::default() }
+    }
+
+    fn as_tuple(&self) -> (u16, u16, HashMap<String, Variant<Box<dyn RefArg>>>) {
+        let mut opts: HashMap<String, Variant<Box<dyn RefArg>>> = HashMap::new();
+        opts.insert("Publish".to_string(), Variant(Box::new(self.publish)));
+        opts.insert("Subscribe".to_string(), Variant(Box::new(self.subscribe)));
+        (self.vendor, self.id, opts)
+    }
+}
+
+impl Default for VendorModel {
+    fn default() -> Self {
+        Self { vendor: 0, id: 0, publish: true, subscribe: true, _non_exhaustive: Default::default() }
+    }
 }
 
 /// An element exposed over D-Bus to bluez.
-pub struct RegisteredElement {
+pub(crate) struct RegisteredElement {
     inner: Arc<SessionInner>,
     element: Element,
-    index: u8,
+    index: usize,
 }
 
 impl RegisteredElement {
-    pub(crate) fn new(inner: Arc<SessionInner>, element: Element, index: u8) -> Self {
+    pub(crate) fn new(inner: Arc<SessionInner>, root_path: String, element: Element, index: usize) -> Self {
+        *element.control_handle.element_ref.lock().unwrap() = Some(ElementRefInner { root_path, index });
         Self { inner, element, index }
     }
 
@@ -70,7 +154,7 @@ impl RegisteredElement {
                 )| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
                         log::trace!(
-                            "Message received for element {:?}: (source: {:?}, key_index: {:?}, dest: {:?}, data: {:?})",
+                            "Message received for element {:?}: source={:?} key_index={:?} dest={:?} data={:?}",
                             reg.index,
                             source,
                             key_index,
@@ -78,44 +162,35 @@ impl RegisteredElement {
                             data
                         );
 
-                        let key = Aid::from(u8::try_from(key_index).unwrap_or_default());
-                        let src: UnicastAddress = source.try_into().map_err(|_| ReqError::Failed)?;
-                        let value = &destination.0;
-                        let dest = match value.arg_type() {
+                        let destination = match destination.0.arg_type() {
                             ArgType::Array => {
-                                let args = dbus::arg::cast::<Vec<u8>>(value).unwrap();
-                                assert!(args.len() >= 2);
-                                Ok(Address::parse([args[0], args[1]]))
+                                let args = dbus::arg::cast::<Vec<u8>>(&destination.0).ok_or(ReqError::Failed)?;
+                                if args.len() < 2 {
+                                    return Err(ReqError::Failed.into());
+                                }
+                                u16::from_be_bytes([args[0], args[1]])
                             }
-                            ArgType::UInt16 => {
-                                Ok(Address::parse(dbus::arg::cast::<u16>(value).unwrap().to_be_bytes()))
-                            }
-                            _ => Err(ReqError::Failed),
-                        }?;
-
-                        let (opcode, parameters) = Opcode::split(&data[..]).unwrap();
-                        let parameters = parameters.to_vec();
-                        let index = reg.index;
-                        let location: Option<u16> = reg.element.location;
-                        let msg = ReceivedMessage {
-                            index, location, key, src, dest, opcode, parameters
+                            ArgType::UInt16 => *dbus::arg::cast::<u16>(&destination.0).ok_or(ReqError::Failed)?,
+                            _ => return Err(ReqError::Failed.into()),
                         };
 
-                        match &reg.element.control_handle {
-                            Some(handler) => {
-                                handler
-                                .messages_tx
-                                .send(ElementMessage::Received(msg))
-                                .await
-                                .map_err(|_| ReqError::Failed)?;
-                            }
-                            None => ()
-                        }
+                        let msg = ReceivedMessage {
+                            key_index,
+                            source,
+                            destination,
+                            data,
+                        };
+                        reg.element.control_handle
+                            .event_tx
+                            .send(ElementEvent::MessageReceived(msg))
+                            .await
+                            .map_err(|_| ReqError::Failed)?;
 
                         Ok(())
                     })
                 },
             );
+
             ib.method_with_cr_async(
                 "DevKeyMessageReceived",
                 ("source", "remote", "net_index", "data"),
@@ -130,7 +205,7 @@ impl RegisteredElement {
                 )| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
                         log::trace!(
-                            "Dev Key Message received for element {:?}: (source: {:?}, net_index: {:?}, remote: {:?}, data: {:?})",
+                            "Dev Key Message received for element {:?}: source={:?} net_index={:?} remote={:?} data={:?}",
                             reg.index,
                             source,
                             net_index,
@@ -138,49 +213,35 @@ impl RegisteredElement {
                             data
                         );
 
-                        let (opcode, parameters) = Opcode::split(&data[..]).unwrap();
-                        let parameters = parameters.to_vec();
-
-                        let msg = DevKeyMessage {
-                            opcode, parameters
+                        let msg = ReceivedDevKeyMessage {
+                            source,
+                            remote,
+                            net_index,
+                            data,
                         };
-
-                        match &reg.element.control_handle {
-                            Some(handler) => {
-                                handler
-                                .messages_tx
-                                .send(ElementMessage::DevKey(msg))
-                                .await
-                                .map_err(|_| ReqError::Failed)?;
-                            }
-                            None => ()
-                        }
+                        reg.element.control_handle
+                            .event_tx
+                            .send(ElementEvent::DevKeyMessageReceived(msg))
+                            .await
+                            .map_err(|_| ReqError::Failed)?;
 
                         Ok(())
                     })
                 },
             );
+
             cr_property!(ib, "Index", reg => {
-                Some(reg.index)
+                Some(reg.index as u8)
             });
+
             cr_property!(ib, "Models", reg => {
-                let mut mt: Vec<(u16, ElementConfig)> = vec![];
-                for model in &reg.element.models {
-                    if let ModelIdentifier::SIG(id) = model {
-                        mt.push((*id, HashMap::new()));
-                    }
-                }
-                Some(mt)
+                Some(reg.element.models.iter().map(|m| m.as_tuple()).collect::<Vec<_>>())
             });
+
             cr_property!(ib, "VendorModels", reg => {
-                let mut mt: Vec<(u16, u16, ElementConfig)> = vec![];
-                for model in &reg.element.models {
-                    if let ModelIdentifier::Vendor(vid, id) = model {
-                        mt.push((vid.0, *id, HashMap::new()));
-                    }
-                }
-                Some(mt)
+                Some(reg.element.vendor_models.iter().map(|m| m.as_tuple()).collect::<Vec<_>>())
             });
+
             cr_property!(ib, "Location", reg => {
                 reg.element.location
             });
@@ -188,20 +249,71 @@ impl RegisteredElement {
     }
 }
 
-/// An object to control a element and receive messages once it has been registered.
+/// A reference to a registered element.
+#[derive(Clone)]
+pub struct ElementRef(Weak<std::sync::Mutex<Option<ElementRefInner>>>);
+
+impl ElementRef {
+    /// Element index.
+    ///
+    /// `None` if the element is currently not registered.
+    pub fn index(&self) -> Option<usize> {
+        self.0.upgrade().and_then(|m| m.lock().unwrap().as_ref().map(|i| i.index))
+    }
+
+    /// Element D-Bus path.
+    pub(crate) fn path(&self) -> Result<dbus::Path<'static>> {
+        self.0
+            .upgrade()
+            .and_then(|m| m.lock().unwrap().as_ref().map(|i| i.path()))
+            .ok_or_else(|| Error::new(ErrorKind::MeshElementUnpublished))
+    }
+}
+
+impl fmt::Debug for ElementRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ElementRef").field("index", &self.index()).finish()
+    }
+}
+
+struct ElementRefInner {
+    root_path: String,
+    index: usize,
+}
+
+impl ElementRefInner {
+    /// Element D-Bus path.
+    fn path(&self) -> dbus::Path<'static> {
+        let element_path = format!("{}/ele{}", &self.root_path, self.index);
+        dbus::Path::new(element_path).unwrap()
+    }
+}
+
+/// An object to control an element and receive events once it has been registered.
 ///
 /// Use [element_control] to obtain controller and associated handle.
-#[pin_project]
 pub struct ElementControl {
-    #[pin]
-    messages_rx: ReceiverStream<ElementMessage>,
+    event_rx: ReceiverStream<ElementEvent>,
+    element_ref: ElementRef,
+}
+
+impl fmt::Debug for ElementControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ElementControl").finish()
+    }
+}
+
+impl ElementControl {
+    /// Returns a reference to the registered element.
+    pub fn element_ref(&self) -> ElementRef {
+        self.element_ref.clone()
+    }
 }
 
 impl Stream for ElementControl {
-    type Item = ElementMessage;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<Option<Self::Item>> {
-        self.project().messages_rx.poll_next(cx)
+    type Item = ElementEvent;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        Pin::into_inner(self).event_rx.poll_next_unpin(cx)
     }
 }
 
@@ -211,64 +323,85 @@ impl Stream for ElementControl {
 /// Use [element_control] to obtain controller and associated handle.
 #[derive(Clone)]
 pub struct ElementControlHandle {
-    messages_tx: mpsc::Sender<ElementMessage>,
+    event_tx: mpsc::Sender<ElementEvent>,
+    element_ref: Arc<std::sync::Mutex<Option<ElementRefInner>>>,
 }
 
 impl Default for ElementControlHandle {
     fn default() -> Self {
-        Self { messages_tx: mpsc::channel(1).0 }
+        Self { event_tx: mpsc::channel(1).0, element_ref: Arc::new(std::sync::Mutex::new(None)) }
     }
 }
 
 impl fmt::Debug for ElementControlHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ElementControlHandle")
+        f.debug_struct("ElementControlHandle").finish()
     }
 }
 
 /// Creates a [ElementControl] and its associated [ElementControlHandle].
 ///
 /// Keep the [ElementControl] and store the [ElementControlHandle] in [Element::control_handle].
-pub fn element_control(size: usize) -> (ElementControl, ElementControlHandle) {
-    let (messages_tx, messages_rx) = mpsc::channel(size);
-    (ElementControl { messages_rx: ReceiverStream::new(messages_rx) }, ElementControlHandle { messages_tx })
+pub fn element_control() -> (ElementControl, ElementControlHandle) {
+    let (event_tx, event_rx) = mpsc::channel(128);
+    let inner = Arc::new(std::sync::Mutex::new(None));
+    (
+        ElementControl {
+            event_rx: ReceiverStream::new(event_rx),
+            element_ref: ElementRef(Arc::downgrade(&inner)),
+        },
+        ElementControlHandle { event_tx, element_ref: inner },
+    )
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-/// Bluetooth mesh messages received by the element of the application.
-pub enum ElementMessage {
+/// Bluetooth mesh element events received by the application.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum ElementEvent {
     /// A message arrived addressed to the application element.
-    Received(ReceivedMessage),
-    /// A message arrived addressed to the application element, which was sent with the remote node's device key.
-    DevKey(DevKeyMessage),
+    MessageReceived(ReceivedMessage),
+    /// A message arrived addressed to the application element,
+    /// which was sent with the remote node's device key.
+    DevKeyMessageReceived(ReceivedDevKeyMessage),
 }
 
 /// A message addressed to the application element.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ReceivedMessage {
-    /// Indicates which application key has been used to decode the incoming message.
-    pub index: u8,
-    /// Location of the element in the application.
-    pub location: Option<u16>,
-    /// Application key.
-    pub key: Aid,
+    /// Index of application key used to decode the incoming message.
+    ///
+    /// The same key_index should
+    /// be used by the application when sending a response to this
+    /// message (in case a response is expected).
+    pub key_index: u16,
     /// Unicast address of the remote node-element that sent the message.
-    pub src: UnicastAddress,
-    /// The destination address of received message.
-    pub dest: Address,
-    /// Message opcode.
-    pub opcode: Opcode,
-    /// Payload of the message.
-    pub parameters: Vec<u8>,
+    pub source: u16,
+    /// The destination address of the received message.
+    pub destination: u16,
+    /// Incoming message.
+    pub data: Vec<u8>,
 }
 
 /// Message originated by a local model encoded with the device key of the remote node.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct DevKeyMessage {
-    /// Message opcode.
-    pub opcode: Opcode,
-    /// Payload of the message.
-    pub parameters: Vec<u8>,
+pub struct ReceivedDevKeyMessage {
+    /// Unicast address of the remote node-element that sent the message.
+    pub source: u16,
+    /// Device key remote origin.
+    ///
+    /// The remote parameter if true indicates that the device key
+    /// used to decrypt the message was from the sender.
+    /// False indicates that the local nodes device key was used, and the
+    /// message has permissions to modify local states.
+    pub remote: bool,
+    /// Subnet message was received on.
+    ///
+    /// The net_index parameter indicates what subnet the message was
+    /// received on, and if a response is required, the same subnet
+    /// must be used to send the response.
+    pub net_index: u16,
+    /// Incoming message.
+    pub data: Vec<u8>,
 }
