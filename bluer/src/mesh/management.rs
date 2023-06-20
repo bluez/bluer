@@ -30,7 +30,7 @@ impl Management {
         Self { inner, app_inner, path }
     }
 
-    /// Add the	unprovisioned device specified by UUID to the network.
+    /// Add the unprovisioned device specified by UUID to the network.
     pub async fn add_node(&self, uuid: Uuid) -> Result<NodeAdded> {
         let mut rx = self.app_inner.add_node_result_rx.resubscribe();
 

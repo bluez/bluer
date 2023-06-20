@@ -90,6 +90,7 @@ impl Network {
     pub async fn attach(&self, app: Application, token: u64) -> Result<Node> {
         let app_hnd = self.application(app).await?;
 
+        #[allow(clippy::type_complexity)]
         let (node_path, element_config): (Path<'static>, Vec<(u8, Vec<(u16, ElementConfig)>)>) =
             self.call_method("Attach", (app_hnd.name.clone(), token)).await?;
         let element_config =

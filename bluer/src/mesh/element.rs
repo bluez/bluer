@@ -104,6 +104,7 @@ impl VendorModel {
         Self { vendor, id, ..Default::default() }
     }
 
+    #[allow(clippy::type_complexity)]
     fn as_tuple(&self) -> (u16, u16, HashMap<String, Variant<Box<dyn RefArg>>>) {
         let mut opts: HashMap<String, Variant<Box<dyn RefArg>>> = HashMap::new();
         opts.insert("Publish".to_string(), Variant(Box::new(self.publish)));

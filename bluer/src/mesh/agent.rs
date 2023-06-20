@@ -187,16 +187,15 @@ impl RegisteredProvisionAgent {
                 (),
                 |ctx, cr, (display_type, number): (String, u32)| {
                     method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let res = reg
-                            .call(
-                                &reg.agent.display_numeric,
-                                DisplayNumeric {
-                                    display_type: NumericCapability::from_str(&display_type).unwrap(),
-                                    number,
-                                },
-                            )
-                            .await?;
-                        Ok(res)
+                        reg.call(
+                            &reg.agent.display_numeric,
+                            DisplayNumeric {
+                                display_type: NumericCapability::from_str(&display_type).unwrap(),
+                                number,
+                            },
+                        )
+                        .await?;
+                        Ok(())
                     })
                 },
             );
