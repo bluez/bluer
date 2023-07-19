@@ -438,8 +438,10 @@ impl MonitorManager {
             event_tx: Mutex::new(Some(event_tx)),
         };
 
-        let mut cr = self.inner.crossroads.lock().await;
-        cr.insert(name.clone(), [&self.inner.monitor_token], Arc::new(reg));
+        {
+            let mut cr = self.inner.crossroads.lock().await;
+            cr.insert(name.clone(), [&self.inner.monitor_token], Arc::new(reg));
+        }
 
         let inner = self.inner.clone();
         let unreg_name = name.clone();
