@@ -19,7 +19,7 @@ async fn main() -> bluer::Result<()> {
 
     let args: Vec<_> = env::args().collect();
     if args.len() != 2 {
-        eprintln!("Specify target Bluetooth address as argment");
+        eprintln!("Specify target Bluetooth address as argument");
         exit(1);
     }
 
