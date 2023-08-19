@@ -576,6 +576,7 @@ pub struct Error {
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[ignore_extra_doc_attributes]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// Bluetooth device already connected
