@@ -1,4 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/bluez/bluer/master/doc/bluez.png",
+    html_favicon_url = "https://raw.githubusercontent.com/bluez/bluer/master/doc/bluez.png"
+)]
 
 //! # BlueR — Official BlueZ Bindings for Rust
 //!
