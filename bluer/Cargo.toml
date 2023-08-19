@@ -44,7 +44,6 @@ id = []
 l2cap = []
 rfcomm = []
 mesh = ["bluetoothd"]
-mesh-examples = []
 serde = ["uuid/serde", "dep:serde"]
 
 [dependencies]
@@ -131,14 +130,14 @@ required-features = ["bluetoothd"]
 name = "list_adapters"
 required-features = ["bluetoothd"]
 
-[[example]]
-name = "mesh_sensor_server"
-required-features = ["mesh", "mesh-examples"]
-
-[[example]]
-name = "mesh_sensor_client"
-required-features = ["mesh", "mesh-examples"]
-
-[[example]]
-name = "mesh_provisioner"
-required-features = ["mesh", "mesh-examples"]
+# [[example]]
+# name = "mesh_sensor_server"
+# required-features = ["mesh"]
+# 
+# [[example]]
+# name = "mesh_sensor_client"
+# required-features = ["mesh"]
+# 
+# [[example]]
+# name = "mesh_provisioner"
+# required-features = ["mesh"]
