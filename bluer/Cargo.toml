@@ -141,3 +141,7 @@ required-features = ["bluetoothd"]
 # [[example]]
 # name = "mesh_provisioner"
 # required-features = ["mesh"]
+
+[[example]]
+name = "le_passive_scan"
+required-features = ["bluetoothd"]
