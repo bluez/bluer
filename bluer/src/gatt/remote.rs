@@ -532,6 +532,17 @@ define_properties!(
             dbus: (CHARACTERISTIC_INTERFACE, "Value", Vec<u8>, MANDATORY),
             get: (cached_value, v => {v.to_owned()}),
         );
+
+        /// The maximum transmission unit for the characteristic.
+        ///
+        /// This is the maximum amount of data that can be sent or received
+        /// in a single packet for this characteristic. Longer data may be
+        /// able to be sent or received using long procedures when available.
+        property(
+            Mtu, u16,
+            dbus: (CHARACTERISTIC_INTERFACE, "MTU", u16, MANDATORY),
+            get: (mtu, v => {v.to_owned()}),
+        );
     }
 );
 
