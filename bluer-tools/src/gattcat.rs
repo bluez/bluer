@@ -641,6 +641,8 @@ impl DiscoverOpts {
                 };
                 println!("    Characteristic {char_id}");
 
+                print_if_some(6, "MTU", char.mtu().await.ok(), "bytes");
+
                 let flags = char.flags().await?;
                 print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
                 if flags.read {
