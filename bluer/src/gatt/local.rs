@@ -25,8 +25,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use super::{
-    make_socket_pair, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags, WriteOp,
-    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    make_socket_pair, mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
+    DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     method_call, parent_path, Adapter, Address, DbusResult, Device, Error, ErrorKind, Result, SessionInner,
@@ -942,8 +942,7 @@ impl RegisteredCharacteristic {
                                 // BlueZ has already confirmed the start of the notification session.
                                 // So there is no point in making this fail-able by our users.
                                 let (fd, stream) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
-                                // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
-                                let mtu = options.mtu.saturating_sub(5).into();
+                                let mtu = mtu_workaround(options.mtu.into());
                                 let writer = CharacteristicWriter {
                                     adapter_name: options.adapter_name.clone(),
                                     device_address: options.device_address,

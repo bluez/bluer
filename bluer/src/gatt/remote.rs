@@ -11,8 +11,8 @@ use tokio::net::UnixStream;
 use uuid::Uuid;
 
 use super::{
-    CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp, CHARACTERISTIC_INTERFACE,
-    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
+    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
     all_dbus_objects, Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SessionInner,
@@ -354,8 +354,7 @@ impl Characteristic {
         let stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(fd.into_fd()) };
         stream.set_nonblocking(true)?;
         let stream = UnixStream::from_std(stream)?;
-        // WORKAROUND: BlueZ drops data at end of packet if full MTU is used.
-        let mtu = mtu.saturating_sub(5).into();
+        let mtu = mtu_workaround(mtu.into());
         Ok(CharacteristicWriter {
             adapter_name: self.adapter_name().to_string(),
             device_address: self.device_address,
@@ -541,7 +540,7 @@ define_properties!(
         property(
             Mtu, usize,
             dbus: (CHARACTERISTIC_INTERFACE, "MTU", u16, MANDATORY),
-            get: (mtu, v => { (*v).into() }),
+            get: (mtu, v => { mtu_workaround((*v).into()) }),
         );
     }
 );

@@ -354,3 +354,11 @@ pub(crate) fn make_socket_pair(non_block: bool) -> std::io::Result<(OwnedFd, Uni
 
     Ok((fd1, us))
 }
+
+/// Apply MTU workaround.
+///
+/// BlueZ drops data at end of packet if full reported MTU is used, thus we
+/// substract 5 bytes to workaround this issue.
+pub(crate) fn mtu_workaround(mtu: usize) -> usize {
+    mtu.saturating_sub(5)
+}
