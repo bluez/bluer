@@ -539,9 +539,9 @@ define_properties!(
         /// in a single packet for this characteristic. Longer data may be
         /// able to be sent or received using long procedures when available.
         property(
-            Mtu, u16,
+            Mtu, usize,
             dbus: (CHARACTERISTIC_INTERFACE, "MTU", u16, MANDATORY),
-            get: (mtu, v => {v.to_owned()}),
+            get: (mtu, v => { (*v).into() }),
         );
     }
 );
