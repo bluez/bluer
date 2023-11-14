@@ -788,8 +788,18 @@ impl DiscoveryFilter {
             hm.insert("Pathloss", Variant(Box::new(pathloss)));
         }
         hm.insert("Transport", Variant(Box::new(transport.to_string())));
-        hm.insert("DuplicateData", Variant(Box::new(duplicate_data)));
-        hm.insert("Discoverable", Variant(Box::new(discoverable)));
+
+        // WORKAROUND: bluetoothd has a bug that causes it to crash when deserializing a bool
+        //             from D-Bus on some architectures (at least 32-bit ARM). We can partly
+        //             work around this by omitting the bools from the dictionary, if they match
+        //             the default values.
+        if !duplicate_data {
+            hm.insert("DuplicateData", Variant(Box::new(false)));
+        }
+        if discoverable {
+            hm.insert("Discoverable", Variant(Box::new(true)));
+        }
+
         if let Some(pattern) = pattern {
             hm.insert("Pattern", Variant(Box::new(pattern)));
         }
