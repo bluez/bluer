@@ -663,6 +663,7 @@ pub enum AdapterEvent {
 }
 
 /// Transport parameter determines the type of scan.
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
 #[non_exhaustive]
 pub enum DiscoveryTransport {
@@ -687,6 +688,7 @@ impl Default for DiscoveryTransport {
 ///
 /// The default discovery filter does not restrict any devices and provides
 /// [duplicate data](Self::duplicate_data).
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match

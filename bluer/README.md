@@ -166,6 +166,8 @@ The following example applications are provided.
 
   - **le_advertise**: Register Bluetooth LE advertisement.
 
+  - **le_passive_scan**: LE passive scan & subscribe to updates for discovered peripheral(s).
+
   - **list_adapters**: List installed Bluetooth adapters and their properties.
 
   - **mesh_sensor_client**: Simple Bluetooth mesh client sending sensor model messages
