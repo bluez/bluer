@@ -715,6 +715,8 @@ pub struct DiscoveryFilter {
     /// PropertiesChanged signals will be emitted
     /// for already existing Device objects, with
     /// updated Pathloss value.
+    ///
+    /// Must not be set when [`rssi`](Self::rssi) is set.
     pub pathloss: Option<u16>,
     /// Transport parameter determines the type of
     /// scan.
@@ -767,7 +769,7 @@ impl Default for DiscoveryFilter {
             rssi: Default::default(),
             pathloss: Default::default(),
             transport: Default::default(),
-            duplicate_data: true,
+            duplicate_data: false,
             discoverable: false,
             pattern: Default::default(),
             _non_exhaustive: (),
@@ -793,8 +795,8 @@ impl DiscoveryFilter {
         //             from D-Bus on some architectures (at least 32-bit ARM). We can partly
         //             work around this by omitting the bools from the dictionary, if they match
         //             the default values.
-        if !duplicate_data {
-            hm.insert("DuplicateData", Variant(Box::new(false)));
+        if duplicate_data {
+            hm.insert("DuplicateData", Variant(Box::new(true)));
         }
         if discoverable {
             hm.insert("Discoverable", Variant(Box::new(true)));
