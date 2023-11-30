@@ -4,13 +4,12 @@
 //! Example: should subscribe to all devices advertising manufacturer data with manufacturer id 0xffff (default/unassigned)
 //!        cargo run  --features=bluetoothd --example le_passive_scan hci0 255 00 ff ff
 
-
 use bluer::monitor::{Monitor, MonitorEvent, Pattern, RssiSamplingPeriod};
 use futures::StreamExt;
 
 fn parse_u8_maybe_hex(s: &str) -> Result<u8, std::num::ParseIntError> {
     if s.starts_with("0x") {
-     u8::from_str_radix(&s[2..], 16)
+        u8::from_str_radix(&s[2..], 16)
     } else {
         s.parse()
     }
@@ -23,11 +22,11 @@ async fn main() -> bluer::Result<()> {
     let adapter_name = std::env::args().nth(1);
     let data_type: u8 = match std::env::args().nth(2) {
         Some(s) => parse_u8_maybe_hex(&s).expect("Failed to parse AD type"),
-        None => 0xff
+        None => 0xff,
     };
     let start_position: u8 = match std::env::args().nth(3) {
         Some(s) => parse_u8_maybe_hex(&s).expect("Failed to parse or-pattern start position"),
-        None => 0x00
+        None => 0x00,
     };
     let filter_string: Vec<String> = std::env::args().skip(4).collect();
     let content: Vec<u8> = if filter_string.len() > 0 {
@@ -40,17 +39,13 @@ async fn main() -> bluer::Result<()> {
         panic!("No filter bytes provided");
     }
 
-    let pattern = Pattern {
-        data_type,
-        start_position,
-        content
-    };
+    let pattern = Pattern { data_type, start_position, content };
 
     let session = bluer::Session::new().await?;
 
     let adapter = match adapter_name {
         Some(name) => session.adapter(&name)?,
-        None => session.default_adapter().await?
+        None => session.default_adapter().await?,
     };
     println!("Running le_passive_scan on adapter {} with or-pattern {:?}", adapter.name(), pattern);
 
