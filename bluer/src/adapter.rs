@@ -665,6 +665,7 @@ pub enum AdapterEvent {
 /// Transport parameter determines the type of scan.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum DiscoveryTransport {
     /// interleaved scan
@@ -690,6 +691,7 @@ impl Default for DiscoveryTransport {
 /// [duplicate data](Self::duplicate_data).
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match
     ///  _any_ UUID.
@@ -761,6 +763,7 @@ pub struct DiscoveryFilter {
     /// string "" pattern will match any device found.
     pub pattern: Option<String>,
     #[doc(hidden)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub _non_exhaustive: (),
 }
 
