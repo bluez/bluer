@@ -57,12 +57,12 @@ tokio-stream = { version = "0.1", optional = true }
 hex = { version = "0.4" }
 lazy_static = { version = "1", optional = true }
 uuid = { version = "1", features = ["v4"] }
-strum = { version = "0.25", features = ["derive"] }
+strum = { version = "0.26", features = ["derive"] }
 num-traits = "0.2"
 num-derive = "0.4"
 libc = "0.2"
 nix = { version = "0.27", default-features = false, features = ["ioctl"] }
-custom_debug = { version = "0.5", optional = true }
+custom_debug = { version = "0.6", optional = true }
 displaydoc = { version = "0.2", optional = true }
 log = "0.4"
 serde = { version = "1", features = ["derive"], optional = true }
@@ -80,7 +80,7 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "signal",
 ] }
-env_logger = "0.10"
+env_logger = "0.11"
 rand = "0.8"
 clap = { version = "4", features = ["derive"] }
 
@@ -133,11 +133,11 @@ required-features = ["bluetoothd"]
 # [[example]]
 # name = "mesh_sensor_server"
 # required-features = ["mesh"]
-# 
+#
 # [[example]]
 # name = "mesh_sensor_client"
 # required-features = ["mesh"]
-# 
+#
 # [[example]]
 # name = "mesh_provisioner"
 # required-features = ["mesh"]

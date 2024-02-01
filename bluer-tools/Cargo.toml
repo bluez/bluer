@@ -39,9 +39,9 @@ clap = { version = "4", features = ["derive"] }
 crossterm = "0.27"
 tab-pty-process = "0.2"
 tokio-compat-02 = "0.2"
-pretty-hex = "0.3"
+pretty-hex = "0.4"
 bytes = "1"
-env_logger = "0.10"
+env_logger = "0.11"
 libc = "0.2"
 log = "0.4"
 hex = { version = "0.4" }
