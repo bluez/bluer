@@ -1,8 +1,8 @@
 //! LE Passive Scan & Subscribe to updates for discovered peripheral(s).
-//!                  
+//!
 //! Usage: cargo run  --features=bluetoothd --example le_passive_scan <device> <AD type> <offset> <filter byte>..
 //! Example: should subscribe to all devices advertising manufacturer data with manufacturer id 0xffff (default/unassigned)
-//!        cargo run  --features=bluetoothd --example le_passive_scan hci0 255 00 ff ff
+//!        cargo run  --features=bluetoothd --example le_passive_scan hci0 255 00 0xff 0xff
 
 use bluer::monitor::{Monitor, MonitorEvent, Pattern, RssiSamplingPeriod};
 use futures::StreamExt;
