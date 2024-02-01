@@ -689,7 +689,7 @@ impl Default for DiscoveryTransport {
 /// The default discovery filter does not restrict any devices and provides
 /// [duplicate data](Self::duplicate_data).
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Default, Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveryFilter {
     ///  Filter by service UUIDs, empty means match
     ///  _any_ UUID.
@@ -762,21 +762,6 @@ pub struct DiscoveryFilter {
     pub pattern: Option<String>,
     #[doc(hidden)]
     pub _non_exhaustive: (),
-}
-
-impl Default for DiscoveryFilter {
-    fn default() -> Self {
-        Self {
-            uuids: Default::default(),
-            rssi: Default::default(),
-            pathloss: Default::default(),
-            transport: Default::default(),
-            duplicate_data: false,
-            discoverable: false,
-            pattern: Default::default(),
-            _non_exhaustive: (),
-        }
-    }
 }
 
 impl DiscoveryFilter {

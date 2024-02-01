@@ -8,10 +8,9 @@ use bluer::monitor::{Monitor, MonitorEvent, Pattern, RssiSamplingPeriod};
 use futures::StreamExt;
 
 fn parse_u8_maybe_hex(s: &str) -> Result<u8, std::num::ParseIntError> {
-    if s.starts_with("0x") {
-        u8::from_str_radix(&s[2..], 16)
-    } else {
-        s.parse()
+    match s.strip_prefix("0x") {
+        Some(hex) => u8::from_str_radix(hex, 16),
+        None => s.parse(),
     }
 }
 
@@ -29,13 +28,13 @@ async fn main() -> bluer::Result<()> {
         None => 0x00,
     };
     let filter_string: Vec<String> = std::env::args().skip(4).collect();
-    let content: Vec<u8> = if filter_string.len() > 0 {
+    let content: Vec<u8> = if !filter_string.is_empty() {
         filter_string.iter().map(|s| parse_u8_maybe_hex(s).expect("Failed to parse or-pattern data")).collect()
     } else {
         vec![0xff, 0xff]
     };
 
-    if content.len() == 0 {
+    if content.is_empty() {
         panic!("No filter bytes provided");
     }
 
