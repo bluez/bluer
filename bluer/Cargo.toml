@@ -15,7 +15,7 @@ keywords = ["bluetooth", "gatt", "l2cap", "rfcomm", "mesh"]
 categories = ["asynchronous", "hardware-support", "os::linux-apis"]
 license = "BSD-2-Clause"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.75"
 exclude = [
     "bluetooth-numbers-database/README.md",
     "bluetooth-numbers-database/*.png",

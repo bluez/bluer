@@ -9,6 +9,7 @@ keywords = ["bluetooth", "bluez", "gatt", "l2cap", "rfcomm"]
 categories = ["hardware-support", "command-line-utilities"]
 license = "BSD-2-Clause"
 edition = "2021"
+rust-version = "1.75"
 
 [[bin]]
 name = "blumon"
