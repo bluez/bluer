@@ -154,12 +154,39 @@ impl DeviceMonitor {
 
                         let device = self.adapter.device(data.address)?;
 
+                        // Assuming `device.manufacturer_data().await?` returns a `HashMap<u16, Vec<u8>>`
+                        let manufacturer_data_map = device.manufacturer_data().await?.unwrap_or_default();
+
+                        // Convert the HashMap into a string representation
+                        let manufacturer_data_string = manufacturer_data_map.iter()
+                        .map(|(key, value)| {
+                            // Convert key to hex string with "0x" prefix
+                            let key_hex = format!("0x{:04X}", key);
+                    
+                            // Convert each byte in the vector to its hex representation with "0x" prefix
+                            // If the byte is a printable ASCII character, also show the character in parentheses
+                            let value_hex = value.iter()
+                                .map(|byte| {
+                                    let hex_str = format!("0x{:02X}", byte);
+                                    if byte.is_ascii_graphic() || *byte == b' ' { // Includes space as printable
+                                        format!("{}({})", hex_str, *byte as char)
+                                    } else {
+                                        hex_str
+                                    }
+                                })
+                                .collect::<Vec<String>>()
+                                .join(" ");
+                    
+                            format!("{}: [{}]", key_hex, value_hex)
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ");
 
                         logger.append(&BluetoothAdvertisement {
                             address: device.address().to_string(),
                             address_type: device.address_type().await?.to_string(),
                             local_name: device.name().await?.unwrap_or_default(),
-                            manufacturer_data: String::new(), //device.manufacturer_data().await?.unwrap_or_default().to_string(),
+                            manufacturer_data: manufacturer_data_string,
                             service_data: String::new(), //device.service_data().await?.unwrap_or_default().to_string(),
                             RSSI: device.rssi().await?.unwrap_or_default(),
                             last_seen: data.last_seen.elapsed().as_secs() as i32,
