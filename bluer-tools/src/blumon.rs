@@ -10,11 +10,85 @@ use futures::{pin_mut, FutureExt, StreamExt};
 use std::{
     collections::HashMap,
     convert::TryFrom,
-    io::stdout,
+    io::{stdout, SeekFrom, Seek},
     iter,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, path::Path,
 };
+
 use tokio::time::sleep;
+
+use serde::{Serialize, Deserialize};
+use std::fs::{OpenOptions, File};
+use std::io::{Write, BufReader, BufRead};
+use std::error::Error;
+
+// Define the BluetoothAdvertisement struct
+#[derive(Serialize, Deserialize, Debug)]
+
+// This should include RSSI and the relevant bluer::adapter::Adapter fields
+struct BluetoothAdvertisement {
+    local_name: String,
+    address: String,
+    address_type: String,
+    manufacturer_data: String,
+    service_data: String,
+    last_seen: i32,
+    RSSI: i16,    
+}
+
+// A struct to manage the file operations
+struct AdvertisementLogger {
+    file: File,
+}
+
+impl AdvertisementLogger {
+    // Function to create a new AdvertisementLogger
+    fn new(file_name: &str) -> std::result::Result<Self, Box<dyn Error>> {
+        let path = Path::new(file_name);
+        let mut file = File::options()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)?;
+
+        if path.metadata()?.len() == 0 {
+            // If the file is new, start an array
+            writeln!(file, "[")?;
+        } else {
+            // Move the file pointer before the last character (likely ']' or '\n')
+            file.seek(SeekFrom::End(-1))?;
+        }
+
+        Ok(AdvertisementLogger { file })
+    }
+
+    // Function to append a BluetoothAdvertisement
+    fn append(&mut self, adv: &BluetoothAdvertisement) -> std::result::Result<(), Box<dyn Error>> {
+       // Serialize the BluetoothAdvertisement to JSON with formatting
+       let json_str = serde_json::to_string_pretty(adv)?;
+
+       // Check if the file already contains data
+       let len = self.file.metadata()?.len();
+       if len > 1 {
+           // If so, overwrite the last ']' or '\n' with a comma and newline
+           self.file.seek(SeekFrom::End(-1))?;
+           writeln!(self.file, ",")?;
+       }
+
+       // Append the JSON string
+       writeln!(self.file, "{}", json_str)?;
+
+        Ok(())
+    }
+
+    // Function to properly close the file
+    fn close(mut self) -> std::result::Result<(), Box<dyn Error>> {
+        // Write the closing bracket for the JSON array
+        writeln!(self.file, "\n]")?;
+        Ok(())
+    }
+}
+
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -53,6 +127,7 @@ impl DeviceMonitor {
         pin_mut!(device_events);
 
         let mut next_update = sleep(UPDATE_INTERVAL).boxed();
+        let mut logger = AdvertisementLogger::new("advertisements.json")?;
 
         loop {
             tokio::select! {
@@ -76,12 +151,29 @@ impl DeviceMonitor {
                         } else {
                             self.show_device(data).await;
                         }
+
+                        let device = self.adapter.device(data.address)?;
+
+
+                        logger.append(&BluetoothAdvertisement {
+                            address: device.address().to_string(),
+                            address_type: device.address_type().await?.to_string(),
+                            local_name: device.name().await?.unwrap_or_default(),
+                            manufacturer_data: String::new(), //device.manufacturer_data().await?.unwrap_or_default().to_string(),
+                            service_data: String::new(), //device.service_data().await?.unwrap_or_default().to_string(),
+                            RSSI: device.rssi().await?.unwrap_or_default(),
+                            last_seen: data.last_seen.elapsed().as_secs() as i32,
+                        })?;
+
                     }
                     next_update = sleep(UPDATE_INTERVAL).boxed();
                 },
                 else => break,
             }
         }
+
+          // Properly close the file
+        logger.close()?;
 
         Ok(())
     }
@@ -126,7 +218,7 @@ impl DeviceMonitor {
         write!(&mut line, "{}", "#".repeat(bar_len as _).black().on_red())?;
         write!(&mut line, "{}", " ".repeat((MAX_BAR_LEN - bar_len) as _))?;
         write!(&mut line, "]")?;
-
+        
         const MAX_AGO_BAR_LEN: u64 = 10;
         let seen_ago = data.last_seen.elapsed().as_secs();
         let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
@@ -169,6 +261,8 @@ impl DeviceMonitor {
             cursor::Show,
         )
         .unwrap();
+
+
     }
 }
 
