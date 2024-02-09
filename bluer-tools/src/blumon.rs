@@ -16,7 +16,10 @@ use std::{
 };
 
 use tokio::time::sleep;
+//use std::time::{SystemTime, UNIX_EPOCH};
+use chrono::{DateTime, Utc};
 
+use serde_json::{self, json};
 use serde::{Serialize, Deserialize};
 use std::fs::{OpenOptions, File};
 use std::io::{Write, BufReader, BufRead};
@@ -65,7 +68,29 @@ impl AdvertisementLogger {
     // Function to append a BluetoothAdvertisement
     fn append(&mut self, adv: &BluetoothAdvertisement) -> std::result::Result<(), Box<dyn Error>> {
        // Serialize the BluetoothAdvertisement to JSON with formatting
-       let json_str = serde_json::to_string_pretty(adv)?;
+      // let adv_json  = serde_json::to_string_pretty(adv)?;
+
+      /* 
+        // Get the current UTC time
+        let now = SystemTime::now();
+        let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
+        let time_recorded = since_the_epoch.as_secs(); // Time in seconds since epoch
+*/
+        // Get the current UTC time as a DateTime<Utc>
+        let now: DateTime<Utc> = Utc::now();
+
+        // Format the time into a human-readable string, e.g., RFC 3339 format
+        let time_recorded = now.to_rfc3339();
+
+
+        // Create a new structure with `adv_name` and `time_recorded`
+        let record = json!({
+            "adv_name": adv,
+            "time_recorded": time_recorded
+        });
+
+        // Serialize the new structure to JSON with formatting
+        let record_json = serde_json::to_string_pretty(&record)?;
 
        // Check if the file already contains data
        let len = self.file.metadata()?.len();
@@ -76,7 +101,7 @@ impl AdvertisementLogger {
        }
 
        // Append the JSON string
-       writeln!(self.file, "{}", json_str)?;
+       writeln!(self.file, "{}", record_json)?;
 
         Ok(())
     }
@@ -181,13 +206,42 @@ impl DeviceMonitor {
                         })
                         .collect::<Vec<String>>()
                         .join(", ");
+                    // ***********************************************************************
+                        // Assuming device.service_data().await?.unwrap_or_default().to_string(),
+                        let service_data_map = device.service_data().await?.unwrap_or_default();
+
+                        // Convert the HashMap into a string representation
+                        let service_data_string = service_data_map.iter()
+                        .map(|(key, value)| {
+                            // Convert key to hex string with "0x" prefix
+                            let key_hex = format!("0x{:04X}", key);
+                    
+                            // Convert each byte in the vector to its hex representation with "0x" prefix
+                            // If the byte is a printable ASCII character, also show the character in parentheses
+                            let value_hex = value.iter()
+                                .map(|byte| {
+                                    let hex_str = format!("0x{:02X}", byte);
+                                    if byte.is_ascii_graphic() || *byte == b' ' { // Includes space as printable
+                                        format!("{}({})", hex_str, *byte as char)
+                                    } else {
+                                        hex_str
+                                    }
+                                })
+                                .collect::<Vec<String>>()
+                                .join(" ");
+                    
+                            format!("{}: [{}]", key_hex, value_hex)
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ");
+
 
                         logger.append(&BluetoothAdvertisement {
                             address: device.address().to_string(),
                             address_type: device.address_type().await?.to_string(),
                             local_name: device.name().await?.unwrap_or_default(),
                             manufacturer_data: manufacturer_data_string,
-                            service_data: String::new(), //device.service_data().await?.unwrap_or_default().to_string(),
+                            service_data: service_data_string, 
                             RSSI: device.rssi().await?.unwrap_or_default(),
                             last_seen: data.last_seen.elapsed().as_secs() as i32,
                         })?;
