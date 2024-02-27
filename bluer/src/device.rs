@@ -22,6 +22,7 @@ use crate::{
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
+pub(crate) const BATTERY_INTERFACE: &str = "org.bluez.Battery1";
 
 /// Interface to a Bluetooth device.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
@@ -517,6 +518,13 @@ define_properties!(
                 }
                 mt
             }),
+        );
+
+        /// The battery percentage of the remote device
+        property(
+            BatteryPercentage, u8,
+            dbus: (BATTERY_INTERFACE, "Percentage", u8, OPTIONAL),
+            get: (battery_percentage, v => {v.to_owned()}),
         );
     }
 );
