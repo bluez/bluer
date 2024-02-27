@@ -522,8 +522,8 @@ define_properties!(
 
         /// The battery percentage of the remote device
         property(
-            Percentage, u8,
-            dbus: (BATTERY_INTERFACE, "Percentage", u8, OPTIONAL),
+            BatteryPercentage, u8,
+            dbus: (BATTERY_INTERFACE, "BatteryPercentage", u8, OPTIONAL),
             get: (battery_percentage, v => {v.to_owned()}),
         );
     }
