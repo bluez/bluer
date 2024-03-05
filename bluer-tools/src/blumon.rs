@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 
 use serde_json::{self, json};
 use serde::{Serialize, Deserialize};
+use serde_jsonlines::{append_json_lines};
 use std::fs::{OpenOptions, File};
 use std::io::{Write, BufReader, BufRead};
 use std::error::Error;
@@ -39,30 +40,24 @@ struct BluetoothAdvertisement {
     RSSI: i16,    
 }
 
+#[derive(Serialize)]
+pub struct AdvStructure<'a> {
+    pub adv_name: &'a BluetoothAdvertisement,
+    pub time_recorded: String,
+}
+
 // A struct to manage the file operations
 struct AdvertisementLogger {
-    file: File,
+    file_name: String,
 }
 
 impl AdvertisementLogger {
     // Function to create a new AdvertisementLogger
     fn new(file_name: &str) -> std::result::Result<Self, Box<dyn Error>> {
-        let path = Path::new(file_name);
-        let mut file = File::options()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(path)?;
 
-        if path.metadata()?.len() == 0 {
-            // If the file is new, start an array
-            writeln!(file, "[")?;
-        } else {
-            // Move the file pointer before the last character (likely ']' or '\n')
-            file.seek(SeekFrom::End(-1))?;
-        }
-
-        Ok(AdvertisementLogger { file })
+        // create AdvertisementLogger struct with file_name converted to a String
+   
+        Ok(AdvertisementLogger { file_name:file_name.to_string() })
     }
 
     // Function to append a BluetoothAdvertisement
@@ -84,10 +79,12 @@ impl AdvertisementLogger {
 
 
         // Create a new structure with `adv_name` and `time_recorded`
+        /* 
         let record = json!({
             "adv_name": adv,
             "time_recorded": time_recorded
         });
+
 
         // Serialize the new structure to JSON with formatting
         let record_json = serde_json::to_string_pretty(&record)?;
@@ -102,16 +99,17 @@ impl AdvertisementLogger {
 
        // Append the JSON string
        writeln!(self.file, "{}", record_json)?;
+*/
+    append_json_lines(&self.file_name, [
+        AdvStructure {
+        adv_name: adv,
+        time_recorded: time_recorded
+    },],)?;
 
         Ok(())
     }
 
-    // Function to properly close the file
-    fn close(mut self) -> std::result::Result<(), Box<dyn Error>> {
-        // Write the closing bracket for the JSON array
-        writeln!(self.file, "\n]")?;
-        Ok(())
-    }
+    
 }
 
 
@@ -253,8 +251,6 @@ impl DeviceMonitor {
             }
         }
 
-          // Properly close the file
-        logger.close()?;
 
         Ok(())
     }
