@@ -10,27 +10,29 @@ use futures::{pin_mut, FutureExt, StreamExt};
 use std::{
     collections::HashMap,
     convert::TryFrom,
-    io::{stdout, SeekFrom, Seek},
+    io::stdout,
     iter,
-    time::{Duration, Instant}, path::Path,
+    time::{Duration, Instant},
+    error::Error,
 };
 
 use tokio::time::sleep;
-//use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::{DateTime, Utc};
 
-use serde_json::{self, json};
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use serde_jsonlines::{append_json_lines};
-use std::fs::{OpenOptions, File};
-use std::io::{Write, BufReader, BufRead};
-use std::error::Error;
+use serde_jsonlines::append_json_lines; //https://jsonlines.org/
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+pub struct Opts {
+    /// The filename to write the advertisement report log to in json lines format
+    #[clap(short, long, default_value = "", help="The filename to write the advertisement report log to in json lines format")]
+    adv_report_log: String,
+}
 
 // Define the BluetoothAdvertisement struct
 #[derive(Serialize, Deserialize, Debug)]
-
-// This should include RSSI and the relevant bluer::adapter::Adapter fields
-struct BluetoothAdvertisement {
+pub struct BluetoothAdvertisement {
     local_name: String,
     address: String,
     address_type: String,
@@ -55,22 +57,28 @@ impl AdvertisementLogger {
     // Function to create a new AdvertisementLogger
     fn new(file_name: &str) -> std::result::Result<Self, Box<dyn Error>> {
 
-        // create AdvertisementLogger struct with file_name converted to a String
-   
-        Ok(AdvertisementLogger { file_name:file_name.to_string() })
+        // create AdvertisementLogger struct with file_name converted to a String . if file_name is empty, the logger is disabled
+        if file_name.is_empty() {
+            return Ok(AdvertisementLogger { file_name: String::new() });
+        }
+        else {
+            // Check if the file exists and if it does not, create it
+            Ok(AdvertisementLogger { file_name:file_name.to_string() })
+        }
+        
+    }
+
+    // return true if the logger is enabled which is defined as the file_name not being empty
+    fn is_enabled(&self) -> bool {
+        !self.file_name.is_empty()
     }
 
     // Function to append a BluetoothAdvertisement
     fn append(&mut self, adv: &BluetoothAdvertisement) -> std::result::Result<(), Box<dyn Error>> {
-       // Serialize the BluetoothAdvertisement to JSON with formatting
-      // let adv_json  = serde_json::to_string_pretty(adv)?;
 
-      /* 
-        // Get the current UTC time
-        let now = SystemTime::now();
-        let since_the_epoch = now.duration_since(UNIX_EPOCH)?;
-        let time_recorded = since_the_epoch.as_secs(); // Time in seconds since epoch
-*/
+        if self.file_name.is_empty() {
+            return Ok(());
+        }
         // Get the current UTC time as a DateTime<Utc>
         let now: DateTime<Utc> = Utc::now();
 
@@ -78,33 +86,11 @@ impl AdvertisementLogger {
         let time_recorded = now.to_rfc3339();
 
 
-        // Create a new structure with `adv_name` and `time_recorded`
-        /* 
-        let record = json!({
-            "adv_name": adv,
-            "time_recorded": time_recorded
-        });
-
-
-        // Serialize the new structure to JSON with formatting
-        let record_json = serde_json::to_string_pretty(&record)?;
-
-       // Check if the file already contains data
-       let len = self.file.metadata()?.len();
-       if len > 1 {
-           // If so, overwrite the last ']' or '\n' with a comma and newline
-           self.file.seek(SeekFrom::End(-1))?;
-           writeln!(self.file, ",")?;
-       }
-
-       // Append the JSON string
-       writeln!(self.file, "{}", record_json)?;
-*/
-    append_json_lines(&self.file_name, [
-        AdvStructure {
-        adv_name: adv,
-        time_recorded: time_recorded
-    },],)?;
+        append_json_lines(&self.file_name, [
+            AdvStructure {
+            adv_name: adv,
+            time_recorded: time_recorded
+        },],)?;
 
         Ok(())
     }
@@ -138,19 +124,19 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter) -> Result<()> {
+    pub async fn run(adapter: Adapter,adv_report_log: &str) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
-        this.perform().await
+        this.perform(adv_report_log).await
     }
 
-    async fn perform(&mut self) -> Result<()> {
+    async fn perform(&mut self,adv_report_log: &str) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
         let mut next_update = sleep(UPDATE_INTERVAL).boxed();
-        let mut logger = AdvertisementLogger::new("advertisements.json")?;
+        let mut logger = AdvertisementLogger::new(adv_report_log)?;
 
         loop {
             tokio::select! {
@@ -233,16 +219,17 @@ impl DeviceMonitor {
                         .collect::<Vec<String>>()
                         .join(", ");
 
-
-                        logger.append(&BluetoothAdvertisement {
-                            address: device.address().to_string(),
-                            address_type: device.address_type().await?.to_string(),
-                            local_name: device.name().await?.unwrap_or_default(),
-                            manufacturer_data: manufacturer_data_string,
-                            service_data: service_data_string, 
-                            RSSI: device.rssi().await?.unwrap_or_default(),
-                            last_seen: data.last_seen.elapsed().as_secs() as i32,
-                        })?;
+                        if logger.is_enabled() {
+                            logger.append(&BluetoothAdvertisement {
+                                address: device.address().to_string(),
+                                address_type: device.address_type().await?.to_string(),
+                                local_name: device.name().await?.unwrap_or_default(),
+                                manufacturer_data: manufacturer_data_string,
+                                service_data: service_data_string, 
+                                RSSI: device.rssi().await?.unwrap_or_default(),
+                                last_seen: data.last_seen.elapsed().as_secs() as i32,
+                            })?;
+                    }
 
                     }
                     next_update = sleep(UPDATE_INTERVAL).boxed();
@@ -339,13 +326,16 @@ impl DeviceMonitor {
         )
         .unwrap();
 
-
     }
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     env_logger::init();
+
+    let opt = Opts::parse();
+    let adv_report_log = opt.adv_report_log;
+
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
 
@@ -358,7 +348,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     adapter.set_powered(true).await?;
-    DeviceMonitor::run(adapter).await?;
+    DeviceMonitor::run(adapter,&adv_report_log).await?;
 
     Ok(())
 }
