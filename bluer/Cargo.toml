@@ -145,3 +145,11 @@ required-features = ["bluetoothd"]
 [[example]]
 name = "le_passive_scan"
 required-features = ["bluetoothd"]
+
+[[example]]
+name = "rfcomm_client"
+required-features = ["bluetoothd", "rfcomm"]
+
+[[example]]
+name = "rfcomm_server"
+required-features = ["bluetoothd", "rfcomm"]
