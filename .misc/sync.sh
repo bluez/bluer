@@ -16,4 +16,4 @@ if [ -z "$TARGET_PATH" ] ; then
     TARGET_PATH="dev/bluer"
 fi
 
-rsync -avz --delete --exclude target --exclude .git --exclude '*.json' "$SCRIPT_PATH/.." "$TARGET:$TARGET_PATH"
+rsync -avz --delete --exclude target --exclude .git "$SCRIPT_PATH/.." "$TARGET:$TARGET_PATH"
