@@ -176,6 +176,10 @@ The following example applications are provided.
 
   - **mesh_provisioner**: Simple Bluetooth mesh provisioner
 
+  - **rfcomm_client**: Simple RFCOMM socket client that connects to a socket and sends and receives test data.
+
+  - **rfcomm_server**: Corresponding RFCOMM socket server that echos received data.
+
 Use `cargo run --all-features --example <name>` to run a particular example application.
 
 [API documentation]: https://docs.rs/bluer
