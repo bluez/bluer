@@ -12,6 +12,7 @@ use std::{
     convert::TryFrom,
     io::stdout,
     iter,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -26,7 +27,7 @@ use serde_jsonlines::append_json_lines; //https://jsonlines.org/
 pub struct Opts {
     /// The filename to write the advertisement report log to in json lines format
     #[clap(short, long)]
-    adv_report_log: String,
+    adv_report_log: Option<PathBuf>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,30 +48,19 @@ pub struct AdvStructure<'a> {
 }
 
 // A struct to manage the file operations
-struct AdvertisementLogger {
-    file_name: String,
+struct AdvertisementLogger<'a> {
+    file_name: &'a Option<PathBuf>,
 }
 
-impl AdvertisementLogger {
+impl<'a> AdvertisementLogger<'a> {
     // Function to create a new AdvertisementLogger
-    fn new(file_name: &str) -> Result<AdvertisementLogger> {
-        // create AdvertisementLogger struct with file_name converted to a String . if file_name is empty, the logger is disabled
-        if file_name.is_empty() {
-            Ok(AdvertisementLogger { file_name: String::new() })
-        } else {
-            // Check if the file exists and if it does not, create it
-            Ok(AdvertisementLogger { file_name: file_name.to_string() })
-        }
-    }
-
-    // return true if the logger is enabled which is defined as the file_name not being empty
-    fn is_enabled(&self) -> bool {
-        !self.file_name.is_empty()
+    fn new(file_name: &'a Option<PathBuf>) -> Result<AdvertisementLogger> {
+        Ok(AdvertisementLogger { file_name })
     }
 
     // Function to append a BluetoothAdvertisement
     fn append(&mut self, adv: &BluetoothAdvertisement) -> Result<()> {
-        if self.file_name.is_empty() {
+        if self.file_name.is_none() {
             return Ok(());
         }
         // Get the current UTC time as a DateTime<Utc>
@@ -79,9 +69,16 @@ impl AdvertisementLogger {
         // Format the time into a human-readable string, e.g., RFC 3339 format
         let time_recorded = now.to_rfc3339();
 
-        append_json_lines(&self.file_name, [AdvStructure { adv_name: adv, time_recorded }])?;
+        append_json_lines(
+            self.file_name.as_ref().unwrap().as_os_str(),
+            [AdvStructure { adv_name: adv, time_recorded }],
+        )?;
 
         Ok(())
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.file_name.is_some()
     }
 }
 
@@ -110,14 +107,14 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter, adv_report_log: &str) -> Result<()> {
+    pub async fn run(adapter: Adapter, adv_report_log: &Option<PathBuf>) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
         this.perform(adv_report_log).await
     }
 
-    async fn perform(&mut self, adv_report_log: &str) -> Result<()> {
+    async fn perform(&mut self, adv_report_log: &Option<PathBuf>) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
