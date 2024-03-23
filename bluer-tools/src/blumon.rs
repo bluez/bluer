@@ -13,24 +13,22 @@ use std::{
     io::stdout,
     iter,
     time::{Duration, Instant},
-    error::Error,
 };
 
 use tokio::time::sleep;
 
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-use serde_jsonlines::append_json_lines; //https://jsonlines.org/
 use clap::Parser;
+use serde::{Deserialize, Serialize};
+use serde_jsonlines::append_json_lines; //https://jsonlines.org/
 
 #[derive(Parser, Debug)]
 pub struct Opts {
     /// The filename to write the advertisement report log to in json lines format
-    #[clap(short, long, default_value = "", help="The filename to write the advertisement report log to in json lines format")]
+    #[clap(short, long)]
     adv_report_log: String,
 }
 
-// Define the BluetoothAdvertisement struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BluetoothAdvertisement {
     local_name: String,
@@ -39,7 +37,7 @@ pub struct BluetoothAdvertisement {
     manufacturer_data: String,
     service_data: String,
     last_seen: i32,
-    RSSI: i16,    
+    rssi: i16,
 }
 
 #[derive(Serialize)]
@@ -55,17 +53,14 @@ struct AdvertisementLogger {
 
 impl AdvertisementLogger {
     // Function to create a new AdvertisementLogger
-    fn new(file_name: &str) -> std::result::Result<Self, Box<dyn Error>> {
-
+    fn new(file_name: &str) -> Result<AdvertisementLogger> {
         // create AdvertisementLogger struct with file_name converted to a String . if file_name is empty, the logger is disabled
         if file_name.is_empty() {
-            return Ok(AdvertisementLogger { file_name: String::new() });
-        }
-        else {
+            Ok(AdvertisementLogger { file_name: String::new() })
+        } else {
             // Check if the file exists and if it does not, create it
-            Ok(AdvertisementLogger { file_name:file_name.to_string() })
+            Ok(AdvertisementLogger { file_name: file_name.to_string() })
         }
-        
     }
 
     // return true if the logger is enabled which is defined as the file_name not being empty
@@ -74,8 +69,7 @@ impl AdvertisementLogger {
     }
 
     // Function to append a BluetoothAdvertisement
-    fn append(&mut self, adv: &BluetoothAdvertisement) -> std::result::Result<(), Box<dyn Error>> {
-
+    fn append(&mut self, adv: &BluetoothAdvertisement) -> Result<()> {
         if self.file_name.is_empty() {
             return Ok(());
         }
@@ -85,19 +79,11 @@ impl AdvertisementLogger {
         // Format the time into a human-readable string, e.g., RFC 3339 format
         let time_recorded = now.to_rfc3339();
 
-
-        append_json_lines(&self.file_name, [
-            AdvStructure {
-            adv_name: adv,
-            time_recorded: time_recorded
-        },],)?;
+        append_json_lines(&self.file_name, [AdvStructure { adv_name: adv, time_recorded }])?;
 
         Ok(())
     }
-
-    
 }
-
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -124,14 +110,14 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter,adv_report_log: &str) -> Result<()> {
+    pub async fn run(adapter: Adapter, adv_report_log: &str) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
         this.perform(adv_report_log).await
     }
 
-    async fn perform(&mut self,adv_report_log: &str) -> Result<()> {
+    async fn perform(&mut self, adv_report_log: &str) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
@@ -171,7 +157,7 @@ impl DeviceMonitor {
                         .map(|(key, value)| {
                             // Convert key to hex string with "0x" prefix
                             let key_hex = format!("0x{:04X}", key);
-                    
+
                             // Convert each byte in the vector to its hex representation with "0x" prefix
                             // If the byte is a printable ASCII character, also show the character in parentheses
                             let value_hex = value.iter()
@@ -185,7 +171,7 @@ impl DeviceMonitor {
                                 })
                                 .collect::<Vec<String>>()
                                 .join(" ");
-                    
+
                             format!("{}: [{}]", key_hex, value_hex)
                         })
                         .collect::<Vec<String>>()
@@ -199,7 +185,7 @@ impl DeviceMonitor {
                         .map(|(key, value)| {
                             // Convert key to hex string with "0x" prefix
                             let key_hex = format!("0x{:04X}", key);
-                    
+
                             // Convert each byte in the vector to its hex representation with "0x" prefix
                             // If the byte is a printable ASCII character, also show the character in parentheses
                             let value_hex = value.iter()
@@ -213,7 +199,7 @@ impl DeviceMonitor {
                                 })
                                 .collect::<Vec<String>>()
                                 .join(" ");
-                    
+
                             format!("{}: [{}]", key_hex, value_hex)
                         })
                         .collect::<Vec<String>>()
@@ -225,8 +211,8 @@ impl DeviceMonitor {
                                 address_type: device.address_type().await?.to_string(),
                                 local_name: device.name().await?.unwrap_or_default(),
                                 manufacturer_data: manufacturer_data_string,
-                                service_data: service_data_string, 
-                                RSSI: device.rssi().await?.unwrap_or_default(),
+                                service_data: service_data_string,
+                                rssi: device.rssi().await?.unwrap_or_default(),
                                 last_seen: data.last_seen.elapsed().as_secs() as i32,
                             })?;
                     }
@@ -237,7 +223,6 @@ impl DeviceMonitor {
                 else => break,
             }
         }
-
 
         Ok(())
     }
@@ -282,7 +267,7 @@ impl DeviceMonitor {
         write!(&mut line, "{}", "#".repeat(bar_len as _).black().on_red())?;
         write!(&mut line, "{}", " ".repeat((MAX_BAR_LEN - bar_len) as _))?;
         write!(&mut line, "]")?;
-        
+
         const MAX_AGO_BAR_LEN: u64 = 10;
         let seen_ago = data.last_seen.elapsed().as_secs();
         let ago_bar_len = (MAX_AGO - seen_ago.clamp(0, MAX_AGO)) * MAX_AGO_BAR_LEN / MAX_AGO;
@@ -325,7 +310,6 @@ impl DeviceMonitor {
             cursor::Show,
         )
         .unwrap();
-
     }
 }
 
@@ -334,7 +318,6 @@ async fn main() -> Result<()> {
     env_logger::init();
 
     let opt = Opts::parse();
-    let adv_report_log = opt.adv_report_log;
 
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -348,7 +331,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     adapter.set_powered(true).await?;
-    DeviceMonitor::run(adapter,&adv_report_log).await?;
+    DeviceMonitor::run(adapter, &opt.adv_report_log).await?;
 
     Ok(())
 }
