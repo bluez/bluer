@@ -1,6 +1,6 @@
 //! Scans for and monitors Bluetooth devices.
 
-use bluer::{id, Adapter, AdapterEvent, Address};
+use bluer::{id, Adapter, AdapterEvent, Address, Device};
 use crossterm::{
     cursor, execute, queue,
     style::{self, Stylize},
@@ -77,6 +77,72 @@ impl<'a> AdvertisementLogger<'a> {
         Ok(())
     }
 
+    async fn log_device(&mut self, device: &Device, last_seen: Instant) -> Result<()> {
+        if !self.is_enabled() {
+            return Ok(());
+        }
+
+        let manufacturer_data_map = device.manufacturer_data().await?.unwrap_or_default();
+        let manufacturer_data_string = manufacturer_data_map
+            .iter()
+            .map(|(key, value)| {
+                let key_hex = format!("0x{:04X}", key);
+
+                // Convert each byte in the vector to its hex representation with "0x" prefix
+                // If the byte is a printable ASCII character, also show the character in parentheses
+                let value_hex = value
+                    .iter()
+                    .map(|byte| {
+                        let hex_str = format!("0x{:02X}", byte);
+                        hex_str
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ");
+
+                format!("{}: [{}]", key_hex, value_hex)
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+        let service_data_map = device.service_data().await?.unwrap_or_default();
+
+        // Convert the HashMap into a string representation
+        let service_data_string = service_data_map
+            .iter()
+            .map(|(key, value)| {
+                // Convert key to hex string with "0x" prefix
+                let key_hex = format!("0x{:04X}", key);
+
+                // Convert each byte in the vector to its hex representation with "0x" prefix
+                // If the byte is a printable ASCII character, also show the character in parentheses
+                let value_hex = value
+                    .iter()
+                    .map(|byte| {
+                        let hex_str = format!("0x{:02X}", byte);
+                        hex_str
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ");
+
+                format!("{}: [{}]", key_hex, value_hex)
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        if self.is_enabled() {
+            self.append(&BluetoothAdvertisement {
+                address: device.address().to_string(),
+                address_type: device.address_type().await?.to_string(),
+                local_name: device.name().await?.unwrap_or_default(),
+                manufacturer_data: manufacturer_data_string,
+                service_data: service_data_string,
+                rssi: device.rssi().await?.unwrap_or_default(),
+                last_seen: last_seen.elapsed().as_secs() as i32,
+            })?;
+        }
+
+        Ok(())
+    }
+
     fn is_enabled(&self) -> bool {
         self.file_name.is_some()
     }
@@ -144,77 +210,11 @@ impl DeviceMonitor {
                             self.show_device(data).await;
                         }
 
-                        let device = self.adapter.device(data.address)?;
+                        if let Ok(device) = self.adapter.device(data.address) {
+                            logger.log_device(&device,data.last_seen).await?;
+                        }
 
-                        // Assuming `device.manufacturer_data().await?` returns a `HashMap<u16, Vec<u8>>`
-                        let manufacturer_data_map = device.manufacturer_data().await?.unwrap_or_default();
-
-                        // Convert the HashMap into a string representation
-                        let manufacturer_data_string = manufacturer_data_map.iter()
-                        .map(|(key, value)| {
-                            // Convert key to hex string with "0x" prefix
-                            let key_hex = format!("0x{:04X}", key);
-
-                            // Convert each byte in the vector to its hex representation with "0x" prefix
-                            // If the byte is a printable ASCII character, also show the character in parentheses
-                            let value_hex = value.iter()
-                                .map(|byte| {
-                                    let hex_str = format!("0x{:02X}", byte);
-                                    if byte.is_ascii_graphic() || *byte == b' ' { // Includes space as printable
-                                        format!("{}({})", hex_str, *byte as char)
-                                    } else {
-                                        hex_str
-                                    }
-                                })
-                                .collect::<Vec<String>>()
-                                .join(" ");
-
-                            format!("{}: [{}]", key_hex, value_hex)
-                        })
-                        .collect::<Vec<String>>()
-                        .join(", ");
-                    // ***********************************************************************
-                        // Assuming device.service_data().await?.unwrap_or_default().to_string(),
-                        let service_data_map = device.service_data().await?.unwrap_or_default();
-
-                        // Convert the HashMap into a string representation
-                        let service_data_string = service_data_map.iter()
-                        .map(|(key, value)| {
-                            // Convert key to hex string with "0x" prefix
-                            let key_hex = format!("0x{:04X}", key);
-
-                            // Convert each byte in the vector to its hex representation with "0x" prefix
-                            // If the byte is a printable ASCII character, also show the character in parentheses
-                            let value_hex = value.iter()
-                                .map(|byte| {
-                                    let hex_str = format!("0x{:02X}", byte);
-                                    if byte.is_ascii_graphic() || *byte == b' ' { // Includes space as printable
-                                        format!("{}({})", hex_str, *byte as char)
-                                    } else {
-                                        hex_str
-                                    }
-                                })
-                                .collect::<Vec<String>>()
-                                .join(" ");
-
-                            format!("{}: [{}]", key_hex, value_hex)
-                        })
-                        .collect::<Vec<String>>()
-                        .join(", ");
-
-                        if logger.is_enabled() {
-                            logger.append(&BluetoothAdvertisement {
-                                address: device.address().to_string(),
-                                address_type: device.address_type().await?.to_string(),
-                                local_name: device.name().await?.unwrap_or_default(),
-                                manufacturer_data: manufacturer_data_string,
-                                service_data: service_data_string,
-                                rssi: device.rssi().await?.unwrap_or_default(),
-                                last_seen: data.last_seen.elapsed().as_secs() as i32,
-                            })?;
-                    }
-
-                    }
+                       }
                     next_update = sleep(UPDATE_INTERVAL).boxed();
                 },
                 else => break,
