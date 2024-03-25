@@ -152,7 +152,6 @@ impl Drop for SessionInner {
 }
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct SingleSessionToken(Arc<oneshot::Sender<()>>);
 
 impl Drop for SingleSessionToken {

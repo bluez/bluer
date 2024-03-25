@@ -1,12 +1,15 @@
 //! Scans for and monitors Bluetooth devices.
 
-use bluer::{id, Adapter, AdapterEvent, Address, Device};
+use chrono::{DateTime, Utc};
+use clap::Parser;
 use crossterm::{
     cursor, execute, queue,
     style::{self, Stylize},
     terminal::{self, ClearType},
 };
 use futures::{pin_mut, FutureExt, StreamExt};
+use serde::Serialize;
+use serde_jsonlines::AsyncJsonLinesWriter;
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -15,143 +18,66 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+use tokio::{fs::File, time::sleep};
+use uuid::Uuid;
 
-use tokio::time::sleep;
-
-use chrono::{DateTime, Utc};
-use clap::Parser;
-use serde::{Deserialize, Serialize};
-use serde_jsonlines::append_json_lines; //https://jsonlines.org/
-
-#[derive(Parser, Debug)]
-pub struct Opts {
-    /// The filename to write the advertisement report log to in json lines format
-    #[clap(short, long)]
-    adv_report_log: Option<PathBuf>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BluetoothAdvertisement {
-    local_name: String,
-    address: String,
-    address_type: String,
-    manufacturer_data: String,
-    service_data: String,
-    last_seen: i32,
-    rssi: i16,
-}
-
-#[derive(Serialize)]
-pub struct AdvStructure<'a> {
-    pub adv_name: &'a BluetoothAdvertisement,
-    pub time_recorded: String,
-}
-
-// A struct to manage the file operations
-struct AdvertisementLogger<'a> {
-    file_name: &'a Option<PathBuf>,
-}
-
-impl<'a> AdvertisementLogger<'a> {
-    // Function to create a new AdvertisementLogger
-    fn new(file_name: &'a Option<PathBuf>) -> Result<AdvertisementLogger> {
-        Ok(AdvertisementLogger { file_name })
-    }
-
-    // Function to append a BluetoothAdvertisement
-    fn append(&mut self, adv: &BluetoothAdvertisement) -> Result<()> {
-        if self.file_name.is_none() {
-            return Ok(());
-        }
-        // Get the current UTC time as a DateTime<Utc>
-        let now: DateTime<Utc> = Utc::now();
-
-        // Format the time into a human-readable string, e.g., RFC 3339 format
-        let time_recorded = now.to_rfc3339();
-
-        append_json_lines(
-            self.file_name.as_ref().unwrap().as_os_str(),
-            [AdvStructure { adv_name: adv, time_recorded }],
-        )?;
-
-        Ok(())
-    }
-
-    async fn log_device(&mut self, device: &Device, last_seen: Instant) -> Result<()> {
-        if !self.is_enabled() {
-            return Ok(());
-        }
-
-        let manufacturer_data_map = device.manufacturer_data().await?.unwrap_or_default();
-        let manufacturer_data_string = manufacturer_data_map
-            .iter()
-            .map(|(key, value)| {
-                let key_hex = format!("0x{:04X}", key);
-
-                // Convert each byte in the vector to its hex representation with "0x" prefix
-                // If the byte is a printable ASCII character, also show the character in parentheses
-                let value_hex = value
-                    .iter()
-                    .map(|byte| {
-                        let hex_str = format!("0x{:02X}", byte);
-                        hex_str
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ");
-
-                format!("{}: [{}]", key_hex, value_hex)
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
-        let service_data_map = device.service_data().await?.unwrap_or_default();
-
-        // Convert the HashMap into a string representation
-        let service_data_string = service_data_map
-            .iter()
-            .map(|(key, value)| {
-                // Convert key to hex string with "0x" prefix
-                let key_hex = format!("0x{:04X}", key);
-
-                // Convert each byte in the vector to its hex representation with "0x" prefix
-                // If the byte is a printable ASCII character, also show the character in parentheses
-                let value_hex = value
-                    .iter()
-                    .map(|byte| {
-                        let hex_str = format!("0x{:02X}", byte);
-                        hex_str
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ");
-
-                format!("{}: [{}]", key_hex, value_hex)
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
-
-        if self.is_enabled() {
-            self.append(&BluetoothAdvertisement {
-                address: device.address().to_string(),
-                address_type: device.address_type().await?.to_string(),
-                local_name: device.name().await?.unwrap_or_default(),
-                manufacturer_data: manufacturer_data_string,
-                service_data: service_data_string,
-                rssi: device.rssi().await?.unwrap_or_default(),
-                last_seen: last_seen.elapsed().as_secs() as i32,
-            })?;
-        }
-
-        Ok(())
-    }
-
-    fn is_enabled(&self) -> bool {
-        self.file_name.is_some()
-    }
-}
+use bluer::{id, Adapter, AdapterEvent, Address, AddressType, Device};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const MAX_AGO: u64 = 30;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Monitor Bluetooth advertisements.
+#[derive(Parser, Debug)]
+pub struct Opts {
+    /// Appends received Bluetooth advertisements to specified file in JSON lines format.
+    #[clap(short = 'l', long, name = "FILENAME")]
+    advertisement_log: Option<PathBuf>,
+}
+
+/// A line in the advertisement log.
+#[derive(Serialize, Debug)]
+pub struct AdvertisementLogLine {
+    received: DateTime<Utc>,
+    address: Address,
+    address_type: AddressType,
+    name: String,
+    manufacturer_data: HashMap<u16, Vec<u8>>,
+    service_data: HashMap<Uuid, Vec<u8>>,
+    rssi: i16,
+}
+
+impl AdvertisementLogLine {
+    async fn new(device: &Device) -> Result<Self> {
+        Ok(Self {
+            received: Utc::now(),
+            address: device.address(),
+            address_type: device.address_type().await?,
+            name: device.name().await?.unwrap_or_default(),
+            manufacturer_data: device.manufacturer_data().await?.unwrap_or_default(),
+            service_data: device.service_data().await?.unwrap_or_default(),
+            rssi: device.rssi().await?.unwrap_or_default(),
+        })
+    }
+}
+
+/// Logs advertisements to file in JSON lines format.
+struct AdvertisementLogger(AsyncJsonLinesWriter<File>);
+
+impl AdvertisementLogger {
+    fn new(writer: File) -> Self {
+        Self(AsyncJsonLinesWriter::new(writer))
+    }
+
+    async fn log_device(&mut self, device: &Device) -> Result<()> {
+        if let Ok(line) = AdvertisementLogLine::new(device).await {
+            self.0.write(&line).await?;
+            self.0.flush().await?;
+        }
+        Ok(())
+    }
+}
 
 fn clear_line(row: u16) {
     queue!(stdout(), cursor::MoveTo(0, row), terminal::DisableLineWrap, terminal::Clear(ClearType::CurrentLine))
@@ -173,19 +99,18 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter, adv_report_log: &Option<PathBuf>) -> Result<()> {
+    pub async fn run(adapter: Adapter, logger: Option<AdvertisementLogger>) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
-        this.perform(adv_report_log).await
+        this.perform(logger).await
     }
 
-    async fn perform(&mut self, adv_report_log: &Option<PathBuf>) -> Result<()> {
+    async fn perform(&mut self, mut logger: Option<AdvertisementLogger>) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
         let mut next_update = sleep(UPDATE_INTERVAL).boxed();
-        let mut logger = AdvertisementLogger::new(adv_report_log)?;
 
         loop {
             tokio::select! {
@@ -195,6 +120,9 @@ impl DeviceMonitor {
                             match self.devices.get_mut(&addr) {
                                 Some(data) => data.last_seen = Instant::now(),
                                 None => self.add_device(addr).await,
+                            }
+                            if let (Some(logger), Ok(device)) = (&mut logger, self.adapter.device(addr)) {
+                                logger.log_device(&device).await?;
                             }
                         },
                         AdapterEvent::DeviceRemoved(addr) => self.remove_device(addr).await,
@@ -209,12 +137,7 @@ impl DeviceMonitor {
                         } else {
                             self.show_device(data).await;
                         }
-
-                        if let Ok(device) = self.adapter.device(data.address) {
-                            logger.log_device(&device,data.last_seen).await?;
-                        }
-
-                       }
+                    }
                     next_update = sleep(UPDATE_INTERVAL).boxed();
                 },
                 else => break,
@@ -314,10 +237,15 @@ impl DeviceMonitor {
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let opt = Opts::parse();
+    let opts = Opts::parse();
 
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
+
+    let logger = match opts.advertisement_log {
+        Some(path) => Some(AdvertisementLogger::new(File::options().append(true).create(true).open(path).await?)),
+        None => None,
+    };
 
     execute!(
         stdout(),
@@ -328,7 +256,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     adapter.set_powered(true).await?;
-    DeviceMonitor::run(adapter, &opt.adv_report_log).await?;
+    DeviceMonitor::run(adapter, logger).await?;
 
     Ok(())
 }
