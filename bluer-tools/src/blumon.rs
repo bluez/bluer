@@ -1,25 +1,83 @@
 //! Scans for and monitors Bluetooth devices.
 
-use bluer::{id, Adapter, AdapterEvent, Address};
+use chrono::{DateTime, Utc};
+use clap::Parser;
 use crossterm::{
     cursor, execute, queue,
     style::{self, Stylize},
     terminal::{self, ClearType},
 };
 use futures::{pin_mut, FutureExt, StreamExt};
+use serde::Serialize;
+use serde_jsonlines::AsyncJsonLinesWriter;
 use std::{
     collections::HashMap,
     convert::TryFrom,
     io::stdout,
     iter,
+    path::PathBuf,
     time::{Duration, Instant},
 };
-use tokio::time::sleep;
+use tokio::{fs::File, time::sleep};
+use uuid::Uuid;
+
+use bluer::{id, Adapter, AdapterEvent, Address, AddressType, Device};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const MAX_AGO: u64 = 30;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Monitor Bluetooth advertisements.
+#[derive(Parser, Debug)]
+pub struct Opts {
+    /// Appends received Bluetooth advertisements to specified file in JSON lines format.
+    #[clap(short = 'l', long, name = "FILENAME")]
+    advertisement_log: Option<PathBuf>,
+}
+
+/// A line in the advertisement log.
+#[derive(Serialize, Debug)]
+pub struct AdvertisementLogLine {
+    received: DateTime<Utc>,
+    address: Address,
+    address_type: AddressType,
+    name: String,
+    manufacturer_data: HashMap<u16, Vec<u8>>,
+    service_data: HashMap<Uuid, Vec<u8>>,
+    rssi: i16,
+}
+
+impl AdvertisementLogLine {
+    async fn new(device: &Device) -> Result<Self> {
+        Ok(Self {
+            received: Utc::now(),
+            address: device.address(),
+            address_type: device.address_type().await?,
+            name: device.name().await?.unwrap_or_default(),
+            manufacturer_data: device.manufacturer_data().await?.unwrap_or_default(),
+            service_data: device.service_data().await?.unwrap_or_default(),
+            rssi: device.rssi().await?.unwrap_or_default(),
+        })
+    }
+}
+
+/// Logs advertisements to file in JSON lines format.
+struct AdvertisementLogger(AsyncJsonLinesWriter<File>);
+
+impl AdvertisementLogger {
+    fn new(writer: File) -> Self {
+        Self(AsyncJsonLinesWriter::new(writer))
+    }
+
+    async fn log_device(&mut self, device: &Device) -> Result<()> {
+        if let Ok(line) = AdvertisementLogLine::new(device).await {
+            self.0.write(&line).await?;
+            self.0.flush().await?;
+        }
+        Ok(())
+    }
+}
 
 fn clear_line(row: u16) {
     queue!(stdout(), cursor::MoveTo(0, row), terminal::DisableLineWrap, terminal::Clear(ClearType::CurrentLine))
@@ -41,14 +99,14 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter) -> Result<()> {
+    pub async fn run(adapter: Adapter, logger: Option<AdvertisementLogger>) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
-        this.perform().await
+        this.perform(logger).await
     }
 
-    async fn perform(&mut self) -> Result<()> {
+    async fn perform(&mut self, mut logger: Option<AdvertisementLogger>) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
@@ -62,6 +120,9 @@ impl DeviceMonitor {
                             match self.devices.get_mut(&addr) {
                                 Some(data) => data.last_seen = Instant::now(),
                                 None => self.add_device(addr).await,
+                            }
+                            if let (Some(logger), Ok(device)) = (&mut logger, self.adapter.device(addr)) {
+                                logger.log_device(&device).await?;
                             }
                         },
                         AdapterEvent::DeviceRemoved(addr) => self.remove_device(addr).await,
@@ -175,8 +236,16 @@ impl DeviceMonitor {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     env_logger::init();
+
+    let opts = Opts::parse();
+
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
+
+    let logger = match opts.advertisement_log {
+        Some(path) => Some(AdvertisementLogger::new(File::options().append(true).create(true).open(path).await?)),
+        None => None,
+    };
 
     execute!(
         stdout(),
@@ -187,7 +256,7 @@ async fn main() -> Result<()> {
     .unwrap();
 
     adapter.set_powered(true).await?;
-    DeviceMonitor::run(adapter).await?;
+    DeviceMonitor::run(adapter, logger).await?;
 
     Ok(())
 }
