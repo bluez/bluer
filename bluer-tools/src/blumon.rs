@@ -27,6 +27,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const MAX_AGO: u64 = 30;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(1);
+const RESTART_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Monitor Bluetooth advertisements.
 #[derive(Parser, Debug)]
@@ -99,14 +100,23 @@ struct DeviceData {
 }
 
 impl DeviceMonitor {
-    pub async fn run(adapter: Adapter, logger: Option<AdvertisementLogger>) -> Result<()> {
+    pub async fn run(adapter: Adapter, mut logger: Option<AdvertisementLogger>) -> Result<()> {
         let (_, n_rows) = terminal::size()?;
         let mut this =
             Self { adapter, n_rows, empty_rows: (2..n_rows - 1).rev().collect(), devices: HashMap::new() };
-        this.perform(logger).await
+
+        loop {
+            // bluetoothd stops discovery automatically after some time,
+            // thus we restart it periodically.
+            tokio::select! {
+                res = this.perform(&mut logger) => break res,
+                () = sleep(RESTART_INTERVAL) => (),
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
     }
 
-    async fn perform(&mut self, mut logger: Option<AdvertisementLogger>) -> Result<()> {
+    async fn perform(&mut self, logger: &mut Option<AdvertisementLogger>) -> Result<()> {
         let device_events = self.adapter.discover_devices_with_changes().await?;
         pin_mut!(device_events);
 
@@ -121,7 +131,7 @@ impl DeviceMonitor {
                                 Some(data) => data.last_seen = Instant::now(),
                                 None => self.add_device(addr).await,
                             }
-                            if let (Some(logger), Ok(device)) = (&mut logger, self.adapter.device(addr)) {
+                            if let (Some(logger), Ok(device)) = (logger.as_mut(), self.adapter.device(addr)) {
                                 logger.log_device(&device).await?;
                             }
                         },
