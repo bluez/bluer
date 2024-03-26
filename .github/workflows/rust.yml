@@ -26,7 +26,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update && \
-          sudo apt-get install -y podman qemu-user-static && \
+          sudo apt-get install -y \
+            podman \
+            qemu-user-static\
+            pkg-config \
+            libdbus-1-dev && \
           cargo binstall --no-confirm cross
 
       - name: Check code formatting
