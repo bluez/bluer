@@ -207,6 +207,12 @@ impl TryFrom<bt_security> for Security {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash, FromPrimitive, ToPrimitive)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FlowControl {
+    /// Basic.
+    Basic = 0x00,
+    /// Enhanced retransmission mode (ERTM).
+    Ertm = 0x01,
+    /// Streaming.
+    Streaming = 0x02,
     /// LE flow control.
     Le = 0x03,
     /// Extended flow control.
