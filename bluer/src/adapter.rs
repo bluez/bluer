@@ -6,6 +6,7 @@ use dbus::{
     Path,
 };
 use futures::{
+    future,
     stream::{self, SelectAll},
     Stream, StreamExt,
 };
@@ -169,10 +170,16 @@ impl Adapter {
     /// The discovery filter can be configured using [set_discovery_filter](Self::set_discovery_filter).
     pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent>> {
         let token = self.discovery_session().await?;
-        let change_events = self.events().await?.map(move |evt| {
-            let _token = &token;
-            evt
-        });
+        let change_events = self
+            .events()
+            .await?
+            .map(move |evt| {
+                let _token = &token;
+                evt
+            })
+            .take_while(|evt| {
+                future::ready(!matches!(evt, AdapterEvent::PropertyChanged(AdapterProperty::Discovering(false))))
+            });
 
         let known = self.device_addresses().await?;
         let known_events = stream::iter(known).map(AdapterEvent::DeviceAdded);

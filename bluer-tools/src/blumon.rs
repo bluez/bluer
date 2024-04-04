@@ -109,7 +109,7 @@ impl DeviceMonitor {
             // bluetoothd stops discovery automatically after some time,
             // thus we restart it periodically.
             tokio::select! {
-                res = this.perform(&mut logger) => break res,
+                res = this.perform(&mut logger) => res?,
                 () = sleep(RESTART_INTERVAL) => (),
             }
             sleep(Duration::from_secs(1)).await;
@@ -124,9 +124,9 @@ impl DeviceMonitor {
 
         loop {
             tokio::select! {
-                Some(device_event) = device_events.next() => {
+                device_event = device_events.next() => {
                     match device_event {
-                        AdapterEvent::DeviceAdded(addr) => {
+                        Some(AdapterEvent::DeviceAdded(addr)) => {
                             match self.devices.get_mut(&addr) {
                                 Some(data) => data.last_seen = Instant::now(),
                                 None => self.add_device(addr).await,
@@ -135,8 +135,9 @@ impl DeviceMonitor {
                                 logger.log_device(&device).await?;
                             }
                         },
-                        AdapterEvent::DeviceRemoved(addr) => self.remove_device(addr).await,
-                        _ => (),
+                        Some(AdapterEvent::DeviceRemoved(addr)) => self.remove_device(addr).await,
+                        Some(_) => (),
+                        None => break,
                     }
                 },
                 _ = &mut next_update => {
