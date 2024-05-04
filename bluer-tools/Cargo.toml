@@ -12,6 +12,10 @@ edition = "2021"
 rust-version = "1.75"
 
 [[bin]]
+name = "bluadv"
+path = "src/bluadv.rs"
+
+[[bin]]
 name = "blumon"
 path = "src/blumon.rs"
 
@@ -37,6 +41,7 @@ tokio = { version = "1", features = [
     "io-util",
     "process",
     "rt-multi-thread",
+    "signal",
 ] }
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.27"
@@ -53,3 +58,6 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde-jsonlines = { version = "0.5.0", features = ["async"] }
+structopt = { version = "0.3", default-features = false }
+regex = "1"
+
