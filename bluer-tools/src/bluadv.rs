@@ -46,13 +46,8 @@ impl FromStr for Interval {
     }
 }
 
-// cargo run --  --advertisement-type "broadcast" --local-name "rust!"
-
-//use uuid::Uuid; // Make sure the `uuid` crate is added to your dependencies
-//use std::str::FromStr;
-
 #[derive(Debug, StructOpt)]
-#[structopt(name = "le_advertise", about = "A command tool to generate BLE advertisements")]
+#[structopt(name = "bluadv", about = "A command tool to generate BLE advertisements")]
 struct Opt {
     #[structopt(long, help = "Type of the advertisement", possible_values = &["broadcast", "peripheral"])]
     advertisement_type: Option<String>,
@@ -173,7 +168,7 @@ async fn main() -> bluer::Result<()> {
     }
 
     let le_advertisement = Advertisement {
-        advertisement_type: advertisement_type,
+        advertisement_type,
         service_uuids,
         local_name: opt.local_name,
         discoverable: Some(opt.discoverable),
@@ -190,7 +185,7 @@ async fn main() -> bluer::Result<()> {
     let handle = adapter.advertise(le_advertisement).await?;
 
     // Wait for a signal to stop the advertisement
-    println!("Press enter to quit");
+    println!("Press <CTRL>-C to quit");
 
     // Wait for either a signal to stop the advertisement or user input
     tokio::select! {
