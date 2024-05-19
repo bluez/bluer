@@ -1,6 +1,6 @@
 //! Perform a Bluetooth LE advertisement.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, BTreeMap};
 use std::process;
 use std::time::Duration;
 use std::{error::Error, fmt, str::FromStr};
@@ -12,6 +12,17 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::time::sleep;
 
 #[derive(Debug)]
+struct HexParseError(String);
+
+impl fmt::Display for HexParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for HexParseError {}
+
+#[derive(Debug)]
 struct IntervalParseError(String);
 
 impl fmt::Display for IntervalParseError {
@@ -21,6 +32,7 @@ impl fmt::Display for IntervalParseError {
 }
 
 impl Error for IntervalParseError {}
+
 
 #[derive(Debug)]
 struct Interval {
@@ -52,8 +64,6 @@ struct Opt {
     #[structopt(long, help = "Type of the advertisement", possible_values = &["broadcast", "peripheral"])]
     advertisement_type: Option<String>,
 
-    /// Activate verbose mode
-    // short and long flags (-v, --verbose) will be deduced from the field's name
     #[structopt(
         short,
         long,
@@ -61,28 +71,23 @@ struct Opt {
     )]
     verbose: bool,
 
-    // short and long flags (-a, --advertiser) will be deduced from the field's name
     #[structopt(
         short,
         long,
         default_value = "",
-        help = "The advertisement address in the form XX:XX:XX:XX:XX:XX  ex: 5C:F3:70:A1:71:0F"
+        help = "The advertisement address in hexidecimal in the form XX:XX:XX:XX:XX:XX  ex: 5C:F3:70:A1:71:0F"
     )]
     advertiser: String,
 
-    /// UUID service to add to the advertisement. ex: 123e4567-e89b-12d3-a456-426614174000
-    #[structopt(short = "u", long, use_delimiter = true, help = "List of service UUIDs separated by commas")]
+    #[structopt(short = "u", long, use_delimiter = true, help = "List of service UUIDs in hexidecimal separated by commas. Example: -u 123e4567-e89b-12d3-a456-426614174000")]
     service_uuids: Vec<String>,
 
-    /// Local name to be used in the advertising report.
     #[structopt(short, long, help = "Local name for the advertisement")]
     local_name: Option<String>,
 
-    /// Advertise as general discoverable.
     #[structopt(long, help = "Advertise as general discoverable")]
     discoverable: bool,
 
-    /// Duration of the advertisement in seconds.
     #[structopt(long, help = "Duration of the advertisement in seconds")]
     duration: Option<u64>,
 
@@ -91,7 +96,46 @@ struct Opt {
 
     #[structopt(long, help = "Advertising TX power level")]
     tx_power: Option<i16>,
+
+    /// Manufacturer data in the format key1:value1,key2:value2 where values are hex-encoded
+    #[structopt(long, 
+        parse(try_from_str = parse_manufacturer_data), 
+        help = "Manufacturer specific data as comma seperated key-value pairs in hexidecimal (key1:value1,key2:value2,...) where the key is a 16-bit identifier and the value is variable length hex-encoded data. Example: --manufacturer-data 0102:010203040506,0203:a0b0c0"
+    )]
+    manufacturer_data: Option<BTreeMap<u16, Vec<u8>>>,
+
+    /// Service data in the format uuid1:value1,uuid2:value2 where values are hex-encoded
+    #[structopt(long, parse(try_from_str = parse_service_data), help = "Service data as key-value pairs in hexidecimal (key1:value1,key2:value2,...) where the key is a 128 bit UUID and the value is hex-encoded data. Example: --service_data 01020304-0506-0708-0910-111213141516:01020f")]
+    service_data: Option<BTreeMap<Uuid, Vec<u8>>>,
+
 }
+
+fn parse_manufacturer_data(s: &str) -> Result<BTreeMap<u16, Vec<u8>>, HexParseError> {
+    s.split(',').map(|kv| {
+        let mut parts = kv.split(':');
+        if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
+            let key = u16::from_str_radix(k, 16).map_err(|_| HexParseError("Invalid key".into()))?;
+            let value = hex::decode(v).map_err(|_| HexParseError("Invalid hex value".into()))?;
+            Ok((key, value))
+        } else {
+            Err(HexParseError("Expected format key:value".into()))
+        }
+    }).collect()
+}
+
+fn parse_service_data(s: &str) -> Result<BTreeMap<Uuid, Vec<u8>>, HexParseError> {
+    s.split(',').map(|kv| {
+        let mut parts = kv.split(':');
+        if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
+            let key = Uuid::from_str(k).map_err(|_| HexParseError("Invalid UUID".into()))?;
+            let value = hex::decode(v).map_err(|_| HexParseError("Invalid hex value".into()))?;
+            Ok((key, value))
+        } else {
+            Err(HexParseError("Expected format uuid:value".into()))
+        }
+    }).collect()
+}    
+
 
 impl Opt {
     fn validate(&self) {
@@ -111,6 +155,7 @@ impl Opt {
             process::exit(1);
         }
     }
+
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -127,7 +172,7 @@ async fn main() -> bluer::Result<()> {
     let service_uuids: BTreeSet<Uuid> = opt.service_uuids.iter().filter_map(|s| Uuid::from_str(s).ok()).collect();
 
     let session = bluer::Session::new().await?;
-    // convert opt.advertisement_type to bluer::adv::Type
+    
     let advertisement_type = match opt.advertisement_type.as_deref() {
         Some("broadcast") => Type::Broadcast,
         Some("peripheral") => Type::Peripheral,
@@ -176,6 +221,8 @@ async fn main() -> bluer::Result<()> {
         tx_power: opt.tx_power,
         min_interval: opt.interval.as_ref().map(|i| Duration::from_millis(i.min_milliseconds)),
         max_interval: opt.interval.as_ref().map(|i| Duration::from_millis(i.max_milliseconds)),
+        manufacturer_data: opt.manufacturer_data.unwrap_or_default(),
+        service_data: opt.service_data.unwrap_or_default(),        
         ..Default::default()
     };
 
