@@ -48,7 +48,7 @@ struct Opt {
     service_uuids: Vec<Uuid>,
 
     /// Local name for the advertisement.
-    #[structopt(short = 'n', long)]
+    #[clap(short = 'n', long)]
     local_name: Option<String>,
 
     /// Advertise as general discoverable.
@@ -60,15 +60,15 @@ struct Opt {
     duration: Option<u64>,
 
     /// Minimum advertising interval in milliseconds.
-    #[structopt(long)]
+    #[clap(long)]
     min_interval: Option<u64>,
 
     /// Maximum advertising interval in milliseconds.
-    #[structopt(long)]
+    #[clap(long)]
     max_interval: Option<u64>,
 
     /// Advertising TX power level. The range is [-127 to +20] where units are in dBm.
-    #[structopt(long, short = 'p')]
+    #[clap(long, short = 'p', allow_negative_numbers(true))]
     tx_power: Option<i16>,
 
     /// Manufacturer specific data in the form "<manufacturer id>:<hex data>" (manufacturer id is in hexadecimal).
