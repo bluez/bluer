@@ -67,11 +67,11 @@ struct Opt {
     #[structopt(long)]
     max_interval: Option<u64>,
 
-    /// Advertising TX power level.
+    /// Advertising TX power level. The range is [-127 to +20] where units are in dBm.
     #[structopt(long, short = 'p')]
     tx_power: Option<i16>,
 
-    /// Manufacturer specific data in the form "<manufacturer id>:<hex data>".
+    /// Manufacturer specific data in the form "<manufacturer id>:<hex data>" (manufacturer id is in hexadecimal).
     #[clap(long, short = 'm')]
     manufacturer_data: Vec<ManufacturerData>,
 
@@ -98,7 +98,7 @@ impl FromStr for ManufacturerData {
             return Err(": missing".to_string());
         };
         Ok(Self {
-            id: id.parse::<u16>().map_err(|err| err.to_string())?,
+            id: u16::from_str_radix(id, 16).map_err(|err| err.to_string())?,
             data: hex::decode(data).map_err(|err| err.to_string())?,
         })
     }
