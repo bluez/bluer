@@ -9,6 +9,8 @@ A running [Bluetooth daemon (BlueZ)] is required.
 
 The following command line tools are included:
 
+  - **bluadv**: Send Bluetooth LE advertisements.
+
   - **blumon**: Scans for and monitors Bluetooth devices similar to `top`.
 
   - **gattcat**: Swiss army knife for Bluetooth LE GATT services.

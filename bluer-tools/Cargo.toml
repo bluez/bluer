@@ -1,6 +1,6 @@
 [package]
 name = "bluer-tools"
-version = "0.17.1"
+version = "0.17.2"
 description = "BlueR tools: swiss army knife for GATT services, L2CAP and RFCOMM sockets on Linux"
 readme = "README.md"
 authors = ["Sebastian Urban <surban@surban.net>", "BlueR contributors"]
