@@ -1,7 +1,7 @@
 //! Perform a Bluetooth LE advertisement.
 
 use clap::{Parser, ValueEnum};
-use std::{str::FromStr, time::Duration};
+use std::{future::pending, str::FromStr, time::Duration};
 use tokio::{
     signal::unix::{signal, SignalKind},
     time::sleep,
@@ -43,9 +43,11 @@ struct Opt {
     #[clap(long, short = 't', default_value = "peripheral")]
     advertisement_type: AdvertisementType,
 
-    /// Service UUIDs.
+    /// Service UUID.
+    ///
+    /// Can be specified multiple times.
     #[clap(short = 'u', long)]
-    service_uuids: Vec<Uuid>,
+    service_uuid: Vec<Uuid>,
 
     /// Local name for the advertisement.
     #[clap(short = 'n', long)]
@@ -72,16 +74,25 @@ struct Opt {
     tx_power: Option<i16>,
 
     /// Manufacturer specific data in the form "<manufacturer id>:<hex data>" (manufacturer id is in hexadecimal).
+    ///
+    /// Can be specified multiple times.
     #[clap(long, short = 'm')]
     manufacturer_data: Vec<ManufacturerData>,
 
     /// Service data in the form "<service uuid>:<hex data>".
+    ///
+    /// Can be specified multiple times.
+
     #[clap(long, short = 's')]
     service_data: Vec<ServiceData>,
 
     /// Show detailed information.
     #[clap(short, long)]
     verbose: bool,
+
+    /// Do not display exit prompt.
+    #[clap(short, long)]
+    quiet: bool,
 }
 
 #[derive(Clone)]
@@ -161,11 +172,19 @@ async fn main() -> AnyResult<()> {
         eprintln!("Using Bluetooth adapter {} with address {}", adapter.name(), adapter.address().await?);
     }
 
+    let duration = opt.duration.map(Duration::from_secs);
+    let timeout = async {
+        match duration {
+            Some(duration) => sleep(duration).await,
+            None => pending().await,
+        }
+    };
+
     let le_advertisement = Advertisement {
         advertisement_type: opt.advertisement_type.into(),
         local_name: opt.local_name.clone(),
         discoverable: Some(opt.discoverable),
-        duration: opt.duration.map(Duration::from_secs),
+        duration,
         tx_power: opt.tx_power,
         min_interval: opt.min_interval.map(Duration::from_millis),
         max_interval: opt.max_interval.map(Duration::from_millis),
@@ -179,11 +198,15 @@ async fn main() -> AnyResult<()> {
 
     let handle = adapter.advertise(le_advertisement).await?;
 
-    // Wait for signal to stop the advertisement.
-    eprintln!("Press <CTRL>-C to stop advertising");
+    if !opt.quiet {
+        eprintln!("Press <CTRL>-C to stop advertising");
+    }
+
+    // Wait for signal or timeout to stop the advertisement.
     tokio::select! {
         _ = sig_term.recv() => (),
         _ = sig_int.recv() => (),
+        () = timeout => (),
     }
 
     // Clean up and finish
