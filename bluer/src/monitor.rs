@@ -333,7 +333,11 @@ impl RegisteredMonitor {
 /// Use this to receive a stream of [advertisement monitor events](MonitorEvent)
 /// for the registered monitor.
 ///
+/// While a [`MonitorHandle`] is being held, its events *must* be consumed regularly.
+/// Otherwise it will use an unbounded amount of memory for buffering the unconsumed events.
+///
 /// Drop to unregister the advertisement monitor target.
+#[must_use = "the MonitorHandle must be held for the monitor to be active and its events must be consumed regularly"]
 pub struct MonitorHandle {
     name: dbus::Path<'static>,
     event_rx: ReceiverStream<MonitorEvent>,
