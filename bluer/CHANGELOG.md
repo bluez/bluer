@@ -4,6 +4,11 @@ All notable changes to BlueR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.17.2 - 2024-06-26
+### Changed
+- warn when a returned handle is unused
+- clarify that events of MonitorHandle must be consumed
+
 ## 0.17.1 - 2024-03-13
 ### Added
 - device: add battery_percentage method by badr

@@ -1,6 +1,6 @@
 [package]
 name = "bluer"
-version = "0.17.1"
+version = "0.17.2"
 description = "BlueR: official Rust interface to the Linux Bluetooth protocol stack (BlueZ)"
 readme = "README.md"
 authors = [
@@ -61,7 +61,7 @@ strum = { version = "0.26", features = ["derive"] }
 num-traits = "0.2"
 num-derive = "0.4"
 libc = "0.2"
-nix = { version = "0.27", default-features = false, features = ["ioctl"] }
+nix = { version = "0.29", default-features = false, features = ["ioctl"] }
 custom_debug = { version = "0.6", optional = true }
 displaydoc = { version = "0.2", optional = true }
 log = "0.4"
