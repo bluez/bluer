@@ -12,7 +12,7 @@ use std::{
 use uuid::Uuid;
 
 #[path = "src/uuid_ext.rs"]
-mod uuid_ext;
+pub mod uuid_ext;
 use uuid_ext::UuidExt;
 
 struct UuidOrShort(Uuid);
