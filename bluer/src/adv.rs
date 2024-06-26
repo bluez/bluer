@@ -330,6 +330,7 @@ impl Advertisement {
 /// Handle to active Bluetooth LE advertisement.
 ///
 /// Drop to unregister advertisement.
+#[must_use = "AdvertisementHandle must be held for advertisement to be broadcasted"]
 pub struct AdvertisementHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,

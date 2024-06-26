@@ -1463,6 +1463,7 @@ impl Profile {
 /// Handle to published local profile (GATT client) instance.
 ///
 /// Drop this handle to unpublish.
+#[must_use = "ProfileHandle must be held for profile to be published"]
 pub struct ProfileHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,

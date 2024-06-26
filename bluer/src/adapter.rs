@@ -14,7 +14,6 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fmt::{Debug, Formatter},
     sync::Arc,
-    u32,
 };
 use strum::{Display, EnumString};
 use tokio::sync::mpsc;

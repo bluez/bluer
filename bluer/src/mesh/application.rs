@@ -237,6 +237,7 @@ pub(crate) struct ApplicationInner {
 /// Handle to Bluetooth mesh application.
 ///
 /// Drop this handle to unpublish.
+#[must_use = "ApplicationHandle must be held for mesh application to be published"]
 pub struct ApplicationHandle {
     pub(crate) app_inner: Arc<ApplicationInner>,
     pub(crate) name: dbus::Path<'static>,

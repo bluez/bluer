@@ -496,6 +496,7 @@ impl RegisteredAgent {
 /// Handle to registered agent.
 ///
 /// Drop to unregister agent.
+#[must_use = "AgentHandle must be held for agent to be registered"]
 pub struct AgentHandle {
     name: dbus::Path<'static>,
     _drop_tx: oneshot::Sender<()>,
