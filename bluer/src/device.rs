@@ -293,6 +293,13 @@ define_properties!(
             get: (name, v => {v.to_owned()}),
         );
 
+        /// The Bluetooth device address of the remote device.
+        property(
+            RemoteAddress, Address,
+            dbus: (INTERFACE, "Address", String, MANDATORY),
+            get: (remote_address, v => {v.parse()?}),
+        );
+
         /// The Bluetooth device address type.
         ///
         /// For dual-mode and
