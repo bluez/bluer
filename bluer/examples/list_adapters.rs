@@ -34,7 +34,7 @@ async fn main() -> bluer::Result<()> {
     let session = bluer::Session::new().await?;
     let adapter_names = session.adapter_names().await?;
     for adapter_name in adapter_names {
-        println!("Bluetooth adapater {}:", &adapter_name);
+        println!("Bluetooth adapter {}:", &adapter_name);
         let adapter = session.adapter(&adapter_name)?;
         if all_properties {
             query_all_adapter_properties(&adapter).await?;
