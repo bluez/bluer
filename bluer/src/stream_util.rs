@@ -21,7 +21,7 @@ use crate::sock;
 #[derive(Debug)]
 pub struct ReadHalf<'a>(pub(crate) &'a Stream);
 
-impl<'a> ReadHalf<'a> {
+impl ReadHalf<'_> {
     /// Receives data on the socket from the remote address to which it is connected,
     /// without removing that data from the queue.
     /// On success, returns the number of bytes peeked.
@@ -36,13 +36,13 @@ impl<'a> ReadHalf<'a> {
     }
 }
 
-impl<'a> AsRef<Stream> for ReadHalf<'a> {
+impl AsRef<Stream> for ReadHalf<'_> {
     fn as_ref(&self) -> &Stream {
         self.0
     }
 }
 
-impl<'a> AsyncRead for ReadHalf<'a> {
+impl AsyncRead for ReadHalf<'_> {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut ReadBuf) -> Poll<Result<()>> {
         self.0.socket.poll_recv_priv(cx, buf)
     }
@@ -52,13 +52,13 @@ impl<'a> AsyncRead for ReadHalf<'a> {
 #[derive(Debug)]
 pub struct WriteHalf<'a>(pub(crate) &'a Stream);
 
-impl<'a> AsRef<Stream> for WriteHalf<'a> {
+impl AsRef<Stream> for WriteHalf<'_> {
     fn as_ref(&self) -> &Stream {
         self.0
     }
 }
 
-impl<'a> AsyncWrite for WriteHalf<'a> {
+impl AsyncWrite for WriteHalf<'_> {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.0.poll_write_priv(cx, buf)
     }

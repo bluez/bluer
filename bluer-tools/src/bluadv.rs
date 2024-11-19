@@ -82,7 +82,6 @@ struct Opt {
     /// Service data in the form "<service uuid>:<hex data>".
     ///
     /// Can be specified multiple times.
-
     #[clap(long, short = 's')]
     service_data: Vec<ServiceData>,
 
