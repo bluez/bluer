@@ -402,7 +402,7 @@ impl MonitorManager {
 
         log::trace!("Registering advertisement monitor root at {}", &root);
         let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
-        proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
+        let () = proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
 
         let (_drop_tx, drop_rx) = oneshot::channel();
         let unreg_root = root.clone();

@@ -330,7 +330,7 @@ impl Characteristic {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &CharacteristicWriteRequest) -> Result<()> {
-        self.call_method("WriteValue", (value, req.to_dict())).await?;
+        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 
@@ -393,7 +393,7 @@ impl Characteristic {
             .single_session(
                 &self.dbus_path,
                 async move {
-                    self.call_method("StartNotify", ()).await?;
+                    let () = self.call_method("StartNotify", ()).await?;
                     Ok(())
                 },
                 async move {
@@ -677,7 +677,7 @@ impl Descriptor {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &DescriptorWriteRequest) -> Result<()> {
-        self.call_method("WriteValue", (value, req.to_dict())).await?;
+        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
         Ok(())
     }
 }

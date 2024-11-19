@@ -247,8 +247,10 @@ impl Adapter {
             .single_session(
                 &self.dbus_path,
                 async move {
-                    self.call_method("SetDiscoveryFilter", (self.discovery_filter().await.into_dict(),)).await?;
-                    self.call_method("StartDiscovery", ()).await?;
+                    let () = self
+                        .call_method("SetDiscoveryFilter", (self.discovery_filter().await.into_dict(),))
+                        .await?;
+                    let () = self.call_method("StartDiscovery", ()).await?;
                     Ok(())
                 },
                 async move {
@@ -352,7 +354,7 @@ impl Adapter {
     /// It will remove also the pairing information.
     pub async fn remove_device(&self, address: Address) -> Result<()> {
         let path = Device::dbus_path(self.name(), address)?;
-        self.call_method("RemoveDevice", ((path),)).await?;
+        let () = self.call_method("RemoveDevice", ((path),)).await?;
         Ok(())
     }
 

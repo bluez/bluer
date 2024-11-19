@@ -35,7 +35,7 @@ impl Management {
         let mut rx = self.app_inner.add_node_result_rx.resubscribe();
 
         let opts = HashMap::<String, Variant<Box<dyn RefArg + 'static>>>::new();
-        self.call_method("AddNode", (uuid.as_bytes().to_vec(), opts)).await?;
+        let () = self.call_method("AddNode", (uuid.as_bytes().to_vec(), opts)).await?;
 
         loop {
             match rx.recv().await {

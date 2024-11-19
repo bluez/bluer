@@ -57,7 +57,7 @@ impl Node {
             &options,
             data
         );
-        self.call_method("Publish", (path, model_id, options, data.to_vec())).await?;
+        let () = self.call_method("Publish", (path, model_id, options, data.to_vec())).await?;
 
         Ok(())
     }
@@ -77,7 +77,7 @@ impl Node {
             &options,
             data
         );
-        self.call_method("Send", (path, destination, key_index, options, data.to_vec())).await?;
+        let () = self.call_method("Send", (path, destination, key_index, options, data.to_vec())).await?;
 
         Ok(())
     }
@@ -99,7 +99,9 @@ impl Node {
             &options,
             data
         );
-        self.call_method("DevKeySend", (path, destination, remote, net_index, options, data.to_vec())).await?;
+        let () = self
+            .call_method("DevKeySend", (path, destination, remote, net_index, options, data.to_vec()))
+            .await?;
 
         Ok(())
     }
@@ -118,7 +120,7 @@ impl Node {
             net_index,
             update
         );
-        self.call_method("AddAppKey", (path, destination, app_key, net_index, update)).await?;
+        let () = self.call_method("AddAppKey", (path, destination, app_key, net_index, update)).await?;
 
         Ok(())
     }

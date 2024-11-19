@@ -466,7 +466,7 @@ impl RegisteredAgent {
 
         log::trace!("Registering agent at {}", &name);
         let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, inner.connection.clone());
-        proxy.method_call(MANAGER_INTERFACE, "RegisterAgent", (name.clone(), capability)).await?;
+        let () = proxy.method_call(MANAGER_INTERFACE, "RegisterAgent", (name.clone(), capability)).await?;
         let connection = inner.connection.clone();
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -486,7 +486,7 @@ impl RegisteredAgent {
         if request_default {
             log::trace!("Requesting default agent for {}", &name);
             let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, connection);
-            proxy.method_call(MANAGER_INTERFACE, "RequestDefaultAgent", (name.clone(),)).await?;
+            let () = proxy.method_call(MANAGER_INTERFACE, "RequestDefaultAgent", (name.clone(),)).await?;
         }
 
         Ok(AgentHandle { name, _drop_tx: drop_tx })

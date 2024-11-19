@@ -63,7 +63,7 @@ impl Network {
             }
         });
 
-        self.call_method("Join", (app_hnd.name.clone(), app_hnd.device_id.as_bytes().to_vec())).await?;
+        let () = self.call_method("Join", (app_hnd.name.clone(), app_hnd.device_id.as_bytes().to_vec())).await?;
 
         let result = match app_hnd.join_result_rx.recv().await {
             Some(Ok(token)) => {

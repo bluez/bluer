@@ -343,7 +343,7 @@ impl RegisteredProfile {
 
         log::trace!("Registering profile at {}", &name);
         let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, inner.connection.clone());
-        proxy
+        let () = proxy
             .method_call(
                 MANAGER_INTERFACE,
                 "RegisterProfile",

@@ -307,7 +307,8 @@ impl Advertisement {
         log::trace!("Registering advertisement at {}", &name);
         let proxy =
             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
-        proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
+        let () =
+            proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
