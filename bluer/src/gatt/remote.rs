@@ -351,15 +351,15 @@ impl Characteristic {
     pub async fn write_io(&self) -> Result<CharacteristicWriter> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
-        let stream = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
-        stream.set_nonblocking(true)?;
-        let stream = UnixDatagram::from_std(stream)?;
+        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
+        socket.set_nonblocking(true)?;
+        let socket = UnixDatagram::from_std(socket)?;
         let mtu = mtu_workaround(mtu.into());
         Ok(CharacteristicWriter {
             adapter_name: self.adapter_name().to_string(),
             device_address: self.device_address,
             mtu,
-            stream,
+            socket,
         })
     }
 
@@ -431,14 +431,14 @@ impl Characteristic {
     pub async fn notify_io(&self) -> Result<CharacteristicReader> {
         let options = PropMap::new();
         let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
-        let stream = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
-        stream.set_nonblocking(true)?;
-        let stream = UnixDatagram::from_std(stream)?;
+        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
+        socket.set_nonblocking(true)?;
+        let socket = UnixDatagram::from_std(socket)?;
         Ok(CharacteristicReader {
             adapter_name: self.adapter_name().to_string(),
             device_address: self.device_address,
             mtu: mtu.into(),
-            stream,
+            socket,
             buf: Vec::new(),
         })
     }

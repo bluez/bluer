@@ -618,9 +618,9 @@ impl CharacteristicWriteIoRequest {
     /// Accept the write request.
     pub fn accept(self) -> Result<CharacteristicReader> {
         let CharacteristicWriteIoRequest { adapter_name, device_address, mtu, tx, .. } = self;
-        let (fd, stream) = make_socket_pair(false)?;
+        let (fd, socket) = make_socket_pair(false)?;
         let _ = tx.send(Ok(fd));
-        Ok(CharacteristicReader { adapter_name, device_address, mtu: mtu.into(), stream, buf: Vec::new() })
+        Ok(CharacteristicReader { adapter_name, device_address, mtu: mtu.into(), socket, buf: Vec::new() })
     }
 
     /// Reject the write request.
@@ -941,13 +941,13 @@ impl RegisteredCharacteristic {
                             Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
                                 // BlueZ has already confirmed the start of the notification session.
                                 // So there is no point in making this fail-able by our users.
-                                let (fd, stream) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
+                                let (fd, socket) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
                                 let mtu = mtu_workaround(options.mtu.into());
                                 let writer = CharacteristicWriter {
                                     adapter_name: options.adapter_name.clone(),
                                     device_address: options.device_address,
                                     mtu,
-                                    stream,
+                                    socket,
                                 };
                                 let _ = reg
                                     .c

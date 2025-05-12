@@ -13,7 +13,7 @@ use std::{
 use strum::{Display, EnumString};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::{UnixDatagram, UnixStream},
+    net::UnixDatagram,
 };
 
 use crate::Address;
@@ -112,7 +112,7 @@ pub struct CharacteristicReader {
     device_address: Address,
     mtu: usize,
     #[pin]
-    stream: UnixDatagram,
+    socket: UnixDatagram,
     buf: Vec<u8>,
 }
 
@@ -134,7 +134,7 @@ impl CharacteristicReader {
 
     /// Wait for a new characteristic value to become available.
     pub async fn recvable(&self) -> std::io::Result<()> {
-        self.stream.readable().await
+        self.socket.readable().await
     }
 
     /// Try to receive the characteristic value from a single notify or write operation.
@@ -142,7 +142,7 @@ impl CharacteristicReader {
     /// Does not wait for new data to arrive.
     pub fn try_recv(&self) -> std::io::Result<Vec<u8>> {
         let mut buf = Vec::with_capacity(self.mtu);
-        let n = self.stream.try_recv_buf(&mut buf)?;
+        let n = self.socket.try_recv_buf(&mut buf)?;
         buf.truncate(n);
         Ok(buf)
     }
@@ -162,7 +162,7 @@ impl CharacteristicReader {
 
     /// Consumes this object, returning the raw underlying file descriptor.
     pub fn into_raw_fd(self) -> std::io::Result<RawFd> {
-        Ok(self.stream.into_std()?.into_raw_fd())
+        Ok(self.socket.into_std()?.into_raw_fd())
     }
 }
 
@@ -189,7 +189,7 @@ impl AsyncRead for CharacteristicReader {
             // If provided buffer is too small, read into temporary buffer.
             let mut mtu_buf: Vec<MaybeUninit<u8>> = vec![MaybeUninit::uninit(); *this.mtu];
             let mut mtu_read_buf = ReadBuf::uninit(&mut mtu_buf);
-            ready!(this.stream.poll_recv(cx, &mut mtu_read_buf))?;
+            ready!(this.socket.poll_recv(cx, &mut mtu_read_buf))?;
             let n = mtu_read_buf.filled().len();
             mtu_buf.truncate(n);
             let mut mtu_buf: Vec<u8> = mtu_buf.into_iter().map(|v| unsafe { v.assume_init() }).collect();
@@ -201,14 +201,14 @@ impl AsyncRead for CharacteristicReader {
 
             Poll::Ready(Ok(()))
         } else {
-            self.project().stream.poll_recv(cx, buf)
+            self.project().socket.poll_recv(cx, buf)
         }
     }
 }
 
 impl AsRawFd for CharacteristicReader {
     fn as_raw_fd(&self) -> RawFd {
-        self.stream.as_raw_fd()
+        self.socket.as_raw_fd()
     }
 }
 
@@ -226,7 +226,7 @@ pub struct CharacteristicWriter {
     device_address: Address,
     mtu: usize,
     #[pin]
-    stream: UnixDatagram,
+    socket: UnixDatagram,
 }
 
 impl CharacteristicWriter {
@@ -247,13 +247,13 @@ impl CharacteristicWriter {
 
     /// Waits for the remote device to stop the notification session.
     pub async fn closed(&self) -> std::io::Result<()> {
-        self.stream.readable().await
+        self.socket.readable().await
     }
 
     /// Checks if the remote device has stopped the notification session.
     pub fn is_closed(&self) -> std::io::Result<bool> {
         let mut buf = [0u8];
-        match self.stream.try_recv(&mut buf) {
+        match self.socket.try_recv(&mut buf) {
             Ok(_) => Ok(true),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
             Err(err) => Err(err),
@@ -262,7 +262,7 @@ impl CharacteristicWriter {
 
     /// Waits for send space to become available.
     pub async fn sendable(&self) -> std::io::Result<()> {
-        self.stream.writable().await
+        self.socket.writable().await
     }
 
     /// Tries to send the characteristic value using a single write or notify operation.
@@ -274,7 +274,7 @@ impl CharacteristicWriter {
         if buf.len() > self.mtu {
             return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "data length exceeds MTU"));
         }
-        match self.stream.try_send(buf) {
+        match self.socket.try_send(buf) {
             Ok(n) if n == buf.len() => Ok(()),
             Ok(_) => Err(std::io::Error::new(std::io::ErrorKind::Other, "partial write occured")),
             Err(err) => Err(err),
@@ -298,7 +298,7 @@ impl CharacteristicWriter {
 
     /// Consumes this object, returning the raw underlying file descriptor.
     pub fn into_raw_fd(self) -> std::io::Result<RawFd> {
-        Ok(self.stream.into_std()?.into_raw_fd())
+        Ok(self.socket.into_std()?.into_raw_fd())
     }
 }
 
@@ -310,15 +310,15 @@ impl AsyncWrite for CharacteristicWriter {
     fn poll_write(self: Pin<&mut Self>, cx: &mut std::task::Context, buf: &[u8]) -> Poll<std::io::Result<usize>> {
         let max_len = buf.len().min(self.mtu);
         let buf = &buf[..max_len];
-        self.project().stream.poll_send(cx, buf)
+        self.project().socket.poll_send(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
         // self.project().stream.poll(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
         // self.project().stream.poll_shutdown(cx)
     }
@@ -326,7 +326,7 @@ impl AsyncWrite for CharacteristicWriter {
 
 impl AsRawFd for CharacteristicWriter {
     fn as_raw_fd(&self) -> RawFd {
-        self.stream.as_raw_fd()
+        self.socket.as_raw_fd()
     }
 }
 
