@@ -315,12 +315,10 @@ impl AsyncWrite for CharacteristicWriter {
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
-        // self.project().stream.poll(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
-        // self.project().stream.poll_shutdown(cx)
     }
 }
 
