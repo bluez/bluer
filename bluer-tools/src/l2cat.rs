@@ -27,6 +27,7 @@ use tokio_compat_02::IoCompat;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+const MAX_LE_PSM: u16 = 0xFF;
 const SERVICE_UUID: Uuid = Uuid::from_u128(0xdb9517c5d364d6fa1160931502091984);
 
 #[derive(Parser)]
@@ -61,6 +62,9 @@ struct ConnectOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
+    /// Print connect and peer address to standard error.
+    #[clap(long, short)]
+    verbose: bool,
     /// Switch the terminal into raw mode when input is a TTY.
     /// Use together with --pty when serving.
     #[clap(long, short)]
@@ -71,7 +75,7 @@ struct ConnectOpts {
     br_edr: bool,
     /// Public Bluetooth address of target device.
     address: Address,
-    /// Target PSM.
+    /// Target PSM (must be specified)
     ///
     /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1.
     psm: u16,
@@ -115,7 +119,7 @@ struct ListenOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
-    /// Print listen and peer address to standard error.
+    /// Print listening address and warnings to standard error.
     #[clap(long, short)]
     verbose: bool,
     /// Switch the terminal into raw mode when input is a TTY.
@@ -128,7 +132,7 @@ struct ListenOpts {
     /// Otherwise Bluetooth Low Energy (LE) is used.
     #[clap(long, short = 'c')]
     br_edr: bool,
-    /// PSM to listen on.
+    /// PSM to listen on (must be specified)
     ///
     /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1 and a
     /// value below 4097 is privileged.
@@ -143,10 +147,20 @@ impl ListenOpts {
 
         let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
         let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
+
+        // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
+        if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
+            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+        }
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
-        if self.verbose && self.psm == 0 {
-            eprintln!("Listening on PSM {}", local_sa.psm);
+        if self.verbose {
+            eprintln!(
+                "Listening on adapter {:?}, address {}  (PSM={})",
+                self.bind.unwrap_or_else(Address::any),
+                local_sa.addr,
+                local_sa.psm,
+            );
         }
 
         let (stream, peer_sa) = listen.accept().await?;
@@ -177,7 +191,7 @@ struct ServeOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
-    /// Print listen and peer address to standard error.
+    /// Print warnings to standard error.
     #[clap(long, short)]
     verbose: bool,
     /// Do not advertise device.
@@ -194,11 +208,12 @@ struct ServeOpts {
     /// Otherwise Bluetooth Low Energy (LE) is used.
     #[clap(long, short = 'c')]
     br_edr: bool,
-    /// PSM to listen on.
+    /// PSM to listen on (must be specified)
     ///
     /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1 and a
     /// value below 4097 is privileged.
     /// For LE, a value below 128 is privileged.
+    /// privileged values may require the use of sudo when running.
     /// Specify 0 to auto allocate an available PSM.
     psm: u16,
     /// Program to execute once connection is established.
@@ -215,9 +230,16 @@ impl ServeOpts {
 
         let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
         let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, self.psm);
+
+        // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
+        if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
+            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+        }
+
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
-        if !self.verbose && self.psm == 0 {
+
+        if self.verbose && self.psm == 0 {
             eprintln!("Listening on PSM {}", local_sa.psm);
         }
 
@@ -396,6 +418,9 @@ struct SpeedClientOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
+    /// Print warnings to standard error.
+    #[clap(long, short)]
+    verbose: bool,
     /// Use classic Bluetooth (BR/EDR).
     /// Otherwise Bluetooth Low Energy (LE) is used.
     #[clap(long, short = 'c')]
@@ -405,8 +430,7 @@ struct SpeedClientOpts {
     time: Option<u64>,
     /// Bluetooth address of target device.
     address: Address,
-    /// Target PSM.
-    ///
+    /// Target PSM (must be specified)
     /// For BR/EDR, it must follow the bit pattern xxxxxxx0_xxxxxxx1.
     psm: u16,
 }
@@ -421,6 +445,11 @@ impl SpeedClientOpts {
             None if self.br_edr => SocketAddr::any_br_edr(),
             None => SocketAddr::any_le(),
         };
+
+        // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
+        if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
+            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+        }
         socket.bind(local_sa)?;
 
         let peer_sa = SocketAddr::new(self.address, addr_type, self.psm);
@@ -492,6 +521,9 @@ struct SpeedServerOpts {
     /// Address of local Bluetooth adapter to use.
     #[clap(long, short)]
     bind: Option<Address>,
+    /// Print warnings to standard error.
+    #[clap(long, short)]
+    verbose: bool,
     /// Do not advertise device.
     #[clap(long, short)]
     no_advertise: bool,
@@ -512,8 +544,15 @@ impl SpeedServerOpts {
     pub async fn perform(self) -> Result<()> {
         let _adv = if !self.no_advertise { Some(advertise(self.br_edr).await?) } else { None };
 
+        let psm_val = self.psm.unwrap_or(0);
+
         let address_type = if self.br_edr { AddressType::BrEdr } else { AddressType::LePublic };
-        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, 0);
+        let local_sa = SocketAddr::new(self.bind.unwrap_or_else(Address::any), address_type, psm_val);
+
+        // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
+        if self.verbose && !self.br_edr && local_sa.psm > MAX_LE_PSM {
+            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+        }
         let listen = StreamListener::bind(local_sa).await?;
 
         let local_sa = listen.as_ref().local_addr()?;
