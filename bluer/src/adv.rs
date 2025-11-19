@@ -1,10 +1,10 @@
 //! Bluetooth LE advertising.
 
-// use dbus::{
-//     arg::{PropMap, RefArg, Variant},
-//     nonblock::Proxy,
-// };
-// use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
+use zbus::{
+    interface,
+    zvariant::{ObjectPath, OwnedObjectPath, Value},
+    Connection,
+};
 use futures::channel::oneshot;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -15,11 +15,11 @@ use std::{
 use strum::{Display, EnumString};
 use uuid::Uuid;
 
-use crate::{Adapter, Result, SessionInner, SERVICE_NAME}; // read_dict, TIMEOUT
+use crate::{Adapter, Result, SessionInner, SERVICE_NAME};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 pub(crate) const ADVERTISEMENT_INTERFACE: &str = "org.bluez.LEAdvertisement1";
-// pub(crate) const ADVERTISEMENT_PREFIX: &str = publish_path!("advertising/");
+pub(crate) const ADVERTISEMENT_PREFIX: &str = "/org/bluez/bluer/advertisement";
 
 /// Determines the type of advertising packet requested.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
@@ -236,115 +236,147 @@ pub struct Advertisement {
     pub _non_exhaustive: (),
 }
 
-// impl Advertisement {
-//     pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
-//         cr.register(ADVERTISEMENT_INTERFACE, |ib: &mut IfaceBuilder<Self>| {
-//             cr_property!(ib, "Type", la => {
-//                 Some(la.advertisement_type.to_string())
-//             });
-//             cr_property!(ib, "ServiceUUIDs", la => {
-//                 Some(la.service_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
-//             });
-//             cr_property!(ib, "ManufacturerData", la => {
-//                 Some(la.manufacturer_data.clone().into_iter().map(|(k, v)| (k, Variant(v))).collect::<HashMap<_, _>>())
-//             });
-//             cr_property!(ib, "SolicitUUIDs", la => {
-//                 Some(la.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
-//             });
-//             cr_property!(ib, "ServiceData", la => {
-//                 Some(la.service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
-//             });
-//             cr_property!(ib, "Data", la => {
-//                 Some(la.advertising_data.iter().map(|(k, v)| (*k, Variant(v.clone()))).collect::<HashMap<_, _>>())
-//             });
-//             cr_property!(ib, "Discoverable", la => {
-//                 la.discoverable
-//             });
-//             cr_property!(ib, "DiscoverableTimeout", la => {
-//                 la.discoverable_timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
-//             });
-//             cr_property!(ib, "Includes", la => {
-//                 Some(la.system_includes.iter().map(|v| v.to_string()).collect::<Vec<_>>())
-//             });
-//             cr_property!(ib, "LocalName", la => {
-//                 la.local_name.clone()
-//             });
-//             cr_property!(ib, "Appearance", la => {
-//                 la.appearance
-//             });
-//             cr_property!(ib, "Duration", la => {
-//                 la.duration.map(|t| t.as_secs().min(u16::MAX as _) as u16)
-//             });
-//             cr_property!(ib, "Timeout", la => {
-//                 la.timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16)
-//             });
-//             cr_property!(ib, "SecondaryChannel", la => {
-//                 la.secondary_channel.map(|v| v.to_string())
-//             });
-//             cr_property!(ib, "MinInterval", la => {
-//                 la.min_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
-//             });
-//             cr_property!(ib, "MaxInterval", la => {
-//                 la.max_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32)
-//             });
-//             cr_property!(ib, "TxPower", la => {
-//                 la.tx_power
-//             });
-//         })
-//     }
+#[interface(name = "org.bluez.LEAdvertisement1")]
+impl Advertisement {
+    #[zbus(property)]
+    fn type_(&self) -> String {
+        self.advertisement_type.to_string()
+    }
 
-//     pub(crate) async fn register(
-//         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
-//     ) -> Result<AdvertisementHandle> {
-//         let name = dbus::Path::new(format!("{}{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
-//         log::trace!("Publishing advertisement at {}", &name);
+    #[zbus(property, name = "ServiceUUIDs")]
+    fn service_uuids(&self) -> Vec<String> {
+        self.service_uuids.iter().map(|uuid| uuid.to_string()).collect()
+    }
 
-//         {
-//             let mut cr = inner.crossroads.lock().await;
-//             cr.insert(name.clone(), &[inner.le_advertisment_token], self);
-//         }
+    #[zbus(property, name = "ManufacturerData")]
+    fn manufacturer_data(&self) -> HashMap<u16, Value> {
+        self.manufacturer_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
+    }
 
-//         log::trace!("Registering advertisement at {}", &name);
-//         let proxy =
-//             Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
-//         let () =
-//             proxy.method_call(MANAGER_INTERFACE, "RegisterAdvertisement", (name.clone(), PropMap::new())).await?;
+    #[zbus(property, name = "SolicitUUIDs")]
+    fn solicit_uuids(&self) -> Vec<String> {
+        self.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect()
+    }
 
-//         let (drop_tx, drop_rx) = oneshot::channel();
-//         let unreg_name = name.clone();
-//         tokio::spawn(async move {
-//             let _ = drop_rx.await;
+    #[zbus(property, name = "ServiceData")]
+    fn service_data(&self) -> HashMap<String, Value> {
+        self.service_data.iter().map(|(k, v)| (k.to_string(), Value::from(v.clone()))).collect()
+    }
 
-//             log::trace!("Unregistering advertisement at {}", &unreg_name);
-//             let _: std::result::Result<(), dbus::Error> =
-//                 proxy.method_call(MANAGER_INTERFACE, "UnregisterAdvertisement", (unreg_name.clone(),)).await;
+    #[zbus(property, name = "Data")]
+    fn data(&self) -> HashMap<u8, Value> {
+        self.advertising_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
+    }
 
-//             log::trace!("Unpublishing advertisement at {}", &unreg_name);
-//             let mut cr = inner.crossroads.lock().await;
-//             let _: Option<Self> = cr.remove(&unreg_name);
-//         });
+    #[zbus(property)]
+    fn discoverable(&self) -> std::result::Result<bool, zbus::fdo::Error> {
+        self.discoverable.ok_or_else(|| zbus::fdo::Error::UnknownProperty("Discoverable".into()))
+    }
 
-//         Ok(AdvertisementHandle { name, _drop_tx: drop_tx })
-//     }
-// }
+    #[zbus(property, name = "DiscoverableTimeout")]
+    fn discoverable_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.discoverable_timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("DiscoverableTimeout".into()))
+    }
 
-// /// Handle to active Bluetooth LE advertisement.
-// ///
-// /// Drop to unregister advertisement.
-// #[must_use = "AdvertisementHandle must be held for advertisement to be broadcasted"]
-// pub struct AdvertisementHandle {
-//     name: dbus::Path<'static>,
-//     _drop_tx: oneshot::Sender<()>,
-// }
+    #[zbus(property, name = "Includes")]
+    fn includes(&self) -> Vec<String> {
+        self.system_includes.iter().map(|v| v.to_string()).collect()
+    }
 
-// impl Drop for AdvertisementHandle {
-//     fn drop(&mut self) {
-//         // required for drop order
-//     }
-// }
+    #[zbus(property, name = "LocalName")]
+    fn local_name(&self) -> std::result::Result<String, zbus::fdo::Error> {
+        self.local_name.clone().ok_or_else(|| zbus::fdo::Error::UnknownProperty("LocalName".into()))
+    }
 
-// impl fmt::Debug for AdvertisementHandle {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "AdvertisementHandle {{ {} }}", &self.name)
-//     }
-// }
+    #[zbus(property)]
+    fn appearance(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.appearance.ok_or_else(|| zbus::fdo::Error::UnknownProperty("Appearance".into()))
+    }
+
+    #[zbus(property)]
+    fn duration(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.duration.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Duration".into()))
+    }
+
+    #[zbus(property)]
+    fn timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Timeout".into()))
+    }
+
+    #[zbus(property, name = "SecondaryChannel")]
+    fn secondary_channel(&self) -> std::result::Result<String, zbus::fdo::Error> {
+        self.secondary_channel.map(|v| v.to_string()).ok_or_else(|| zbus::fdo::Error::UnknownProperty("SecondaryChannel".into()))
+    }
+
+    #[zbus(property, name = "MinInterval")]
+    fn min_interval(&self) -> std::result::Result<u32, zbus::fdo::Error> {
+        self.min_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32).ok_or_else(|| zbus::fdo::Error::UnknownProperty("MinInterval".into()))
+    }
+
+    #[zbus(property, name = "MaxInterval")]
+    fn max_interval(&self) -> std::result::Result<u32, zbus::fdo::Error> {
+        self.max_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32).ok_or_else(|| zbus::fdo::Error::UnknownProperty("MaxInterval".into()))
+    }
+
+    #[zbus(property, name = "TxPower")]
+    fn tx_power(&self) -> std::result::Result<i16, zbus::fdo::Error> {
+        self.tx_power.ok_or_else(|| zbus::fdo::Error::UnknownProperty("TxPower".into()))
+    }
+}
+
+impl Advertisement {
+    pub(crate) async fn register(
+        self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
+    ) -> Result<AdvertisementHandle> {
+        let path = format!("{}/{}", ADVERTISEMENT_PREFIX, Uuid::new_v4().as_simple());
+        let path = OwnedObjectPath::try_from(path).unwrap();
+        log::trace!("Publishing advertisement at {}", &path);
+
+        let _ = inner.connection.object_server().at(&path, self).await?;
+
+        log::trace!("Registering advertisement at {}", &path);
+        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
+        let () = proxy.call("RegisterAdvertisement", &(&path, HashMap::<String, Value>::new())).await?;
+
+        let (drop_tx, drop_rx) = oneshot::channel();
+        let unreg_path = path.clone();
+        let connection = inner.connection.clone();
+        let adapter_name = adapter_name.clone();
+        tokio::spawn(async move {
+            let _ = drop_rx.await;
+
+            log::trace!("Unregistering advertisement at {}", &unreg_path);
+            if let Ok(adapter_path) = Adapter::dbus_path(&adapter_name) {
+                if let Ok(proxy) = zbus::Proxy::new(&connection, SERVICE_NAME, adapter_path, MANAGER_INTERFACE).await {
+                    let _: std::result::Result<(), zbus::Error> = proxy.call("UnregisterAdvertisement", &(&unreg_path,)).await;
+                }
+            }
+
+            log::trace!("Unpublishing advertisement at {}", &unreg_path);
+            let _ = connection.object_server().remove::<Self, _>(&unreg_path).await;
+        });
+
+        Ok(AdvertisementHandle { path, _drop_tx: drop_tx })
+    }
+}
+
+/// Handle to active Bluetooth LE advertisement.
+///
+/// Drop to unregister advertisement.
+#[must_use = "AdvertisementHandle must be held for advertisement to be broadcasted"]
+pub struct AdvertisementHandle {
+    path: OwnedObjectPath,
+    _drop_tx: oneshot::Sender<()>,
+}
+
+impl Drop for AdvertisementHandle {
+    fn drop(&mut self) {
+        // required for drop order
+    }
+}
+
+impl fmt::Debug for AdvertisementHandle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "AdvertisementHandle {{ {} }}", &self.path)
+    }
+}

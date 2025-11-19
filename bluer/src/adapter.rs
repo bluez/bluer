@@ -310,9 +310,9 @@ impl Adapter {
     /// reached it will result in NotPermitted error.
     ///
     /// Drop the returned [AdvertisementHandle] to unregister the advertisement.
-    // pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
-    //     le_advertisement.register(self.inner.clone(), self.name.clone()).await
-    // }
+    pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<adv::AdvertisementHandle> {
+        le_advertisement.register(self.inner.clone(), self.name.clone()).await
+    }
 
     /// Registers a local GATT services hierarchy (GATT Server).
     ///
