@@ -1,10 +1,14 @@
 //! Bluetooth adapter.
 
-use dbus::{
-    arg::{PropMap, RefArg, Variant},
-    nonblock::{Proxy, SyncConnection},
-    Path,
+use zbus::{
+    proxy::Proxy,
+    zvariant::{ObjectPath, OwnedObjectPath},
 };
+// use dbus::{
+//     arg::{PropMap, RefArg, Variant},
+//     nonblock::{Proxy, SyncConnection},
+//     Path,
+// };
 use futures::{
     future,
     stream::{self, SelectAll},
@@ -22,13 +26,14 @@ use uuid::Uuid;
 
 use crate::{
     adv,
-    adv::{Advertisement, AdvertisementHandle, Capabilities, Feature, PlatformFeature, SecondaryChannel},
-    all_dbus_objects, device,
-    device::Device,
-    gatt,
-    monitor::MonitorManager,
-    Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
-    SingleSessionToken, SERVICE_NAME, TIMEOUT,
+    adv::{Advertisement, Capabilities, Feature, PlatformFeature, SecondaryChannel},
+    // all_dbus_objects, device,
+    // device::Device,
+    // gatt,
+    // monitor::MonitorManager,
+    Address, AddressType, Error, ErrorKind, InternalErrorKind, Modalias, Result, SessionInner,
+    // SingleSessionToken, SERVICE_NAME, TIMEOUT,
+    SERVICE_NAME,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -43,7 +48,7 @@ pub(crate) const DEFAULT_NAME: &str = "hci0";
 #[derive(Clone)]
 pub struct Adapter {
     inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
+    dbus_path: OwnedObjectPath,
     name: Arc<String>,
 }
 
@@ -58,32 +63,35 @@ impl Adapter {
     pub(crate) fn new(inner: Arc<SessionInner>, name: &str) -> Result<Self> {
         Ok(Self {
             inner,
-            dbus_path: Path::new(PREFIX.to_string() + name)
-                .map_err(|_| Error::new(ErrorKind::InvalidName(name.to_string())))?,
+            dbus_path: ObjectPath::try_from(format!("{}{}", PREFIX, name))
+                .map_err(|_| Error::new(ErrorKind::InvalidName(name.to_string())))?
+                .into(),
             name: Arc::new(name.to_string()),
         })
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
+    async fn proxy(&self) -> Result<Proxy<'_>> {
+        Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, INTERFACE).await.map_err(Into::into)
     }
 
-    pub(crate) fn dbus_path(adapter_name: &str) -> Result<Path<'static>> {
-        Path::new(format!("{PREFIX}{adapter_name}",))
+    pub(crate) fn dbus_path(adapter_name: &str) -> Result<OwnedObjectPath> {
+        ObjectPath::try_from(format!("{PREFIX}{adapter_name}"))
             .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
+            .map(Into::into)
     }
 
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<(&'a str, &'a str)> {
-        match path.strip_prefix(PREFIX) {
-            Some(p) => {
-                let sep = p.find('/').unwrap_or(p.len());
-                Some((&p[0..sep], &p[sep..]))
-            }
-            None => None,
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a ObjectPath) -> Option<(&'a str, &'a str)> {
+        let p = path.as_str();
+        if p.starts_with(PREFIX) {
+            let p = &p[PREFIX.len()..];
+            let sep = p.find('/').unwrap_or(p.len());
+            Some((&p[0..sep], &p[sep..]))
+        } else {
+            None
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<&'a str> {
+    pub(crate) fn parse_dbus_path<'a>(path: &'a ObjectPath) -> Option<&'a str> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -97,6 +105,7 @@ impl Adapter {
         &self.name
     }
 
+/*
     /// Bluetooth addresses of discovered Bluetooth devices.
     pub async fn device_addresses(&self) -> Result<Vec<Address>> {
         let mut addrs = Vec::new();
@@ -314,9 +323,9 @@ impl Adapter {
     /// reached it will result in NotPermitted error.
     ///
     /// Drop the returned [AdvertisementHandle] to unregister the advertisement.
-    pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
-        le_advertisement.register(self.inner.clone(), self.name.clone()).await
-    }
+    // pub async fn advertise(&self, le_advertisement: Advertisement) -> Result<AdvertisementHandle> {
+    //     le_advertisement.register(self.inner.clone(), self.name.clone()).await
+    // }
 
     /// Registers a local GATT services hierarchy (GATT Server).
     ///
@@ -324,11 +333,11 @@ impl Adapter {
     /// which then becomes available to remote devices.
     ///
     /// Drop the returned [ApplicationHandle](gatt::local::ApplicationHandle) to unregister the application.
-    pub async fn serve_gatt_application(
-        &self, gatt_application: gatt::local::Application,
-    ) -> Result<gatt::local::ApplicationHandle> {
-        gatt_application.register(self.inner.clone(), self.name.clone()).await
-    }
+    // pub async fn serve_gatt_application(
+    //     &self, gatt_application: gatt::local::Application,
+    // ) -> Result<gatt::local::ApplicationHandle> {
+    //     gatt_application.register(self.inner.clone(), self.name.clone()).await
+    // }
 
     /// Registers local GATT profiles (GATT Client).
     ///
@@ -395,6 +404,7 @@ impl Adapter {
 
         self.device(address)
     }
+*/
 }
 
 define_properties!(
@@ -636,9 +646,9 @@ define_properties!(
         /// useful to the client.
         property(
             SupportedAdvertisingCapabilities, Capabilities,
-            dbus: (adv::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (adv::MANAGER_INTERFACE, "SupportedCapabilities", HashMap<String, zbus::zvariant::OwnedValue>, OPTIONAL),
             get: (supported_advertising_capabilities, v => {
-                Capabilities::from_dict(v)?
+                Capabilities::from_dict(&v)?
             }),
         );
 
@@ -657,152 +667,152 @@ define_properties!(
     }
 );
 
-/// Bluetooth adapter event.
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum AdapterEvent {
-    /// Bluetooth device with specified address was added.
-    DeviceAdded(Address),
-    /// Bluetooth device with specified address was removed.
-    DeviceRemoved(Address),
-    /// Bluetooth adapter property changed.
-    PropertyChanged(AdapterProperty),
-}
+// /// Bluetooth adapter event.
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// #[derive(Clone, Debug)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// pub enum AdapterEvent {
+//     /// Bluetooth device with specified address was added.
+//     DeviceAdded(Address),
+//     /// Bluetooth device with specified address was removed.
+//     DeviceRemoved(Address),
+//     /// Bluetooth adapter property changed.
+//     PropertyChanged(AdapterProperty),
+// }
 
-/// Transport parameter determines the type of scan.
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-pub enum DiscoveryTransport {
-    /// interleaved scan
-    #[strum(serialize = "auto")]
-    Auto,
-    /// BR/EDR inquiry
-    #[strum(serialize = "bredr")]
-    BrEdr,
-    /// LE scan only
-    #[strum(serialize = "le")]
-    Le,
-}
+// /// Transport parameter determines the type of scan.
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// #[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// #[non_exhaustive]
+// pub enum DiscoveryTransport {
+//     /// interleaved scan
+//     #[strum(serialize = "auto")]
+//     Auto,
+//     /// BR/EDR inquiry
+//     #[strum(serialize = "bredr")]
+//     BrEdr,
+//     /// LE scan only
+//     #[strum(serialize = "le")]
+//     Le,
+// }
 
-impl Default for DiscoveryTransport {
-    fn default() -> Self {
-        Self::Auto
-    }
-}
+// impl Default for DiscoveryTransport {
+//     fn default() -> Self {
+//         Self::Auto
+//     }
+// }
 
-/// Bluetooth device discovery filter.
-///
-/// The default discovery filter does not restrict any devices and provides
-/// [duplicate data](Self::duplicate_data).
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Default, Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct DiscoveryFilter {
-    ///  Filter by service UUIDs, empty means match
-    ///  _any_ UUID.
-    ///
-    ///  When a remote device is found that advertises
-    ///  any UUID from UUIDs, it will be reported if:
-    ///  - pathloss and RSSI are both empty.
-    ///  - only pathloss param is set, device advertise
-    ///    TX power, and computed pathloss is less than
-    ///    pathloss param.
-    ///  - only RSSI param is set, and received RSSI is
-    ///    higher than RSSI param.
-    pub uuids: HashSet<Uuid>,
-    /// RSSI threshold value.
-    ///
-    /// PropertiesChanged signals will be emitted
-    /// for already existing Device objects, with
-    /// updated RSSI value. If one or more discovery
-    /// filters have been set, the RSSI delta-threshold,
-    /// that is imposed by StartDiscovery by default,
-    /// will not be applied.
-    pub rssi: Option<i16>,
-    /// Pathloss threshold value.
-    ///
-    /// PropertiesChanged signals will be emitted
-    /// for already existing Device objects, with
-    /// updated Pathloss value.
-    ///
-    /// Must not be set when [`rssi`](Self::rssi) is set.
-    pub pathloss: Option<u16>,
-    /// Transport parameter determines the type of
-    /// scan.
-    ///
-    /// Possible values:
-    ///     "auto"  - interleaved scan
-    ///     "bredr" - BR/EDR inquiry
-    ///     "le"    - LE scan only
-    ///
-    /// If "le" or "bredr" Transport is requested,
-    /// and the controller doesn't support it,
-    /// org.bluez.Error.Failed error will be returned.
-    ///
-    /// If "auto" transport is requested, scan will use
-    /// LE, BREDR, or both, depending on what's
-    /// currently enabled on the controller.
-    pub transport: DiscoveryTransport,
-    /// Disables duplicate detection of advertisement data.
-    ///
-    /// When enabled PropertiesChanged signals will be
-    /// generated for either ManufacturerData and
-    /// ServiceData every time they are discovered.
-    pub duplicate_data: bool,
-    /// Make adapter discoverable while discovering.
-    ///
-    /// If the adapter is already discoverable setting
-    /// this filter won't do anything.
-    pub discoverable: bool,
-    /// Discover devices where the pattern matches
-    /// either the prefix of the address or
-    /// device name which is convenient way to limited
-    /// the number of device objects created during a
-    /// discovery.
-    ///
-    /// When set disregards device discoverable flags.
-    ///
-    /// Note: The pattern matching is ignored if there
-    /// are other client that don't set any pattern as
-    /// it work as a logical OR, also setting empty
-    /// string "" pattern will match any device found.
-    pub pattern: Option<String>,
-    #[doc(hidden)]
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub _non_exhaustive: (),
-}
+// /// Bluetooth device discovery filter.
+// ///
+// /// The default discovery filter does not restrict any devices and provides
+// /// [duplicate data](Self::duplicate_data).
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// #[derive(Default, Clone, Debug, Eq, PartialEq)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// pub struct DiscoveryFilter {
+//     ///  Filter by service UUIDs, empty means match
+//     ///  _any_ UUID.
+//     ///
+//     ///  When a remote device is found that advertises
+//     ///  any UUID from UUIDs, it will be reported if:
+//     ///  - pathloss and RSSI are both empty.
+//     ///  - only pathloss param is set, device advertise
+//     ///    TX power, and computed pathloss is less than
+//     ///    pathloss param.
+//     ///  - only RSSI param is set, and received RSSI is
+//     ///    higher than RSSI param.
+//     pub uuids: HashSet<Uuid>,
+//     /// RSSI threshold value.
+//     ///
+//     /// PropertiesChanged signals will be emitted
+//     /// for already existing Device objects, with
+//     /// updated RSSI value. If one or more discovery
+//     /// filters have been set, the RSSI delta-threshold,
+//     /// that is imposed by StartDiscovery by default,
+//     /// will not be applied.
+//     pub rssi: Option<i16>,
+//     /// Pathloss threshold value.
+//     ///
+//     /// PropertiesChanged signals will be emitted
+//     /// for already existing Device objects, with
+//     /// updated Pathloss value.
+//     ///
+//     /// Must not be set when [`rssi`](Self::rssi) is set.
+//     pub pathloss: Option<u16>,
+//     /// Transport parameter determines the type of
+//     /// scan.
+//     ///
+//     /// Possible values:
+//     ///     "auto"  - interleaved scan
+//     ///     "bredr" - BR/EDR inquiry
+//     ///     "le"    - LE scan only
+//     ///
+//     /// If "le" or "bredr" Transport is requested,
+//     /// and the controller doesn't support it,
+//     /// org.bluez.Error.Failed error will be returned.
+//     ///
+//     /// If "auto" transport is requested, scan will use
+//     /// LE, BREDR, or both, depending on what's
+//     /// currently enabled on the controller.
+//     pub transport: DiscoveryTransport,
+//     /// Disables duplicate detection of advertisement data.
+//     ///
+//     /// When enabled PropertiesChanged signals will be
+//     /// generated for either ManufacturerData and
+//     /// ServiceData every time they are discovered.
+//     pub duplicate_data: bool,
+//     /// Make adapter discoverable while discovering.
+//     ///
+//     /// If the adapter is already discoverable setting
+//     /// this filter won't do anything.
+//     pub discoverable: bool,
+//     /// Discover devices where the pattern matches
+//     /// either the prefix of the address or
+//     /// device name which is convenient way to limited
+//     /// the number of device objects created during a
+//     /// discovery.
+//     ///
+//     /// When set disregards device discoverable flags.
+//     ///
+//     /// Note: The pattern matching is ignored if there
+//     /// are other client that don't set any pattern as
+//     /// it work as a logical OR, also setting empty
+//     /// string "" pattern will match any device found.
+//     pub pattern: Option<String>,
+//     #[doc(hidden)]
+//     #[cfg_attr(feature = "serde", serde(skip))]
+//     pub _non_exhaustive: (),
+// }
 
-impl DiscoveryFilter {
-    fn into_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
-        let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
-        let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern, _non_exhaustive } =
-            self;
-        hm.insert("UUIDs", Variant(Box::new(uuids.into_iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())));
-        if let Some(rssi) = rssi {
-            hm.insert("RSSI", Variant(Box::new(rssi)));
-        }
-        if let Some(pathloss) = pathloss {
-            hm.insert("Pathloss", Variant(Box::new(pathloss)));
-        }
-        hm.insert("Transport", Variant(Box::new(transport.to_string())));
+// impl DiscoveryFilter {
+//     fn into_dict(self) -> HashMap<&'static str, Variant<Box<dyn RefArg>>> {
+//         let mut hm: HashMap<&'static str, Variant<Box<dyn RefArg>>> = HashMap::new();
+//         let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern, _non_exhaustive } =
+//             self;
+//         hm.insert("UUIDs", Variant(Box::new(uuids.into_iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())));
+//         if let Some(rssi) = rssi {
+//             hm.insert("RSSI", Variant(Box::new(rssi)));
+//         }
+//         if let Some(pathloss) = pathloss {
+//             hm.insert("Pathloss", Variant(Box::new(pathloss)));
+//         }
+//         hm.insert("Transport", Variant(Box::new(transport.to_string())));
 
-        // WORKAROUND: bluetoothd has a bug that causes it to crash when deserializing a bool
-        //             from D-Bus on some architectures (at least 32-bit ARM). We can partly
-        //             work around this by omitting the bools from the dictionary, if they match
-        //             the default values.
-        if duplicate_data {
-            hm.insert("DuplicateData", Variant(Box::new(true)));
-        }
-        if discoverable {
-            hm.insert("Discoverable", Variant(Box::new(true)));
-        }
+//         // WORKAROUND: bluetoothd has a bug that causes it to crash when deserializing a bool
+//         //             from D-Bus on some architectures (at least 32-bit ARM). We can partly
+//         //             work around this by omitting the bools from the dictionary, if they match
+//         //             the default values.
+//         if duplicate_data {
+//             hm.insert("DuplicateData", Variant(Box::new(true)));
+//         }
+//         if discoverable {
+//             hm.insert("Discoverable", Variant(Box::new(true)));
+//         }
 
-        if let Some(pattern) = pattern {
-            hm.insert("Pattern", Variant(Box::new(pattern)));
-        }
-        hm
-    }
-}
+//         if let Some(pattern) = pattern {
+//             hm.insert("Pattern", Variant(Box::new(pattern)));
+//         }
+//         hm
+//     }
+// }

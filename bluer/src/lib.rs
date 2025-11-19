@@ -93,13 +93,16 @@
 compile_error!("BlueR only supports the Linux operating system.");
 
 #[cfg(feature = "bluetoothd")]
-use dbus::{
-    arg::{prop_cast, AppendAll, PropMap, RefArg, Variant},
-    nonblock::{stdintf::org_freedesktop_dbus::ObjectManager, Proxy, SyncConnection},
-    Path,
-};
+pub use zbus;
+
 #[cfg(feature = "bluetoothd")]
-use dbus_crossroads::{Context, Crossroads};
+use zbus::{
+    proxy::Proxy,
+    Connection,
+    Error as ZbusError,
+};
+// #[cfg(feature = "bluetoothd")]
+// use dbus_crossroads::{Context, Crossroads};
 #[cfg(feature = "bluetoothd")]
 use futures::Future;
 #[cfg(feature = "bluetoothd")]
@@ -125,112 +128,113 @@ pub(crate) const ERR_PREFIX: &str = "org.bluez.Error.";
 #[cfg(feature = "bluetoothd")]
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
-#[cfg(feature = "bluetoothd")]
-macro_rules! publish_path {
-    ($path:expr) => {
-        concat!("/org/bluez/", env!("CARGO_PKG_NAME"), "/", $path)
-    };
-}
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! publish_path {
+//     ($path:expr) => {
+//         concat!("/org/bluez/", env!("CARGO_PKG_NAME"), "/", $path)
+//     };
+// }
+
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! dbus_interface {
+//     () => {
+//         #[allow(dead_code)]
+//         async fn get_property_with_interface<R>(&self, name: &str, interface: &str) -> crate::Result<R>
+//         where
+//             R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
+//         {
+//             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
+//             let value = self.proxy().get(interface, name).await?;
+//             log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
+//             Ok(value)
+//         }
+
+//         #[allow(dead_code)]
+//         async fn get_opt_property_with_interface<R>(
+//             &self, name: &str, interface: &str,
+//         ) -> crate::Result<Option<R>>
+//         where
+//             R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
+//         {
+//             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
+//             match self.proxy().get(interface, name).await {
+//                 Ok(value) => {
+//                     log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
+//                     Ok(Some(value))
+//                 }
+//                 Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
+//                     log::trace!("{}: {}.{} = None", &self.proxy().path, &interface, &name);
+//                     Ok(None)
+//                 }
+//                 Err(err) => Err(err.into()),
+//             }
+//         }
+
+//         #[allow(dead_code)]
+//         async fn set_property_with_interface<T>(&self, name: &str, value: T, interface: &str) -> crate::Result<()>
+//         where
+//             T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
+//         {
+//             use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
+//             log::trace!("{}: {}.{} := {:?}", &self.proxy().path, &interface, &name, &value);
+//             self.proxy().set(interface, name, value).await?;
+//             Ok(())
+//         }
+
+//         #[allow(dead_code)]
+//         async fn call_method_with_interface<A, R>(&self, name: &str, args: A, interface: &str) -> crate::Result<R>
+//         where
+//             A: dbus::arg::AppendAll + std::fmt::Debug,
+//             R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
+//         {
+//             log::trace!("{}: {}.{} {:?}", &self.proxy().path, &interface, &name, &args);
+//             let result = self.proxy().method_call(interface, name, args).await;
+//             log::trace!("{}: {}.{} (...) -> {:?}", &self.proxy().path, &interface, &name, &result);
+//             Ok(result?)
+//         }
+//     };
+// }
+
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! dbus_default_interface {
+//     ($interface:expr) => {
+//         #[allow(dead_code)]
+//         async fn get_property<R>(&self, name: &str) -> crate::Result<R>
+//         where
+//             R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
+//         {
+//             self.get_property_with_interface(name, $interface).await
+//         }
+
+//         #[allow(dead_code)]
+//         async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
+//         where
+//             R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
+//         {
+//             self.get_opt_property_with_interface(name, $interface).await
+//         }
+
+//         #[allow(dead_code)]
+//         async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
+//         where
+//             T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
+//         {
+//             self.set_property_with_interface(name, value, $interface).await
+//         }
+
+//         #[allow(dead_code)]
+//         async fn call_method<A, R>(&self, name: &str, args: A) -> crate::Result<R>
+//         where
+//             A: dbus::arg::AppendAll + std::fmt::Debug,
+//             R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
+//         {
+//             self.call_method_with_interface(name, args, $interface).await
+//         }
+//     };
+// }
 
 #[cfg(feature = "bluetoothd")]
-macro_rules! dbus_interface {
-    () => {
-        #[allow(dead_code)]
-        async fn get_property_with_interface<R>(&self, name: &str, interface: &str) -> crate::Result<R>
-        where
-            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
-        {
-            use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            let value = self.proxy().get(interface, name).await?;
-            log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
-            Ok(value)
-        }
-
-        #[allow(dead_code)]
-        async fn get_opt_property_with_interface<R>(
-            &self, name: &str, interface: &str,
-        ) -> crate::Result<Option<R>>
-        where
-            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
-        {
-            use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            match self.proxy().get(interface, name).await {
-                Ok(value) => {
-                    log::trace!("{}: {}.{} = {:?}", &self.proxy().path, &interface, &name, &value);
-                    Ok(Some(value))
-                }
-                Err(err) if err.name() == Some("org.freedesktop.DBus.Error.InvalidArgs") => {
-                    log::trace!("{}: {}.{} = None", &self.proxy().path, &interface, &name);
-                    Ok(None)
-                }
-                Err(err) => Err(err.into()),
-            }
-        }
-
-        #[allow(dead_code)]
-        async fn set_property_with_interface<T>(&self, name: &str, value: T, interface: &str) -> crate::Result<()>
-        where
-            T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
-        {
-            use dbus::nonblock::stdintf::org_freedesktop_dbus::Properties;
-            log::trace!("{}: {}.{} := {:?}", &self.proxy().path, &interface, &name, &value);
-            self.proxy().set(interface, name, value).await?;
-            Ok(())
-        }
-
-        #[allow(dead_code)]
-        async fn call_method_with_interface<A, R>(&self, name: &str, args: A, interface: &str) -> crate::Result<R>
-        where
-            A: dbus::arg::AppendAll + std::fmt::Debug,
-            R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
-        {
-            log::trace!("{}: {}.{} {:?}", &self.proxy().path, &interface, &name, &args);
-            let result = self.proxy().method_call(interface, name, args).await;
-            log::trace!("{}: {}.{} (...) -> {:?}", &self.proxy().path, &interface, &name, &result);
-            Ok(result?)
-        }
-    };
-}
-
-#[cfg(feature = "bluetoothd")]
-macro_rules! dbus_default_interface {
-    ($interface:expr) => {
-        #[allow(dead_code)]
-        async fn get_property<R>(&self, name: &str) -> crate::Result<R>
-        where
-            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
-        {
-            self.get_property_with_interface(name, $interface).await
-        }
-
-        #[allow(dead_code)]
-        async fn get_opt_property<R>(&self, name: &str) -> crate::Result<Option<R>>
-        where
-            R: for<'b> dbus::arg::Get<'b> + std::fmt::Debug + 'static,
-        {
-            self.get_opt_property_with_interface(name, $interface).await
-        }
-
-        #[allow(dead_code)]
-        async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
-        where
-            T: dbus::arg::Arg + dbus::arg::Append + std::fmt::Debug,
-        {
-            self.set_property_with_interface(name, value, $interface).await
-        }
-
-        #[allow(dead_code)]
-        async fn call_method<A, R>(&self, name: &str, args: A) -> crate::Result<R>
-        where
-            A: dbus::arg::AppendAll + std::fmt::Debug,
-            R: dbus::arg::ReadAll + std::fmt::Debug + 'static,
-        {
-            self.call_method_with_interface(name, args, $interface).await
-        }
-    };
-}
-
-#[cfg(feature = "bluetoothd")]
+#[macro_export]
 macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
@@ -238,14 +242,17 @@ macro_rules! define_properties {
         $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
-        pub async fn $getter_name(&self) -> crate::Result<Option<$type>> {
-            let dbus_opt_value: Option<$dbus_type> = self.get_opt_property_with_interface($dbus_name, $dbus_interface).await?;
-            #[allow(clippy::manual_map)]
-            let value: Option<$type> = match dbus_opt_value.as_ref() {
-                Some($dbus_value) => Some($getter_transform),
-                None => None
-            };
-            Ok(value)
+        pub async fn $getter_name(&self) -> $crate::Result<Option<$type>> {
+            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
+            let res: $crate::zbus::Result<$dbus_type> = proxy.get_property($dbus_name).await;
+            match res {
+                Ok(v) => {
+                    let $dbus_value = v;
+                    let value: $type = $getter_transform;
+                    Ok(Some(value))
+                },
+                Err(_) => Ok(None), // Assume missing if error, for now. TODO: Check specific error.
+            }
         }
     };
 
@@ -255,9 +262,10 @@ macro_rules! define_properties {
         $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
-        pub async fn $getter_name(&self) -> crate::Result<$type> {
-            let dbus_value: $dbus_type = self.get_property_with_interface($dbus_name, $dbus_interface).await?;
-            let $dbus_value = &dbus_value;
+        pub async fn $getter_name(&self) -> $crate::Result<$type> {
+            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
+            let v: $dbus_type = proxy.get_property($dbus_name).await?;
+            let $dbus_value = v;
             let value: $type = $getter_transform;
             Ok(value)
         }
@@ -269,9 +277,10 @@ macro_rules! define_properties {
         $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
     ) => {
         $(#[$outer])*
-        pub async fn $setter_name(&self, $value: $type) -> crate::Result<()> {
+        pub async fn $setter_name(&self, $value: $type) -> $crate::Result<()> {
+            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
             let dbus_value: $dbus_type = $setter_transform;
-            self.set_property_with_interface($dbus_name, dbus_value, $dbus_interface).await?;
+            proxy.set_property($dbus_name, dbus_value).await?;
             Ok(())
         }
     };
@@ -325,7 +334,7 @@ macro_rules! define_properties {
 
             /// Queries and returns all properties.
             #[allow(dead_code)]
-            $enum_vis async fn all_properties(&self) -> Result<Vec<$enum_name>> {
+            $enum_vis async fn all_properties(&self) -> $crate::Result<Vec<$enum_name>> {
                 let mut props = Vec::new();
 
                 $(
@@ -354,24 +363,20 @@ macro_rules! define_properties {
             #[allow(dead_code)]
             fn from_variant_property(
                 name: &str,
-                var_value: dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>
-            ) -> crate::Result<Option<Self>> {
+                var_value: $crate::zbus::zvariant::OwnedValue
+            ) -> $crate::Result<Option<Self>> {
                 match name {
                     $(
                         $dbus_name => {
-                            crate::with_variant_property_cast(&var_value.0, |dbus_opt_value: Option<&$dbus_type>| {
-                                match dbus_opt_value {
-                                    Some($dbus_value) => {
-                                        let value: $type = $getter_transform;
-                                        Ok(Some(Self::$name (value)))
-                                    },
-                                    None => {
-                                        log::warn!("Casting variant property {} with value {:?} failed",
-                                            &name, &var_value.0);
-                                        Ok(None)
-                                    }
-                                }
-                            })
+                            let val_res: $crate::zbus::Result<$dbus_type> = var_value.try_into().map_err(Into::into);
+                            match val_res {
+                                Ok(v) => {
+                                    let $dbus_value = v;
+                                    let value: $type = $getter_transform;
+                                    Ok(Some(Self::$name (value)))
+                                },
+                                Err(_) => Ok(None),
+                            }
                         }
                     )*,
                     _ => Ok(None),
@@ -379,7 +384,7 @@ macro_rules! define_properties {
             }
 
             #[allow(dead_code)]
-            fn from_prop_map(prop_map: dbus::arg::PropMap) -> Vec<Self> {
+            fn from_prop_map(prop_map: std::collections::HashMap<String, $crate::zbus::zvariant::OwnedValue>) -> Vec<Self> {
                 prop_map.into_iter().filter_map(|(name, value)|
                     Self::from_variant_property(&name, value).ok().flatten()
                 ).collect()
@@ -388,72 +393,72 @@ macro_rules! define_properties {
     }
 }
 
-#[cfg(feature = "bluetoothd")]
-fn variant_hashmap<K>(a: &(dyn RefArg + 'static)) -> HashMap<K, Variant<Box<dyn RefArg + 'static>>>
-where
-    K: std::hash::Hash + std::cmp::Eq + Clone + 'static,
-{
-    let mut hm: HashMap<K, Variant<Box<dyn RefArg + 'static>>> = HashMap::new();
+// #[cfg(feature = "bluetoothd")]
+// fn variant_hashmap<K>(a: &(dyn RefArg + 'static)) -> HashMap<K, Variant<Box<dyn RefArg + 'static>>>
+// where
+//     K: std::hash::Hash + std::cmp::Eq + Clone + 'static,
+// {
+//     let mut hm: HashMap<K, Variant<Box<dyn RefArg + 'static>>> = HashMap::new();
 
-    let mut key: Option<K> = None;
-    for i in a.as_iter().unwrap() {
-        let ib = i.box_clone();
-        match key.take() {
-            Some(key) => {
-                let value: &Variant<Box<dyn RefArg + 'static>> = dbus::arg::cast(&ib).unwrap();
-                hm.insert(key, Variant(value.0.box_clone()));
-            }
-            None => {
-                let key_ref: Option<&K> = dbus::arg::cast(&ib);
-                key = Some(key_ref.unwrap().clone());
-            }
-        }
-    }
+//     let mut key: Option<K> = None;
+//     for i in a.as_iter().unwrap() {
+//         let ib = i.box_clone();
+//         match key.take() {
+//             Some(key) => {
+//                 let value: &Variant<Box<dyn RefArg + 'static>> = dbus::arg::cast(&ib).unwrap();
+//                 hm.insert(key, Variant(value.0.box_clone()));
+//             }
+//             None => {
+//                 let key_ref: Option<&K> = dbus::arg::cast(&ib);
+//                 key = Some(key_ref.unwrap().clone());
+//             }
+//         }
+//     }
 
-    hm
-}
+//     hm
+// }
 
-#[cfg(feature = "bluetoothd")]
-pub(crate) fn with_variant_property_cast<T, R>(a: &(dyn RefArg + 'static), f: impl FnOnce(Option<&T>) -> R) -> R
-where
-    T: 'static,
-{
-    let dbus_cast: Option<&T> = dbus::arg::cast(a);
-    match dbus_cast {
-        Some(v) => f(Some(v)),
-        None => {
-            use std::any::Any;
+// #[cfg(feature = "bluetoothd")]
+// pub(crate) fn with_variant_property_cast<T, R>(a: &(dyn RefArg + 'static), f: impl FnOnce(Option<&T>) -> R) -> R
+// where
+//     T: 'static,
+// {
+//     let dbus_cast: Option<&T> = dbus::arg::cast(a);
+//     match dbus_cast {
+//         Some(v) => f(Some(v)),
+//         None => {
+//             use std::any::Any;
 
-            if a.signature().starts_with("a{yv") {
-                let hm = variant_hashmap::<u8>(a);
-                f((&hm as &dyn Any).downcast_ref())
-            } else if a.signature().starts_with("a{qv") {
-                let hm = variant_hashmap::<u16>(a);
-                f((&hm as &dyn Any).downcast_ref())
-            } else if a.signature().starts_with("a{sv") {
-                let hm = variant_hashmap::<String>(a);
-                f((&hm as &dyn Any).downcast_ref())
-            } else {
-                log::warn!("unimplemented D-Bus type signature: {}", a.signature());
-                f(None)
-            }
-        }
-    }
-}
+//             if a.signature().starts_with("a{yv") {
+//                 let hm = variant_hashmap::<u8>(a);
+//                 f((&hm as &dyn Any).downcast_ref())
+//             } else if a.signature().starts_with("a{qv") {
+//                 let hm = variant_hashmap::<u16>(a);
+//                 f((&hm as &dyn Any).downcast_ref())
+//             } else if a.signature().starts_with("a{sv") {
+//                 let hm = variant_hashmap::<String>(a);
+//                 f((&hm as &dyn Any).downcast_ref())
+//             } else {
+//                 log::warn!("unimplemented D-Bus type signature: {}", a.signature());
+//                 f(None)
+//             }
+//         }
+//     }
+// }
 
-#[cfg(feature = "bluetoothd")]
-macro_rules! cr_property {
-    ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
-        $ib.property($dbus_name).get(|ctx, $obj| {
-            let value = $get;
-            log::trace!("{}: {}.{} = {:?}", ctx.path(), ctx.interface(), &$dbus_name, &value);
-            match value {
-                Some(v) => Ok(v),
-                None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
-            }
-        })
-    };
-}
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! cr_property {
+//     ($ib:expr, $dbus_name:expr, $obj:ident => $get:block) => {
+//         $ib.property($dbus_name).get(|ctx, $obj| {
+//             let value = $get;
+//             log::trace!("{}: {}.{} = {:?}", ctx.path(), ctx.interface(), &$dbus_name, &value);
+//             match value {
+//                 Some(v) => Ok(v),
+//                 None => Err(dbus_crossroads::MethodErr::no_property($dbus_name)),
+//             }
+//         })
+//     };
+// }
 
 #[cfg(feature = "bluetoothd")]
 macro_rules! define_flags {
@@ -523,23 +528,23 @@ mod adapter;
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod adv;
-#[cfg(feature = "bluetoothd")]
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-pub mod agent;
-#[cfg(feature = "bluetoothd")]
-mod device;
-#[cfg(feature = "bluetoothd")]
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-pub mod gatt;
+// #[cfg(feature = "bluetoothd")]
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// pub mod agent;
+// #[cfg(feature = "bluetoothd")]
+// mod device;
+// #[cfg(feature = "bluetoothd")]
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
-#[cfg(feature = "mesh")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-pub mod mesh;
-#[cfg(feature = "bluetoothd")]
-#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-pub mod monitor;
+// #[cfg(feature = "mesh")]
+// #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+// pub mod mesh;
+// #[cfg(feature = "bluetoothd")]
+// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+// pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
 pub mod rfcomm;
@@ -548,7 +553,7 @@ mod session;
 mod sys;
 
 #[cfg(feature = "bluetoothd")]
-pub use crate::{adapter::*, device::*, session::*};
+pub use crate::{adapter::*, session::*};
 
 #[doc(no_inline)]
 pub use uuid::Uuid;
@@ -714,21 +719,33 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 #[cfg(feature = "bluetoothd")]
-impl From<dbus::Error> for Error {
-    fn from(err: dbus::Error) -> Self {
-        log::trace!("DBus error {}: {}", err.name().unwrap_or_default(), err.message().unwrap_or_default());
-        if err.name() == Some("org.freedesktop.DBus.Error.UnknownObject") {
-            return Self::new(ErrorKind::NotFound);
+impl From<ZbusError> for Error {
+    fn from(err: ZbusError) -> Self {
+        log::trace!("DBus error: {}", err);
+        match err {
+            ZbusError::MethodError(name, message, _) => {
+                if name == "org.freedesktop.DBus.Error.UnknownObject" {
+                    return Self::new(ErrorKind::NotFound);
+                }
+                let kind = match name.strip_prefix(ERR_PREFIX)
+                    .and_then(|s| ErrorKind::from_str(s).ok())
+                {
+                    Some(kind) => kind,
+                    _ => ErrorKind::Internal(InternalErrorKind::DBus(name.to_string())),
+                };
+                Self { kind, message: message.unwrap_or_default() }
+            }
+            _ => {
+                Self { kind: ErrorKind::Internal(InternalErrorKind::DBus(err.to_string())), message: err.to_string() }
+            }
         }
-        let kind = match err
-            .name()
-            .and_then(|name| name.strip_prefix(ERR_PREFIX))
-            .and_then(|s| ErrorKind::from_str(s).ok())
-        {
-            Some(kind) => kind,
-            _ => ErrorKind::Internal(InternalErrorKind::DBus(err.name().unwrap_or_default().to_string())),
-        };
-        Self { kind, message: err.message().unwrap_or_default().to_string() }
+    }
+}
+
+#[cfg(feature = "bluetoothd")]
+impl From<zbus::fdo::Error> for Error {
+    fn from(err: zbus::fdo::Error) -> Self {
+        Self::from(ZbusError::from(err))
     }
 }
 
@@ -1028,75 +1045,84 @@ impl FromStr for Modalias {
     }
 }
 
-/// Gets all D-Bus objects from the BlueZ service.
-#[cfg(feature = "bluetoothd")]
-async fn all_dbus_objects(
-    connection: &SyncConnection,
-) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
-    let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
-    Ok(p.get_managed_objects().await?)
-}
+// /// Gets all D-Bus objects from the BlueZ service.
+// #[cfg(feature = "bluetoothd")]
+// async fn all_dbus_objects(
+//     connection: &SyncConnection,
+// ) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
+//     let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
+//     Ok(p.get_managed_objects().await?)
+// }
 
 /// Read value from D-Bus dictionary.
 #[cfg(feature = "bluetoothd")]
-pub(crate) fn read_dict<'a, T: 'static>(
-    dict: &'a HashMap<String, Variant<Box<dyn RefArg + 'static>>>, key: &str,
-) -> Result<&'a T> {
-    prop_cast(dict, key)
-        .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))
+pub(crate) fn read_dict<T>(
+    dict: &std::collections::HashMap<String, zbus::zvariant::OwnedValue>, key: &str,
+) -> Result<T>
+where
+    T: TryFrom<zbus::zvariant::OwnedValue, Error = zbus::zvariant::Error>,
+{
+    let value = dict.get(key)
+        .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))?;
+    
+    (*value).try_clone().map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))?
+        .try_into().map_err(|e: zbus::zvariant::Error| {
+        let err: zbus::Error = e.into();
+        Error::new(ErrorKind::Internal(InternalErrorKind::DBus(err.to_string())))
+    })
 }
 
-/// Returns the parent path of the specified D-Bus path.
-#[cfg(feature = "bluetoothd")]
-pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
-    let mut comps: Vec<_> = path.split('/').collect();
-    comps.pop();
-    if comps.is_empty() {
-        Path::new("/").unwrap()
-    } else {
-        Path::new(comps.join("/")).unwrap()
-    }
-}
+// /// Returns the parent path of the specified D-Bus path.
+// #[cfg(feature = "bluetoothd")]
+// pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
+//     let mut comps: Vec<_> = path.split('/').collect();
+//     comps.pop();
+//     if comps.is_empty() {
+//         Path::new("/").unwrap()
+//     } else {
+//         Path::new(comps.join("/")).unwrap()
+//     }
+// }
 
-/// Result of calling one of our D-Bus methods.
-#[cfg(feature = "bluetoothd")]
-type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
+// /// Result of calling one of our D-Bus methods.
+// #[cfg(feature = "bluetoothd")]
+// type DbusResult<T> = std::result::Result<T, dbus::MethodErr>;
 
-/// Call method on Arc D-Bus object we are serving.
-#[cfg(feature = "bluetoothd")]
-fn method_call<
-    T: Send + Sync + 'static,
-    R: AppendAll + fmt::Debug,
-    F: Future<Output = DbusResult<R>> + Send + 'static,
->(
-    mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
-) -> impl Future<Output = PhantomData<R>> {
-    let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
-    let data: Arc<T> = data_ref.clone();
-    async move {
-        if log::log_enabled!(log::Level::Trace) {
-            let mut args = Vec::new();
-            let mut arg_iter = ctx.message().iter_init();
-            while let Some(value) = arg_iter.get_refarg() {
-                args.push(format!("{value:?}"));
-                arg_iter.next();
-            }
-            log::trace!(
-                "{}: {}.{} ({})",
-                ctx.path(),
-                ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
-                ctx.method(),
-                args.join(", ")
-            );
-        }
-        let result = f(data).await;
-        log::trace!(
-            "{}: {}.{} (...) -> {:?}",
-            ctx.path(),
-            ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
-            ctx.method(),
-            &result
-        );
-        ctx.reply(result)
-    }
-}
+// /// Call method on Arc D-Bus object we are serving.
+// #[cfg(feature = "bluetoothd")]
+// fn method_call<
+//     T: Send + Sync + 'static,
+//     R: AppendAll + fmt::Debug,
+//     F: Future<Output = DbusResult<R>> + Send + 'static,
+// >(
+//     mut ctx: Context, cr: &mut Crossroads, f: impl FnOnce(Arc<T>) -> F,
+// ) -> impl Future<Output = PhantomData<R>> {
+//     let data_ref: &mut Arc<T> = cr.data_mut(ctx.path()).unwrap();
+//     let data: Arc<T> = data_ref.clone();
+//     async move {
+//         if log::log_enabled!(log::Level::Trace) {
+//             let mut args = Vec::new();
+//             let mut arg_iter = ctx.message().iter_init();
+//             while let Some(value) = arg_iter.get_refarg() {
+//                 args.push(format!("{value:?}"));
+//                 arg_iter.next();
+//             }
+//             log::trace!(
+//                 "{}: {}.{} ({})",
+//                 ctx.path(),
+//                 ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+//                 ctx.method(),
+//                 args.join(", ")
+//             );
+//         }
+//         let result = f(data).await;
+//         log::trace!(
+//             "{}: {}.{} (...) -> {:?}",
+//             ctx.path(),
+//             ctx.interface().map(|i| i.to_string()).unwrap_or_default(),
+//             ctx.method(),
+//             &result
+//         );
+//         ctx.reply(result)
+//     }
+// }
