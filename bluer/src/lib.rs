@@ -587,13 +587,13 @@ pub mod l2cap;
 // pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
-pub mod rfcomm;
+// pub mod rfcomm; // TODO: port to zbus
 #[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;
 
 #[cfg(feature = "bluetoothd")]
-pub use crate::{adapter::*, session::*, device::*};
+pub use crate::{adapter::*, session::*, device::*}; // TODO: re-enable device when ported
 
 #[doc(no_inline)]
 pub use uuid::Uuid;
@@ -687,21 +687,21 @@ pub enum ErrorKind {
     /// the discovery filter cannot be changed while a discovery session is active
     #[strum(disabled)]
     DiscoveryActive,
-    /// joining the mesh network failed: {0}
-    #[cfg(feature = "mesh")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    #[strum(disabled)]
-    MeshJoinFailed(mesh::application::JoinFailedReason),
-    /// adding a node to the mesh network failed: {0}
-    #[cfg(feature = "mesh")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    #[strum(disabled)]
-    MeshAddNodeFailed(mesh::management::AddNodeFailedReason),
-    /// mesh element is not published
-    #[cfg(feature = "mesh")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    #[strum(disabled)]
-    MeshElementUnpublished,
+    // /// joining the mesh network failed: {0}
+    // #[cfg(feature = "mesh")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    // #[strum(disabled)]
+    // MeshJoinFailed(mesh::application::JoinFailedReason),
+    // /// adding a node to the mesh network failed: {0}
+    // #[cfg(feature = "mesh")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    // #[strum(disabled)]
+    // MeshAddNodeFailed(mesh::management::AddNodeFailedReason),
+    // /// mesh element is not published
+    // #[cfg(feature = "mesh")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    // #[strum(disabled)]
+    // MeshElementUnpublished,
     /// internal error: {0}
     #[strum(disabled)]
     Internal(InternalErrorKind),
@@ -851,12 +851,12 @@ impl From<Error> for std::io::Error {
             ErrorKind::NotFound => E::NotFound,
             ErrorKind::DiscoveryActive => E::PermissionDenied,
             ErrorKind::AdvertisementMonitorRejected => E::InvalidInput,
-            #[cfg(feature = "mesh")]
-            ErrorKind::MeshJoinFailed(_) => E::ConnectionRefused,
-            #[cfg(feature = "mesh")]
-            ErrorKind::MeshAddNodeFailed(_) => E::ConnectionRefused,
-            #[cfg(feature = "mesh")]
-            ErrorKind::MeshElementUnpublished => E::InvalidInput,
+            // #[cfg(feature = "mesh")]
+            // ErrorKind::MeshJoinFailed(_) => E::ConnectionRefused,
+            // #[cfg(feature = "mesh")]
+            // ErrorKind::MeshAddNodeFailed(_) => E::ConnectionRefused,
+            // #[cfg(feature = "mesh")]
+            // ErrorKind::MeshElementUnpublished => E::InvalidInput,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };

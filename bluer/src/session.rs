@@ -45,14 +45,16 @@ use crate::{
     Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME, Adapter,
 };
 
-#[cfg(feature = "mesh")]
-use crate::mesh::{
-    agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
-    network::Network, provisioner::RegisteredProvisioner,
-};
+// TODO: re-enable when mesh module is ported
+// #[cfg(feature = "mesh")]
+// use crate::mesh::{
+//     agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
+//     network::Network, provisioner::RegisteredProvisioner,
+// };
 
-#[cfg(feature = "rfcomm")]
-use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
+// TODO: re-enable when rfcomm module is ported
+// #[cfg(feature = "rfcomm")]
+// use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
 
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
@@ -297,47 +299,50 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    /// Create an interface for the Bluetooth mesh network.
-    #[cfg(feature = "mesh")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    pub async fn mesh(&self) -> Result<Network> {
-        Network::new(self.inner.clone()).await
-    }
+    // /// Create an interface for the Bluetooth mesh network.
+    // TODO: re-enable when mesh module is ported
+    // #[cfg(feature = "mesh")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    // pub async fn mesh(&self) -> Result<Network> {
+    //     Network::new(self.inner.clone()).await
+    // }
 
-    /// Registers a Bluetooth authorization agent handler.
-    ///
-    /// Every application can register its own agent to use
-    /// that agent for all actions triggered by that application.
-    ///
-    /// It is not required by an application to register
-    /// an agent. If an application chooses not to
-    /// register an agent, the default agent is used. This
-    /// is in most cases a good idea. Only applications
-    /// like a pairing wizard should register their own
-    /// agent.
-    ///
-    /// An application can only register one agent. Multiple
-    /// agents per application are not supported.
-    ///
-    /// Drop the returned [AgentHandle] to unregister the agent.
+    // TODO: re-enable when agent module is ported
+    // /// Registers a Bluetooth authorization agent handler.
+    // ///
+    // /// Every application can register its own agent to use
+    // /// that agent for all actions triggered by that application.
+    // ///
+    // /// It is not required by an application to register
+    // /// an agent. If an application chooses not to
+    // /// register an agent, the default agent is used. This
+    // /// is in most cases a good idea. Only applications
+    // /// like a pairing wizard should register their own
+    // // agent.
+    // //
+    // // An application can only register one agent. Multiple
+    // // agents per application are not supported.
+    // //
+    // // Drop the returned [AgentHandle] to unregister the agent.
     // pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
     //     let reg_agent = RegisteredAgent::new(agent);
     //     reg_agent.register(self.inner.clone()).await
     // }
 
-    /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
-    ///
-    /// The returned [ProfileHandle] provides a stream of
-    /// [connection requests](crate::rfcomm::ConnectRequest).
-    ///
-    /// Drop the handle to unregister the profile.
-    #[cfg(feature = "rfcomm")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
-    pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
-        let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
-        let reg_profile = RegisteredProfile::new(req_tx);
-        reg_profile.register(self.inner.clone(), profile, req_rx).await
-    }
+    // TODO: re-enable when rfcomm module is ported
+// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
+//
+// The returned [ProfileHandle] provides a stream of
+// [connection requests](crate::rfcomm::ConnectRequest).
+//
+// Drop the handle to unregister the profile.
+    // #[cfg(feature = "rfcomm")]
+    // #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
+    // pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
+    //     let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
+    //     let reg_profile = RegisteredProfile::new(req_tx);
+    //     reg_profile.register(self.inner.clone(), profile, req_rx).await
+    // }
 }
 
 /// A D-Bus object or property event.
