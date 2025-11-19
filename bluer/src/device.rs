@@ -46,17 +46,15 @@ impl Device {
     }
 
     async fn proxy(&self) -> Result<Proxy<'_>> {
-        Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, INTERFACE)
-            .await
-            .map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
+        Ok(Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, INTERFACE).await?)
     }
 
     pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<OwnedObjectPath> {
         let adapter_path = Adapter::dbus_path(adapter_name)?;
         let path_str = format!("{}/dev_{}", adapter_path.as_str(), address.to_string().replace(':', "_"));
-        ObjectPath::try_from(path_str)
+        Ok(ObjectPath::try_from(path_str)
             .map(OwnedObjectPath::from)
-            .map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
+            .map_err(zbus::Error::from)?)
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a ObjectPath) -> Option<((&'a str, Address), &'a str)> {
@@ -176,7 +174,7 @@ impl Device {
         R: serde::de::DeserializeOwned + zbus::zvariant::Type,
     {
         let proxy = self.proxy().await?;
-        proxy.call(method, &body).await.map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
+        Ok(proxy.call(method, &body).await?)
     }
 
     // ===========================================================================================

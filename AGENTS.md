@@ -52,3 +52,8 @@ If you prefer manual testing:
    ```
 2. On `ubupi5a.srv`, run the `le_advertise` example.
 3. On `ubupi5b.srv`, run the `discover_devices` example to see the advertisement.
+
+
+# SYNC YOUR CODE
+
+When testing on remote servers, remember to **sync your code**. (.misc/sync.sh)

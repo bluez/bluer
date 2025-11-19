@@ -41,6 +41,12 @@ use crate::{
     Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME, Adapter,
 };
 
+#[cfg(feature = "rfcomm")]
+use crate::rfcomm::{
+    profile::{Profile, ProfileHandle, RegisteredProfile},
+    ConnectRequest,
+};
+
 // TODO: re-enable when mesh module is ported
 // #[cfg(feature = "mesh")]
 // use crate::mesh::{
@@ -338,19 +344,19 @@ impl Session {
     }
 
     // TODO: re-enable when rfcomm module is ported
-// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
-//
-// The returned [ProfileHandle] provides a stream of
-// [connection requests](crate::rfcomm::ConnectRequest).
-//
-// Drop the handle to unregister the profile.
-    // #[cfg(feature = "rfcomm")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
-    // pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
-    //     let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
-    //     let reg_profile = RegisteredProfile::new(req_tx);
-    //     reg_profile.register(self.inner.clone(), profile, req_rx).await
-    // }
+    /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
+    ///
+    /// The returned [ProfileHandle] provides a stream of
+    /// [connection requests](crate::rfcomm::ConnectRequest).
+    ///
+    /// Drop the handle to unregister the profile.
+    #[cfg(feature = "rfcomm")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
+    pub async fn register_profile(&self, profile: Profile) -> Result<ProfileHandle> {
+        let (req_tx, req_rx) = tokio::sync::mpsc::channel(1);
+        let reg_profile = RegisteredProfile::new(req_tx);
+        reg_profile.register(self.inner.clone(), profile, req_rx).await
+    }
 }
 
 /// A D-Bus object or property event.

@@ -1,10 +1,9 @@
 //! Bluetooth profiles for RFCOMM connections.
 
-use dbus::{
-    arg::{OwnedFd, PropMap, RefArg, Variant},
-    nonblock::Proxy,
+use zbus::{
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Type},
+    Proxy,
 };
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -21,12 +20,12 @@ use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use super::{Socket, Stream};
-use crate::{method_call, read_dict, Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
+use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.ProfileManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
 pub(crate) const PROFILE_INTERFACE: &str = "org.bluez.Profile1";
-pub(crate) const PROFILE_PREFIX: &str = publish_path!("profile/");
+pub(crate) const PROFILE_PREFIX: &str = "/org/bluez/profile/";
 
 /// Error response from us to a Bluetooth profile request.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
@@ -48,10 +47,10 @@ impl Default for ReqError {
     }
 }
 
-impl From<ReqError> for dbus::MethodErr {
+impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
         let name: &'static str = err.into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+        zbus::fdo::Error::Failed(format!("{}.{}", ERR_PREFIX, name))
     }
 }
 
@@ -139,40 +138,40 @@ pub struct Profile {
 }
 
 impl Profile {
-    fn to_dict(&self) -> PropMap {
-        let mut pm = PropMap::new();
+    fn to_dict(&self) -> HashMap<String, OwnedValue> {
+        let mut pm = HashMap::new();
         if let Some(name) = &self.name {
-            pm.insert("Name".to_string(), Variant(name.box_clone()));
+            pm.insert("Name".to_string(), OwnedValue::from(zbus::zvariant::Str::from(name.clone())));
         }
         if let Some(service) = &self.service {
-            pm.insert("Service".to_string(), Variant(service.to_string().box_clone()));
+            pm.insert("Service".to_string(), OwnedValue::from(zbus::zvariant::Str::from(service.to_string())));
         }
         if let Some(role) = &self.role {
-            pm.insert("Role".to_string(), Variant(role.to_string().box_clone()));
+            pm.insert("Role".to_string(), OwnedValue::from(zbus::zvariant::Str::from(role.to_string())));
         }
         if let Some(channel) = &self.channel {
-            pm.insert("Channel".to_string(), Variant(channel.box_clone()));
+            pm.insert("Channel".to_string(), OwnedValue::from(*channel));
         }
         if let Some(psm) = &self.psm {
-            pm.insert("PSM".to_string(), Variant(psm.box_clone()));
+            pm.insert("PSM".to_string(), OwnedValue::from(*psm));
         }
         if let Some(require_authentication) = &self.require_authentication {
-            pm.insert("RequireAuthentication".to_string(), Variant(require_authentication.box_clone()));
+            pm.insert("RequireAuthentication".to_string(), OwnedValue::from(*require_authentication));
         }
         if let Some(require_authorization) = &self.require_authorization {
-            pm.insert("RequireAuthorization".to_string(), Variant(require_authorization.box_clone()));
+            pm.insert("RequireAuthorization".to_string(), OwnedValue::from(*require_authorization));
         }
         if let Some(auto_connect) = &self.auto_connect {
-            pm.insert("AutoConnect".to_string(), Variant(auto_connect.box_clone()));
+            pm.insert("AutoConnect".to_string(), OwnedValue::from(*auto_connect));
         }
         if let Some(service_record) = &self.service_record {
-            pm.insert("ServiceRecord".to_string(), Variant(service_record.box_clone()));
+            pm.insert("ServiceRecord".to_string(), OwnedValue::from(zbus::zvariant::Str::from(service_record.clone())));
         }
         if let Some(version) = &self.version {
-            pm.insert("Version".to_string(), Variant(version.box_clone()));
+            pm.insert("Version".to_string(), OwnedValue::from(*version));
         }
         if let Some(features) = &self.features {
-            pm.insert("Features".to_string(), Variant(features.box_clone()));
+            pm.insert("Features".to_string(), OwnedValue::from(*features));
         }
         pm
     }
@@ -230,6 +229,7 @@ impl ConnectRequest {
     pub fn accept(self) -> Result<Stream> {
         let Self { fd, tx, .. } = self;
 
+        let fd: std::os::unix::io::OwnedFd = fd.into();
         let fd = fd.into_raw_fd();
         if unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
             return Err(std::io::Error::last_os_error().into());
@@ -248,18 +248,23 @@ impl ConnectRequest {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct ConnectRequestProps {
     pub version: Option<u16>,
     pub features: Option<u16>,
 }
 
 impl ConnectRequestProps {
-    fn from_dict(dict: &HashMap<String, Variant<Box<dyn RefArg + 'static>>>) -> Self {
-        Self {
-            version: read_dict(dict, "Version").ok().cloned(),
-            features: read_dict(dict, "Features").ok().cloned(),
+    fn from_dict(dict: HashMap<String, OwnedValue>) -> Self {
+        let mut props = Self::default();
+        for (key, value) in dict {
+            match key.as_str() {
+                "Version" => props.version = <u16>::try_from(value).ok(),
+                "Features" => props.features = <u16>::try_from(value).ok(),
+                _ => (),
+            }
         }
+        props
     }
 }
 
@@ -268,101 +273,94 @@ pub(crate) struct RegisteredProfile {
     device_closed_rx: Mutex<HashMap<Address, Vec<mpsc::Receiver<()>>>>,
 }
 
+#[zbus::interface(name = "org.bluez.Profile1")]
+impl RegisteredProfile {
+    async fn new_connection(
+        &self,
+        device: OwnedObjectPath,
+        fd: OwnedFd,
+        fd_properties: HashMap<String, OwnedValue>,
+    ) -> zbus::fdo::Result<()> {
+        let device = if let Some((_, device)) = Device::parse_dbus_path(&device) {
+            device
+        } else {
+            log::error!("Cannot parse device path: {}", &device);
+            return Err(ReqError::Rejected.into());
+        };
+        let props = ConnectRequestProps::from_dict(fd_properties);
+
+        let (tx, rx) = oneshot::channel();
+        let (closed_tx, closed_rx) = mpsc::channel(1);
+
+        let cr = ConnectRequest { device, fd, props, tx, closed_tx };
+        let _ = self.req_tx.send(cr).await;
+
+        match rx.await {
+            Ok(Ok(())) => {
+                let mut device_closed_rx = self.device_closed_rx.lock().await;
+                device_closed_rx.entry(device).or_default().push(closed_rx);
+                Ok(())
+            }
+            Ok(Err(err)) => Err(err.into()),
+            Err(_) => Err(ReqError::Rejected.into()),
+        }
+    }
+
+    async fn request_disconnection(&self, device: OwnedObjectPath) -> zbus::fdo::Result<()> {
+        let device = if let Some((_, device)) = Device::parse_dbus_path(&device) {
+            device
+        } else {
+            log::error!("Cannot parse device path: {}", &device);
+            return Err(ReqError::Rejected.into());
+        };
+
+        let mut device_closed_rx = self.device_closed_rx.lock().await;
+        device_closed_rx.remove(&device);
+        Ok(())
+    }
+
+    async fn release(&self) {
+        log::trace!("Profile released");
+    }
+}
+
 impl RegisteredProfile {
     pub(crate) fn new(req_tx: mpsc::Sender<ConnectRequest>) -> Self {
         Self { req_tx, device_closed_rx: Mutex::new(HashMap::new()) }
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(PROFILE_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            ib.method_with_cr_async(
-                "NewConnection",
-                ("device", "fd", "fd_properties"),
-                (),
-                |ctx, cr, (device_path, fd, props): (dbus::Path<'static>, OwnedFd, PropMap)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let device = if let Some((_, device)) = Device::parse_dbus_path(&device_path) {
-                            device
-                        } else {
-                            log::error!("Cannot parse device path: {}", &device_path);
-                            return Err(ReqError::Rejected.into());
-                        };
-                        let props = ConnectRequestProps::from_dict(&props);
-
-                        let (tx, rx) = oneshot::channel();
-                        let (closed_tx, closed_rx) = mpsc::channel(1);
-
-                        let cr = ConnectRequest { device, fd, props, tx, closed_tx };
-                        let _ = reg.req_tx.send(cr).await;
-
-                        match rx.await {
-                            Ok(Ok(())) => {
-                                let mut device_closed_rx = reg.device_closed_rx.lock().await;
-                                device_closed_rx.entry(device).or_default().push(closed_rx);
-                                Ok(())
-                            }
-                            Ok(Err(err)) => Err(err.into()),
-                            Err(_) => Err(ReqError::Rejected.into()),
-                        }
-                    })
-                },
-            );
-
-            ib.method_with_cr_async(
-                "RequestDisconnection",
-                ("device",),
-                (),
-                |ctx, cr, (device_path,): (dbus::Path<'static>,)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let device = if let Some((_, device)) = Device::parse_dbus_path(&device_path) {
-                            device
-                        } else {
-                            log::error!("Cannot parse device path: {}", &device_path);
-                            return Err(ReqError::Rejected.into());
-                        };
-
-                        let mut device_closed_rx = reg.device_closed_rx.lock().await;
-                        device_closed_rx.remove(&device);
-                        Ok(())
-                    })
-                },
-            );
-        })
-    }
-
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, profile: Profile, req_rx: mpsc::Receiver<ConnectRequest>,
     ) -> Result<ProfileHandle> {
-        let name = dbus::Path::new(format!("{}{}", PROFILE_PREFIX, Uuid::new_v4().as_simple())).unwrap();
+        let name = OwnedObjectPath::try_from(format!("{}{}", PROFILE_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         log::trace!("Publishing profile at {}", &name);
 
-        {
-            let mut cr = inner.crossroads.lock().await;
-            cr.insert(name.clone(), &[inner.profile_token], Arc::new(self));
-        }
+        inner.connection.object_server().at(name.clone(), self).await?;
 
         log::trace!("Registering profile at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, inner.connection.clone());
+        let proxy = Proxy::new(&inner.connection, SERVICE_NAME, MANAGER_PATH, MANAGER_INTERFACE).await?;
         let () = proxy
-            .method_call(
-                MANAGER_INTERFACE,
+            .call(
                 "RegisterProfile",
-                (name.clone(), profile.uuid.to_string(), profile.to_dict()),
+                &(name.clone(), profile.uuid.to_string(), profile.to_dict()),
             )
             .await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
+        let connection = inner.connection.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering profile at {}", &unreg_name);
-            let _: std::result::Result<(), dbus::Error> =
-                proxy.method_call(MANAGER_INTERFACE, "UnregisterProfile", (unreg_name.clone(),)).await;
+            let proxy = Proxy::new(&connection, SERVICE_NAME, MANAGER_PATH, MANAGER_INTERFACE).await;
+            if let Ok(proxy) = proxy {
+                let _: std::result::Result<(), zbus::Error> =
+                    proxy.call("UnregisterProfile", &(unreg_name.clone(),)).await;
+            }
 
             log::trace!("Unpublishing profile at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
-            let _: Option<Self> = cr.remove(&unreg_name);
+            let _ = connection.object_server().remove::<RegisteredProfile, _>(&unreg_name).await;
         });
 
         Ok(ProfileHandle { name, req_rx: ReceiverStream::new(req_rx), _drop_tx: drop_tx })
@@ -375,7 +373,7 @@ impl RegisteredProfile {
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
 #[pin_project(PinnedDrop)]
 pub struct ProfileHandle {
-    name: dbus::Path<'static>,
+    name: OwnedObjectPath,
     #[pin]
     req_rx: ReceiverStream<ConnectRequest>,
     _drop_tx: oneshot::Sender<()>,

@@ -587,7 +587,7 @@ pub mod l2cap;
 // pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
-// pub mod rfcomm; // TODO: port to zbus
+pub mod rfcomm;
 #[cfg(feature = "bluetoothd")]
 mod session;
 mod sys;
@@ -1120,11 +1120,8 @@ where
     let value = dict.get(key)
         .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))?;
     
-    (*value).try_clone().map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))?
-        .try_into().map_err(|e: zbus::zvariant::Error| {
-        let err: zbus::Error = e.into();
-        Error::new(ErrorKind::Internal(InternalErrorKind::DBus(err.to_string())))
-    })
+    Ok((*value).try_clone().map_err(zbus::Error::from)?
+        .try_into().map_err(zbus::Error::from)?)
 }
 
 /// Returns the parent path of the specified D-Bus path.
@@ -1181,4 +1178,6 @@ pub(crate) fn parent_path(path: &zbus::zvariant::ObjectPath) -> zbus::zvariant::
 //         ctx.reply(result)
 //     }
 // }
+
+
 

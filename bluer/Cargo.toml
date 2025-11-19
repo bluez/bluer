@@ -149,3 +149,11 @@ required-features = ["bluetoothd", "rfcomm"]
 [[example]]
 name = "rfcomm_server"
 required-features = ["bluetoothd", "rfcomm"]
+
+[[example]]
+name = "rfcomm_profile_server"
+required-features = ["bluetoothd", "rfcomm"]
+
+[[example]]
+name = "rfcomm_profile_client"
+required-features = ["bluetoothd", "rfcomm"]
