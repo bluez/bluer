@@ -28,9 +28,9 @@ path = "src/blumon.rs"
 # name = "l2cat"
 # path = "src/l2cat.rs"
 
-# [[bin]]
-# name = "rfcat"
-# path = "src/rfcat.rs"
+[[bin]]
+name = "rfcat"
+path = "src/rfcat.rs"
 
 [dependencies]
 bluer = { version = "0.17.4", path = "../bluer", features = ["full"] }
