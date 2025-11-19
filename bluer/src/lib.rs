@@ -96,7 +96,7 @@ compile_error!("BlueR only supports the Linux operating system.");
 pub use zbus;
 
 // mod gatt;
-// mod monitor;
+pub mod monitor;
 // mod device;
 
 #[cfg(feature = "bluetoothd")]

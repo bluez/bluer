@@ -30,7 +30,7 @@ use crate::{
     // all_dbus_objects, device,
     // device::Device,
     // gatt,
-    // monitor::MonitorManager,
+    monitor::MonitorManager,
     Address, AddressType, Error, ErrorKind, InternalErrorKind, Modalias, Result, SessionInner,
     SingleSessionToken, SERVICE_NAME, Device, Event,
 };
@@ -118,7 +118,6 @@ impl Adapter {
         Ok(addrs)
     }
 
-    /*
     /// Starts monitoring of advertisements.
     ///
     /// Once a monitoring job is activated by BlueZ, the client can expect to get
@@ -130,7 +129,6 @@ impl Adapter {
     pub async fn monitor(&self) -> Result<MonitorManager> {
         MonitorManager::new(self.inner.clone(), self.name()).await
     }
-    */
 
     /// Get interface to Bluetooth device of specified address.
     pub fn device(&self, address: Address) -> Result<Device> {

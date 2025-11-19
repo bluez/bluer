@@ -4,29 +4,32 @@
 //! exposing advertisement monitors with filtering conditions, thresholds of RSSI and timers
 //! of RSSI thresholds.
 
-use dbus::nonblock::Proxy;
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
+use zbus::{
+    interface,
+    zvariant::{ObjectPath, OwnedObjectPath, Value},
+};
 use futures::{Stream, StreamExt};
 use std::{
     fmt,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
+    collections::HashMap,
 };
 use strum::{Display, EnumString};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use crate::{
-    method_call, Address, DbusResult, Device, Error, ErrorKind, Result, SessionInner, SERVICE_NAME, TIMEOUT,
+    Address, Device, Error, ErrorKind, Result, SessionInner, SERVICE_NAME,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const MONITOR_PREFIX: &str = publish_path!("monitor");
+pub(crate) const MONITOR_PREFIX: &str = "/org/bluez/bluer/monitor";
 
 /// Determines the type of advertisement monitor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
@@ -151,7 +154,7 @@ impl RssiSamplingPeriod {
 /// Specifies an advertisement monitor target.
 ///
 /// Use [`MonitorManager::register`] to add a monitor target.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Monitor {
     /// The type of the monitor.
     pub monitor_type: Type,
@@ -236,95 +239,127 @@ pub(crate) struct RegisteredMonitor {
     am: Monitor,
     activate_tx: mpsc::Sender<()>,
     release_tx: mpsc::Sender<()>,
-    event_tx: Mutex<Option<mpsc::Sender<MonitorEvent>>>,
+    event_tx: AsyncMutex<Option<mpsc::Sender<MonitorEvent>>>,
 }
 
 impl RegisteredMonitor {
-    fn parse_device_path(device: &dbus::Path<'static>) -> DbusResult<(String, Address)> {
+    fn parse_device_path(device: &ObjectPath) -> zbus::fdo::Result<(String, Address)> {
         match Device::parse_dbus_path(device) {
             Some((adapter, addr)) => Ok((adapter.to_string(), addr)),
             None => {
                 log::error!("Cannot parse device path {}", &device);
-                Err(dbus::MethodErr::invalid_arg("cannot parse device path"))
+                Err(zbus::fdo::Error::InvalidArgs("cannot parse device path".into()))
             }
         }
     }
+}
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<RegisteredMonitor>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<RegisteredMonitor>>| {
-            ib.method_with_cr_async("Release", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
-                    *reg.event_tx.lock().await = None;
-                    let _ = reg.release_tx.send(()).await;
-                    Ok(())
-                })
-            });
+#[interface(name = "org.bluez.AdvertisementMonitor1")]
+impl RegisteredMonitor {
+    async fn release(&self) {
+        *self.event_tx.lock().await = None;
+        let _ = self.release_tx.send(()).await;
+    }
 
-            ib.method_with_cr_async("Activate", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
-                    let _ = reg.activate_tx.send(()).await;
-                    Ok(())
-                })
-            });
+    async fn activate(&self) {
+        let _ = self.activate_tx.send(()).await;
+    }
 
-            ib.method_with_cr_async(
-                "DeviceFound",
-                ("device",),
-                (),
-                |ctx, cr, (addr,): (dbus::Path<'static>,)| {
-                    method_call(ctx, cr, |reg: Arc<RegisteredMonitor>| async move {
-                        let (adapter, device) = Self::parse_device_path(&addr)?;
-                        if let Some(event_tx) = reg.event_tx.lock().await.as_ref() {
-                            let _ = event_tx.send(MonitorEvent::DeviceFound(DeviceId { adapter, device })).await;
-                        }
-                        Ok(())
-                    })
-                },
-            );
+    async fn device_found(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device)?;
+        if let Some(event_tx) = self.event_tx.lock().await.as_ref() {
+            let _ = event_tx.send(MonitorEvent::DeviceFound(DeviceId { adapter, device })).await;
+        }
+        Ok(())
+    }
 
-            ib.method_with_cr_async("DeviceLost", ("device",), (), |ctx, cr, (addr,): (dbus::Path<'static>,)| {
-                method_call(ctx, cr, move |reg: Arc<RegisteredMonitor>| async move {
-                    let (adapter, device) = Self::parse_device_path(&addr)?;
-                    if let Some(event_tx) = reg.event_tx.lock().await.as_ref() {
-                        let _ = event_tx.send(MonitorEvent::DeviceLost(DeviceId { adapter, device })).await;
-                    }
-                    Ok(())
-                })
-            });
+    async fn device_lost(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device)?;
+        if let Some(event_tx) = self.event_tx.lock().await.as_ref() {
+            let _ = event_tx.send(MonitorEvent::DeviceLost(DeviceId { adapter, device })).await;
+        }
+        Ok(())
+    }
 
-            cr_property!(ib, "Type", r => {
-                Some(r.am.monitor_type.to_string())
-            });
+    #[zbus(property)]
+    fn type_(&self) -> String {
+        self.am.monitor_type.to_string()
+    }
 
-            cr_property!(ib, "RSSILowThreshold", r => {
-                r.am.rssi_low_threshold
-            });
+    #[zbus(property, name = "RSSILowThreshold")]
+    fn rssi_low_threshold(&self) -> std::result::Result<i16, zbus::fdo::Error> {
+        self.am.rssi_low_threshold.ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSILowThreshold".into()))
+    }
 
-            cr_property!(ib, "RSSIHighThreshold", r => {
-                r.am.rssi_high_threshold
-            });
+    #[zbus(property, name = "RSSIHighThreshold")]
+    fn rssi_high_threshold(&self) -> std::result::Result<i16, zbus::fdo::Error> {
+        self.am.rssi_high_threshold.ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSIHighThreshold".into()))
+    }
 
-            cr_property!(ib, "RSSILowTimeout", r => {
-                r.am.rssi_low_timeout.map(|t| t.as_secs().clamp(1, 300) as u16)
-            });
+    #[zbus(property, name = "RSSILowTimeout")]
+    fn rssi_low_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.am.rssi_low_timeout.map(|t| t.as_secs().clamp(1, 300) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSILowTimeout".into()))
+    }
 
-            cr_property!(ib, "RSSIHighTimeout", r => {
-                r.am.rssi_high_timeout.map(|t| t.as_secs().clamp(1, 300) as u16)
-            });
+    #[zbus(property, name = "RSSIHighTimeout")]
+    fn rssi_high_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.am.rssi_high_timeout.map(|t| t.as_secs().clamp(1, 300) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSIHighTimeout".into()))
+    }
 
-            cr_property!(ib, "RSSISamplingPeriod", r => {
-                r.am.rssi_sampling_period.map(|v| v.to_value())
-            });
+    #[zbus(property, name = "RSSISamplingPeriod")]
+    fn rssi_sampling_period(&self) -> std::result::Result<u16, zbus::fdo::Error> {
+        self.am.rssi_sampling_period.map(|v| v.to_value()).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSISamplingPeriod".into()))
+    }
 
-            cr_property!(ib, "Patterns", r => {
-                r.am.patterns.as_ref().map(|patterns: &Vec<Pattern>| {
-                    patterns
-                        .iter()
-                        .map(|p| (p.start_position, p.data_type, p.content.clone()))
-                        .collect::<Vec<_>>()
-                })
-            });
-        })
+    #[zbus(property)]
+    fn patterns(&self) -> std::result::Result<Vec<(u8, u8, Vec<u8>)>, zbus::fdo::Error> {
+        self.am.patterns.as_ref().map(|patterns| {
+            patterns
+                .iter()
+                .map(|p| (p.start_position, p.data_type, p.content.clone()))
+                .collect()
+        }).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Patterns".into()))
+    }
+}
+
+struct MonitorApplication {
+    monitors: Arc<Mutex<HashMap<OwnedObjectPath, Monitor>>>,
+}
+
+#[interface(name = "org.freedesktop.DBus.ObjectManager")]
+impl MonitorApplication {
+    fn get_managed_objects(&self) -> HashMap<OwnedObjectPath, HashMap<String, HashMap<String, Value<'_>>>> {
+        let monitors = self.monitors.lock().unwrap();
+        let mut managed_objects = HashMap::new();
+        for (path, monitor) in monitors.iter() {
+            let mut interfaces = HashMap::new();
+            let mut props = HashMap::new();
+            
+            props.insert("Type".to_string(), Value::from(monitor.monitor_type.to_string()));
+            if let Some(v) = monitor.rssi_low_threshold {
+                props.insert("RSSILowThreshold".to_string(), Value::from(v));
+            }
+            if let Some(v) = monitor.rssi_high_threshold {
+                props.insert("RSSIHighThreshold".to_string(), Value::from(v));
+            }
+            if let Some(v) = monitor.rssi_low_timeout {
+                props.insert("RSSILowTimeout".to_string(), Value::from(v.as_secs().clamp(1, 300) as u16));
+            }
+            if let Some(v) = monitor.rssi_high_timeout {
+                props.insert("RSSIHighTimeout".to_string(), Value::from(v.as_secs().clamp(1, 300) as u16));
+            }
+            if let Some(v) = monitor.rssi_sampling_period {
+                props.insert("RSSISamplingPeriod".to_string(), Value::from(v.to_value()));
+            }
+            if let Some(patterns) = &monitor.patterns {
+                let p: Vec<(u8, u8, Vec<u8>)> = patterns.iter().map(|p| (p.start_position, p.data_type, p.content.clone())).collect();
+                props.insert("Patterns".to_string(), Value::from(p));
+            }
+
+            interfaces.insert(INTERFACE.to_string(), props);
+            managed_objects.insert(path.clone(), interfaces);
+        }
+        managed_objects
     }
 }
 
@@ -339,7 +374,7 @@ impl RegisteredMonitor {
 /// Drop to unregister the advertisement monitor target.
 #[must_use = "the MonitorHandle must be held for the monitor to be active and its events must be consumed regularly"]
 pub struct MonitorHandle {
-    name: dbus::Path<'static>,
+    name: OwnedObjectPath,
     event_rx: ReceiverStream<MonitorEvent>,
     _drop_tx: oneshot::Sender<()>,
 }
@@ -375,7 +410,8 @@ impl Drop for MonitorHandle {
 /// Use this to target advertisements and drop it to stop monitoring advertisements.
 pub struct MonitorManager {
     inner: Arc<SessionInner>,
-    root: dbus::Path<'static>,
+    root: OwnedObjectPath,
+    monitors: Arc<Mutex<HashMap<OwnedObjectPath, Monitor>>>,
     _drop_tx: oneshot::Sender<()>,
 }
 
@@ -387,46 +423,44 @@ impl fmt::Debug for MonitorManager {
 
 impl MonitorManager {
     pub(crate) async fn new(inner: Arc<SessionInner>, adapter_name: &str) -> Result<Self> {
-        let manager_path = dbus::Path::new(format!("{}/{}", MANAGER_PATH, adapter_name)).unwrap();
-        let root = dbus::Path::new(format!("{}/{}", MONITOR_PREFIX, Uuid::new_v4().as_simple())).unwrap();
+        let manager_path = format!("{}/{}", MANAGER_PATH, adapter_name);
+        let root = format!("{}/{}", MONITOR_PREFIX, Uuid::new_v4().as_simple());
+        let root = OwnedObjectPath::try_from(root).unwrap();
 
         log::trace!("Publishing advertisement monitor root at {}", &root);
 
-        {
-            let mut cr = inner.crossroads.lock().await;
-            let object_manager_token = cr.object_manager();
-            let introspectable_token = cr.introspectable();
-            let properties_token = cr.properties();
-            cr.insert(root.clone(), [&object_manager_token, &introspectable_token, &properties_token], ());
-        }
+        let monitors = Arc::new(Mutex::new(HashMap::new()));
+        let app = MonitorApplication { monitors: monitors.clone() };
+        let _ = inner.connection.object_server().at(&root, app).await?;
 
         log::trace!("Registering advertisement monitor root at {}", &root);
-        let proxy = Proxy::new(SERVICE_NAME, manager_path, TIMEOUT, inner.connection.clone());
-        let () = proxy.method_call(MANAGER_INTERFACE, "RegisterMonitor", (root.clone(),)).await?;
+        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, manager_path, MANAGER_INTERFACE).await?;
+        let () = proxy.call("RegisterMonitor", &(&root,)).await?;
 
         let (_drop_tx, drop_rx) = oneshot::channel();
         let unreg_root = root.clone();
-        let unreg_inner = inner.clone();
+        let connection = inner.connection.clone();
+        let proxy = proxy.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering advertisement monitor root at {}", &unreg_root);
-            let _: std::result::Result<(), dbus::Error> =
-                proxy.method_call(MANAGER_INTERFACE, "UnregisterMonitor", (unreg_root.clone(),)).await;
+            let _: std::result::Result<(), zbus::Error> =
+                proxy.call("UnregisterMonitor", &(&unreg_root,)).await;
 
             log::trace!("Unpublishing advertisement monitor root at {}", &unreg_root);
-            let mut cr = unreg_inner.crossroads.lock().await;
-            cr.remove::<()>(&unreg_root);
+            let _ = connection.object_server().remove::<MonitorApplication, _>(&unreg_root).await;
         });
 
-        Ok(Self { inner, root, _drop_tx })
+        Ok(Self { inner, root, monitors, _drop_tx })
     }
 
     /// Registers an advertisement monitor target.
     ///
     /// Returns a handle to receive events.
     pub async fn register(&self, advertisement_monitor: Monitor) -> Result<MonitorHandle> {
-        let name = dbus::Path::new(format!("{}/{}", &self.root, Uuid::new_v4().as_simple())).unwrap();
+        let name = format!("{}/{}", &self.root, Uuid::new_v4().as_simple());
+        let name = OwnedObjectPath::try_from(name).unwrap();
 
         log::trace!("Publishing advertisement monitor target at {}", &name);
 
@@ -436,25 +470,30 @@ impl MonitorManager {
         let (_drop_tx, drop_rx) = oneshot::channel();
 
         let reg = RegisteredMonitor {
-            am: advertisement_monitor,
+            am: advertisement_monitor.clone(),
             activate_tx,
             release_tx,
-            event_tx: Mutex::new(Some(event_tx)),
+            event_tx: AsyncMutex::new(Some(event_tx)),
         };
 
+        let _ = self.inner.connection.object_server().at(&name, reg).await?;
+        
         {
-            let mut cr = self.inner.crossroads.lock().await;
-            cr.insert(name.clone(), [&self.inner.monitor_token], Arc::new(reg));
+            let mut monitors = self.monitors.lock().unwrap();
+            monitors.insert(name.clone(), advertisement_monitor);
         }
 
         let inner = self.inner.clone();
         let unreg_name = name.clone();
+        let monitors = self.monitors.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unpublishing advertisement monitor target at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
-            cr.remove::<Arc<RegisteredMonitor>>(&unreg_name);
+            let _ = inner.connection.object_server().remove::<RegisteredMonitor, _>(&unreg_name).await;
+            
+            let mut monitors = monitors.lock().unwrap();
+            monitors.remove(&unreg_name);
         });
 
         tokio::select! {
