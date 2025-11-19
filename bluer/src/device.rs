@@ -1,9 +1,8 @@
 //! Remote Bluetooth device.
 
-use dbus::{
-    arg::{RefArg, Variant},
-    nonblock::{Proxy, SyncConnection},
-    Path,
+use zbus::{
+    zvariant::{OwnedObjectPath, ObjectPath},
+    Proxy, ProxyBuilder,
 };
 use futures::{pin_mut, select, stream, FutureExt, Stream, StreamExt};
 use std::{
@@ -15,10 +14,10 @@ use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    all_dbus_objects,
-    gatt::{self, remote::Service, SERVICE_INTERFACE},
+    // all_dbus_objects,
+    // gatt::{self, remote::Service, SERVICE_INTERFACE},
     Adapter, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
-    SERVICE_NAME, TIMEOUT,
+    SERVICE_NAME, // TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -29,7 +28,7 @@ pub(crate) const BATTERY_INTERFACE: &str = "org.bluez.Battery1";
 #[derive(Clone)]
 pub struct Device {
     inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
+    dbus_path: OwnedObjectPath,
     adapter_name: Arc<String>,
     address: Address,
 }
@@ -46,16 +45,21 @@ impl Device {
         Ok(Self { inner, dbus_path: Self::dbus_path(&adapter_name, address)?, adapter_name, address })
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
+    async fn proxy(&self) -> Result<Proxy<'_>> {
+        Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, INTERFACE)
+            .await
+            .map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
     }
 
-    pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<Path<'static>> {
+    pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<OwnedObjectPath> {
         let adapter_path = Adapter::dbus_path(adapter_name)?;
-        Ok(Path::new(format!("{}/dev_{}", adapter_path, address.to_string().replace(':', "_"))).unwrap())
+        let path_str = format!("{}/dev_{}", adapter_path.as_str(), address.to_string().replace(':', "_"));
+        ObjectPath::try_from(path_str)
+            .map(OwnedObjectPath::from)
+            .map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
     }
 
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a ObjectPath) -> Option<((&'a str, Address), &'a str)> {
         match Adapter::parse_dbus_path_prefix(path) {
             Some((adapter_name, p)) => match p.strip_prefix("/dev_") {
                 Some(p) => {
@@ -71,7 +75,7 @@ impl Device {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<(&'a str, Address)> {
+    pub(crate) fn parse_dbus_path<'a>(path: &'a ObjectPath) -> Option<(&'a str, Address)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -95,7 +99,7 @@ impl Device {
         let events = self.inner.events(self.dbus_path.clone(), false).await?;
         let stream = events.flat_map(move |event| match event {
             Event::PropertiesChanged { changed, .. } => {
-                stream::iter(DeviceProperty::from_prop_map(changed).into_iter().map(DeviceEvent::PropertyChanged))
+                stream::iter(DeviceProperty::from_prop_map(&changed).into_iter().map(DeviceEvent::PropertyChanged))
                     .boxed()
             }
             _ => stream::empty().boxed(),
@@ -104,6 +108,7 @@ impl Device {
         Ok(stream)
     }
 
+    /*
     /// Wait until remote GATT services are resolved.
     async fn wait_for_services_resolved(&self) -> Result<()> {
         let mut changes = self.events().await?.fuse();
@@ -163,9 +168,16 @@ impl Device {
     pub async fn service(&self, service_id: u16) -> Result<gatt::remote::Service> {
         gatt::remote::Service::new(self.inner.clone(), self.adapter_name.clone(), self.address, service_id)
     }
+    */
 
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
+    async fn call_method<B, R>(&self, method: &str, body: B) -> Result<R>
+    where
+        B: serde::Serialize + zbus::zvariant::DynamicType,
+        R: serde::de::DeserializeOwned + zbus::zvariant::Type,
+    {
+        let proxy = self.proxy().await?;
+        proxy.call(method, &body).await.map_err(|e| Error::new(ErrorKind::Internal(InternalErrorKind::DBus(e.to_string()))))
+    }
 
     // ===========================================================================================
     // Methods
@@ -221,7 +233,7 @@ impl Device {
     /// device. The UUID provided is the remote service
     /// UUID for the profile.
     pub async fn connect_profile(&self, uuid: &Uuid) -> Result<()> {
-        self.call_method("ConnectProfile", (uuid.to_string(),)).await
+        self.call_method("ConnectProfile", &(uuid.to_string(),)).await
     }
 
     /// This method disconnects a specific profile of
@@ -234,7 +246,7 @@ impl Device {
     /// as long as the profile is registered this will always
     /// succeed.
     pub async fn disconnect_profile(&self, uuid: &Uuid) -> Result<()> {
-        self.call_method("DisconnectProfile", (uuid.to_string(),)).await
+        self.call_method("DisconnectProfile", &(uuid.to_string(),)).await
     }
 
     /// This method will connect to the remote device,
@@ -260,9 +272,15 @@ impl Device {
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
             if done_rx.await.is_err() {
-                let proxy = Proxy::new(SERVICE_NAME, dbus_path, TIMEOUT, &*connection);
-                let _: std::result::Result<(), dbus::Error> =
-                    proxy.method_call(INTERFACE, "CancelPairing", ()).await;
+                let proxy = ProxyBuilder::<Proxy>::new(&connection)
+                    .destination(SERVICE_NAME).unwrap()
+                    .path(dbus_path).unwrap()
+                    .interface(INTERFACE).unwrap()
+                    .build().await;
+                
+                if let Ok(proxy) = proxy {
+                     let _: std::result::Result<(), _> = proxy.call("CancelPairing", &()).await;
+                }
             }
         });
 
@@ -465,12 +483,12 @@ define_properties!(
         /// value.
         property(
             ManufacturerData, HashMap<u16, Vec<u8>>,
-            dbus: (INTERFACE, "ManufacturerData", HashMap<u16, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (INTERFACE, "ManufacturerData", HashMap<u16, zbus::zvariant::OwnedValue>, OPTIONAL),
             get: (manufacturer_data, m => {
                 let mut mt: HashMap<u16, Vec<u8>> = HashMap::new();
                 for (k, v) in m {
-                    if let Some(v) = dbus::arg::cast(&v.0).cloned() {
-                        mt.insert(*k, v);
+                    if let Ok(v) = v.try_into() {
+                        mt.insert(k, v);
                     }
                 }
                 mt
@@ -482,11 +500,11 @@ define_properties!(
         /// Keys are the UUIDs followed by its byte array value.
         property(
             ServiceData, HashMap<Uuid, Vec<u8>>,
-            dbus: (INTERFACE, "ServiceData", HashMap<String, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (INTERFACE, "ServiceData", HashMap<String, zbus::zvariant::OwnedValue>, OPTIONAL),
             get: (service_data, m => {
                 let mut mt: HashMap<Uuid, Vec<u8>> = HashMap::new();
                 for (k, v) in m {
-                    if let (Ok(k), Some(v)) = (k.parse(), dbus::arg::cast(&v.0).cloned()) {
+                    if let (Ok(k), Ok(v)) = (k.parse(), v.try_into()) {
                         mt.insert(k, v);
                     }
                 }
@@ -515,12 +533,12 @@ define_properties!(
         /// application are exposed.
         property(
             AdvertisingData, HashMap<u8, Vec<u8>>,
-            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, Variant<Box<dyn RefArg  + 'static>>>, OPTIONAL),
+            dbus: (INTERFACE, "AdvertisingData", HashMap<u8, zbus::zvariant::OwnedValue>, OPTIONAL),
             get: (advertising_data, m => {
                 let mut mt: HashMap<u8, Vec<u8>> = HashMap::new();
                 for (k, v) in m {
-                    if let Some(v) = dbus::arg::cast(&v.0).cloned() {
-                        mt.insert(*k, v);
+                    if let Ok(v) = v.try_into() {
+                        mt.insert(k, v);
                     }
                 }
                 mt

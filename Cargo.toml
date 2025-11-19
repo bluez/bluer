@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "bluer",
-    "bluer-tools",
+    # "bluer-tools",
 ]
 
 [patch.crates-io]

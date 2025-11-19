@@ -78,77 +78,77 @@ pub(crate) struct SessionInner {
     // pub monitor_token: IfaceToken<Arc<RegisteredMonitor>>,
     // #[cfg(feature = "rfcomm")]
     // pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
-    // pub single_sessions: Mutex<HashMap<dbus::Path<'static>, SingleSessionTerm>>,
-    // pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
+    pub single_sessions: Mutex<HashMap<zbus::zvariant::OwnedObjectPath, SingleSessionTerm>>,
+    pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
     // dbus_task: JoinHandle<connection::IOResourceError>,
-    // pub adapter_discovery_filter: Mutex<HashMap<String, DiscoveryFilter>>,
+    pub adapter_discovery_filter: Mutex<HashMap<String, crate::DiscoveryFilter>>,
 }
 
-// impl SessionInner {
-//     pub async fn single_session(
-//         &self, path: &dbus::Path<'static>, start_fn: impl Future<Output = Result<()>>,
-//         stop_fn: impl Future<Output = ()> + Send + 'static,
-//     ) -> Result<SingleSessionToken> {
-//         let mut single_sessions = self.single_sessions.lock().await;
+impl SessionInner {
+    pub async fn single_session(
+        &self, path: &zbus::zvariant::OwnedObjectPath, start_fn: impl Future<Output = Result<()>>,
+        stop_fn: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<SingleSessionToken> {
+        let mut single_sessions = self.single_sessions.lock().await;
 
-//         if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
-//             match term_tx_weak.upgrade() {
-//                 Some(term_tx) => {
-//                     log::trace!("Using existing single session for {}", &path);
-//                     return Ok(SingleSessionToken(term_tx));
-//                 }
-//                 None => {
-//                     log::trace!("Waiting for termination of previous single session for {}", &path);
-//                     let _ = termed_rx.await;
-//                     single_sessions.remove(path);
-//                 }
-//             }
-//         }
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
+            match term_tx_weak.upgrade() {
+                Some(term_tx) => {
+                    log::trace!("Using existing single session for {}", &path);
+                    return Ok(SingleSessionToken(term_tx));
+                }
+                None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
+                    let _ = termed_rx.await;
+                    single_sessions.remove(path);
+                }
+            }
+        }
 
-//         log::trace!("Starting new single session for {}", &path);
-//         start_fn.await?;
+        log::trace!("Starting new single session for {}", &path);
+        start_fn.await?;
 
-//         let (term_tx, term_rx) = oneshot::channel();
-//         let term_tx = Arc::new(term_tx);
-//         let (termed_tx, termed_rx) = oneshot::channel();
-//         single_sessions.insert(path.clone(), (Arc::downgrade(&term_tx), termed_rx));
+        let (term_tx, term_rx) = oneshot::channel();
+        let term_tx = Arc::new(term_tx);
+        let (termed_tx, termed_rx) = oneshot::channel();
+        single_sessions.insert(path.clone(), (Arc::downgrade(&term_tx), termed_rx));
 
-//         let path = path.clone();
-//         tokio::spawn(async move {
-//             let _ = term_rx.await;
-//             log::trace!("Terminating single session for {}", &path);
-//             stop_fn.await;
-//             let _ = termed_tx.send(());
-//             log::trace!("Terminated single session for {}", &path);
-//         });
+        let path = path.clone();
+        tokio::spawn(async move {
+            let _ = term_rx.await;
+            log::trace!("Terminating single session for {}", &path);
+            stop_fn.await;
+            let _ = termed_tx.send(());
+            log::trace!("Terminated single session for {}", &path);
+        });
 
-//         Ok(SingleSessionToken(term_tx))
-//     }
+        Ok(SingleSessionToken(term_tx))
+    }
 
-//     pub async fn is_single_session_active(&self, path: &dbus::Path<'static>) -> bool {
-//         let mut single_sessions = self.single_sessions.lock().await;
+    pub async fn is_single_session_active(&self, path: &zbus::zvariant::OwnedObjectPath) -> bool {
+        let mut single_sessions = self.single_sessions.lock().await;
 
-//         if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
-//             match term_tx_weak.upgrade() {
-//                 Some(_) => true,
-//                 None => {
-//                     log::trace!("Waiting for termination of previous single session for {}", &path);
-//                     let _ = termed_rx.await;
-//                     single_sessions.remove(path);
-//                     false
-//                 }
-//             }
-//         } else {
-//             false
-//         }
-//     }
+        if let Some((term_tx_weak, termed_rx)) = single_sessions.get_mut(path) {
+            match term_tx_weak.upgrade() {
+                Some(_) => true,
+                None => {
+                    log::trace!("Waiting for termination of previous single session for {}", &path);
+                    let _ = termed_rx.await;
+                    single_sessions.remove(path);
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
 
-//     pub async fn events(
-//         &self, path: dbus::Path<'static>, child_objects: bool,
-//     ) -> Result<mpsc::UnboundedReceiver<Event>> {
-//         Event::subscribe(&mut self.event_sub_tx.clone(), path, child_objects).await
-//     }
-// }
+    pub async fn events(
+        &self, path: zbus::zvariant::OwnedObjectPath, child_objects: bool,
+    ) -> Result<mpsc::UnboundedReceiver<Event>> {
+        Event::subscribe(&mut self.event_sub_tx.clone(), path, child_objects).await
+    }
+}
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -192,6 +192,9 @@ impl Session {
     /// This establishes a connection to the system Bluetooth daemon over D-Bus.
     pub async fn new() -> Result<Self> {
         let connection = Connection::system().await?;
+        let (event_sub_tx, event_sub_rx) = mpsc::channel(1);
+        Event::handle_connection(connection.clone(), event_sub_rx).await?;
+
         Ok(Self {
             inner: Arc::new(SessionInner {
                 connection,
@@ -213,10 +216,10 @@ impl Session {
                 // monitor_token: IfaceToken::new(),
                 // #[cfg(feature = "rfcomm")]
                 // profile_token: IfaceToken::new(),
-                // single_sessions: Mutex::new(HashMap::new()),
-                // event_sub_tx,
+                single_sessions: Mutex::new(HashMap::new()),
+                event_sub_tx,
                 // dbus_task,
-                // adapter_discovery_filter: Mutex::new(HashMap::new()),
+                adapter_discovery_filter: Mutex::new(HashMap::new()),
             }),
         })
     }
@@ -279,6 +282,16 @@ impl Session {
         Ok(names)
     }
 
+    /// Get the default adapter.
+    pub async fn default_adapter(&self) -> Result<Adapter> {
+        let names = self.adapter_names().await?;
+        if let Some(name) = names.first() {
+            self.adapter(name)
+        } else {
+            Err(Error::new(ErrorKind::NotFound))
+        }
+    }
+
     /// Create an interface to the Bluetooth adapter with the specified name.
     pub fn adapter(&self, adapter_name: &str) -> Result<Adapter> {
         Adapter::new(self.inner.clone(), adapter_name)
@@ -327,197 +340,197 @@ impl Session {
     }
 }
 
-// /// A D-Bus object or property event.
-// #[derive(Debug)]
-// pub(crate) enum Event {
-//     /// Object or object interfaces added.
-//     ObjectAdded { object: dbus::Path<'static>, interfaces: HashSet<String> },
-//     /// Object or object interfaces removed.
-//     ObjectRemoved { object: dbus::Path<'static>, interfaces: HashSet<String> },
-//     /// Properties changed.
-//     PropertiesChanged { object: dbus::Path<'static>, interface: String, changed: dbus::arg::PropMap },
-// }
+/// A D-Bus object or property event.
+#[derive(Debug, Clone)]
+pub(crate) enum Event {
+    /// Object or object interfaces added.
+    ObjectAdded { object: zbus::zvariant::OwnedObjectPath, interfaces: HashSet<String> },
+    /// Object or object interfaces removed.
+    ObjectRemoved { object: zbus::zvariant::OwnedObjectPath, interfaces: HashSet<String> },
+    /// Properties changed.
+    PropertiesChanged { object: zbus::zvariant::OwnedObjectPath, interface: String, changed: Arc<HashMap<String, zbus::zvariant::OwnedValue>> },
+}
 
-// impl Clone for Event {
-//     fn clone(&self) -> Self {
-//         match self {
-//             Self::ObjectAdded { object, interfaces } => {
-//                 Self::ObjectAdded { object: object.clone(), interfaces: interfaces.clone() }
-//             }
-//             Self::ObjectRemoved { object, interfaces } => {
-//                 Self::ObjectRemoved { object: object.clone(), interfaces: interfaces.clone() }
-//             }
-//             Self::PropertiesChanged { object, interface, changed } => Self::PropertiesChanged {
-//                 object: object.clone(),
-//                 interface: interface.clone(),
-//                 changed: changed.iter().map(|(k, v)| (k.clone(), Variant(v.0.box_clone()))).collect(),
-//             },
-//         }
-//     }
-// }
+/// D-Bus events subscription request.
+pub(crate) struct SubscriptionReq {
+    path: zbus::zvariant::OwnedObjectPath,
+    child_objects: bool,
+    tx: mpsc::UnboundedSender<Event>,
+    ready_tx: oneshot::Sender<()>,
+}
 
-// /// D-Bus events subscription request.
-// pub(crate) struct SubscriptionReq {
-//     path: dbus::Path<'static>,
-//     child_objects: bool,
-//     tx: mpsc::UnboundedSender<Event>,
-//     ready_tx: oneshot::Sender<()>,
-// }
+impl Event {
+    pub(crate) async fn subscribe(
+        tx: &mut mpsc::Sender<SubscriptionReq>,
+        path: zbus::zvariant::OwnedObjectPath,
+        child_objects: bool,
+    ) -> Result<mpsc::UnboundedReceiver<Event>> {
+        let (ready_tx, ready_rx) = oneshot::channel();
+        let (event_tx, event_rx) = mpsc::unbounded();
+        tx.send(SubscriptionReq {
+            path,
+            child_objects,
+            tx: event_tx,
+            ready_tx,
+        }).await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::Cancelled)))?;
+        ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::Cancelled)))?;
+        Ok(event_rx)
+    }
 
-// impl Event {
-//     /// Spawns a task that handles events for the specified connection.
-//     pub(crate) async fn handle_connection(
-//         connection: Arc<SyncConnection>, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
-//     ) -> Result<()> {
-//         use dbus::message::SignalArgs;
-//         lazy_static! {
-//             static ref SERVICE_NAME_BUS: BusName<'static> = BusName::new(SERVICE_NAME).unwrap();
-//             static ref SERVICE_NAME_REF: Option<&'static BusName<'static>> = Some(&SERVICE_NAME_BUS);
-//         }
+    /// Spawns a task that handles events for the specified connection.
+    pub(crate) async fn handle_connection(
+        connection: zbus::Connection, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
+    ) -> Result<()> {
+        use zbus::Message;
+        use zbus::message::Type;
+        use zbus::MessageStream;
 
-//         let (msg_tx, mut msg_rx) = mpsc::unbounded();
-//         let handle_msg = move |msg: Message| {
-//             let _ = msg_tx.unbounded_send(msg);
-//             true
-//         };
+        let object_manager_match = zbus::MatchRule::builder()
+            .msg_type(Type::Signal)
+            .sender(SERVICE_NAME)?
+            .interface("org.freedesktop.DBus.ObjectManager")?
+            .build();
+        
+        let properties_match = zbus::MatchRule::builder()
+            .msg_type(Type::Signal)
+            .sender(SERVICE_NAME)?
+            .interface("org.freedesktop.DBus.Properties")?
+            .member("PropertiesChanged")?
+            .build();
 
-//         let rule_add = ObjectManagerInterfacesAdded::match_rule(*SERVICE_NAME_REF, None);
-//         let msg_match_add = connection.add_match(rule_add).await?.msg_cb(handle_msg.clone());
+        let mut object_manager_stream = MessageStream::for_match_rule(
+            object_manager_match,
+            &connection,
+            None,
+        ).await?;
+        let mut properties_stream = MessageStream::for_match_rule(
+            properties_match,
+            &connection,
+            None,
+        ).await?;
 
-//         let rule_removed = ObjectManagerInterfacesRemoved::match_rule(*SERVICE_NAME_REF, None);
-//         let msg_match_removed = connection.add_match(rule_removed).await?.msg_cb(handle_msg.clone());
+        tokio::spawn(async move {
+            log::trace!("Starting event loop for {}", connection.unique_name().map(|n| n.as_str()).unwrap_or_default());
 
-//         let rule_prop = PropertiesPropertiesChanged::match_rule(*SERVICE_NAME_REF, None);
-//         let msg_match_prop = connection.add_match(rule_prop).await?.msg_cb(handle_msg.clone());
+            struct Subscription {
+                child_objects: bool,
+                tx: mpsc::UnboundedSender<Event>,
+            }
+            let mut subs: HashMap<String, Vec<Subscription>> = HashMap::new();
 
-//         tokio::spawn(async move {
-//             log::trace!("Starting event loop for {}", &connection.unique_name());
+            loop {
+                select! {
+                    msg_opt = object_manager_stream.next() => {
+                        if let Some(msg) = msg_opt {
+                            let msg = match msg {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    log::warn!("Error receiving ObjectManager signal: {}", e);
+                                    continue;
+                                }
+                            };
+                            
+                            let header = msg.header();
+                            let member = header.member();
+                            if let Some(member) = member {
+                                if member == "InterfacesAdded" {
+                                    if let Ok((object, interfaces)) = msg.body().deserialize::<(zbus::zvariant::OwnedObjectPath, HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>)>() {
+                                        // Check for parent path match for ObjectAdded event.
+                                        let parent = crate::parent_path(&object);
+                                        if let Some(parent_subs) = subs.get_mut(parent.as_str()) {
+                                            let evt = Self::ObjectAdded {
+                                                object: object.into(),
+                                                interfaces: interfaces.into_keys().collect(),
+                                            };
+                                            log::trace!("Event: {:?}", &evt);
+                                            parent_subs.retain(|sub| {
+                                                if sub.child_objects {
+                                                    sub.tx.unbounded_send(evt.clone()).is_ok()
+                                                } else {
+                                                    true
+                                                }
+                                            });
+                                            if parent_subs.is_empty() {
+                                                subs.remove(parent.as_str());
+                                            }
+                                        }
+                                    }
+                                } else if member == "InterfacesRemoved" {
+                                    if let Ok((object, interfaces)) = msg.body().deserialize::<(zbus::zvariant::OwnedObjectPath, Vec<String>)>() {
+                                        // Check for parent path match for ObjectRemoved event.
+                                        let parent = crate::parent_path(&object);
+                                        if let Some(parent_subs) = subs.get_mut(parent.as_str()) {
+                                            let evt = Self::ObjectRemoved {
+                                                object: object.into(),
+                                                interfaces: interfaces.into_iter().collect(),
+                                            };
+                                            log::trace!("Event: {:?}", &evt);
+                                            parent_subs.retain(|sub| {
+                                                if sub.child_objects {
+                                                    sub.tx.unbounded_send(evt.clone()).is_ok()
+                                                } else {
+                                                    true
+                                                }
+                                            });
+                                            if parent_subs.is_empty() {
+                                                subs.remove(parent.as_str());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    msg_opt = properties_stream.next() => {
+                        if let Some(msg) = msg_opt {
+                            let msg = match msg {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    log::warn!("Error receiving Properties signal: {}", e);
+                                    continue;
+                                }
+                            };
 
-//             struct Subscription {
-//                 child_objects: bool,
-//                 tx: mpsc::UnboundedSender<Event>,
-//             }
-//             let mut subs: HashMap<String, Vec<Subscription>> = HashMap::new();
-
-//             loop {
-//                 select! {
-//                     msg_opt = msg_rx.next() => {
-//                         match msg_opt {
-//                             Some(msg) => {
-//                                 // Properties changed.
-//                                 if let (Some(object), Some(PropertiesPropertiesChanged { interface_name, changed_properties, .. })) =
-//                                     (msg.path(), PropertiesPropertiesChanged::from_message(&msg))
-//                                 {
-//                                     // Check for direct path match for PropertiesChanged event.
-//                                     if let Some(path_subs) = subs.get_mut(&*object) {
-//                                         let evt = Self::PropertiesChanged {
-//                                             object: object.clone().into_static(),
-//                                             interface: interface_name,
-//                                             changed: changed_properties,
-//                                         };
-//                                         log::trace!("Event: {:?}", &evt);
-//                                         path_subs.retain(|sub| sub.tx.unbounded_send(evt.clone()).is_ok());
-//                                         if path_subs.is_empty() {
-//                                             subs.remove(&*object);
-//                                         }
-//                                     }
-//                                 }
-
-//                                 // Objects added.
-//                                 if let Some(ObjectManagerInterfacesAdded { object, interfaces }) =
-//                                     ObjectManagerInterfacesAdded::from_message(&msg)
-//                                 {
-//                                     // Check for parent path match for ObjectAdded event.
-//                                     let parent = parent_path(&object);
-//                                     if let Some(parent_subs) = subs.get_mut(&*parent) {
-//                                         let evt = Self::ObjectAdded {
-//                                             object,
-//                                             interfaces: interfaces.into_keys().collect(),
-//                                         };
-//                                         log::trace!("Event: {:?}", &evt);
-//                                         parent_subs.retain(|sub| {
-//                                             if sub.child_objects {
-//                                                 sub.tx.unbounded_send(evt.clone()).is_ok()
-//                                             } else {
-//                                                 true
-//                                             }
-//                                         });
-//                                         if parent_subs.is_empty() {
-//                                             subs.remove(&*parent);
-//                                         }
-//                                     }
-//                                 }
-
-//                                 // Object removed.
-//                                 if let Some(ObjectManagerInterfacesRemoved { object, interfaces, .. }) =
-//                                     ObjectManagerInterfacesRemoved::from_message(&msg)
-//                                 {
-//                                     // Remove subscriptions for removed object.
-//                                     // This ends the event streams of the subscriptions.
-//                                     if subs.remove(&*object).is_some() {
-//                                         log::trace!("Event subscription for {} ended because object was removed", &object);
-//                                     }
-
-//                                     // Check for parent path match for ObjectRemoved event.
-//                                     let parent = parent_path(&object);
-//                                     if let Some(parent_subs) = subs.get_mut(&*parent) {
-//                                         let evt = Self::ObjectRemoved { object, interfaces: interfaces.into_iter().collect() };
-//                                         log::trace!("Event: {:?}", &evt);
-//                                         parent_subs.retain(|sub| {
-//                                             if sub.child_objects {
-//                                                 sub.tx.unbounded_send(evt.clone()).is_ok()
-//                                             } else {
-//                                                 true
-//                                             }
-//                                         });
-//                                         if parent_subs.is_empty() {
-//                                             subs.remove(&*parent);
-//                                         }
-//                                     }
-//                                 }
-//                             },
-//                             None => break,
-//                         }
-//                     },
-//                     sub_opt = sub_rx.next() => {
-//                         match sub_opt {
-//                             Some(SubscriptionReq { path, child_objects, tx, ready_tx }) => {
-//                                 log::trace!("Adding event subscription for {} with child_objects={:?}", &path, &child_objects);
-//                                 let _ = ready_tx.send(());
-//                                 let path_subs = subs.entry(path.to_string()).or_default();
-//                                 path_subs.push(Subscription {
-//                                     child_objects, tx
-//                                 });
-//                             }
-//                             None => break,
-//                         }
-//                     }
-//                 }
-//             }
-
-//             let _ = connection.remove_match(msg_match_add.token()).await;
-//             let _ = connection.remove_match(msg_match_removed.token()).await;
-//             let _ = connection.remove_match(msg_match_prop.token()).await;
-//             log::trace!("Terminated event loop for {}", &connection.unique_name());
-//         });
-
-//         Ok(())
-//     }
-
-//     /// Subscribe to D-Bus events for specified path.
-//     ///
-//     /// If `child_objects` is [true] events about *direct* child objects being added and removed
-//     /// will also be delivered.
-//     pub(crate) async fn subscribe(
-//         sub_tx: &mut mpsc::Sender<SubscriptionReq>, path: dbus::Path<'static>, child_objects: bool,
-//     ) -> Result<mpsc::UnboundedReceiver<Event>> {
-//         let (tx, rx) = mpsc::unbounded();
-//         let (ready_tx, ready_rx) = oneshot::channel();
-//         sub_tx
-//             .send(SubscriptionReq { path, child_objects, tx, ready_tx })
-//             .await
-//             .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
-//         ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::DBusConnectionLost)))?;
-//         Ok(rx)
-//     }
-// }
+                            if let Ok((interface_name, changed_properties, _invalidated_properties)) = msg.body().deserialize::<(String, HashMap<String, zbus::zvariant::OwnedValue>, Vec<String>)>() {
+                                if let Some(object) = msg.header().path() {
+                                    let object_str = object.as_str();
+                                    // Check for direct path match for PropertiesChanged event.
+                                    if let Some(path_subs) = subs.get_mut(object_str) {
+                                        let evt = Self::PropertiesChanged {
+                                            object: object.clone().into(),
+                                            interface: interface_name,
+                                            changed: Arc::new(changed_properties),
+                                        };
+                                        log::trace!("Event: {:?}", &evt);
+                                        path_subs.retain(|sub| sub.tx.unbounded_send(evt.clone()).is_ok());
+                                        if path_subs.is_empty() {
+                                            subs.remove(object_str);
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    sub_req_opt = sub_rx.next() => {
+                        match sub_req_opt {
+                            Some(sub_req) => {
+                                let sub = Subscription {
+                                    child_objects: sub_req.child_objects,
+                                    tx: sub_req.tx,
+                                };
+                                subs.entry(sub_req.path.to_string()).or_default().push(sub);
+                                let _ = sub_req.ready_tx.send(());
+                            }
+                            None => break,
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+}

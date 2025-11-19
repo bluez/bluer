@@ -25,7 +25,7 @@ exclude = [
 ]
 
 [features]
-default = []
+default = ["bluetoothd", "id", "l2cap", "serde"]
 full = ["bluetoothd", "id", "l2cap", "rfcomm", "mesh", "serde"]
 bluetoothd = [
     "zbus",

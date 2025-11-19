@@ -95,6 +95,10 @@ compile_error!("BlueR only supports the Linux operating system.");
 #[cfg(feature = "bluetoothd")]
 pub use zbus;
 
+// mod gatt;
+// mod monitor;
+// mod device;
+
 #[cfg(feature = "bluetoothd")]
 use zbus::{
     proxy::Proxy,
@@ -234,6 +238,40 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 // }
 
 #[cfg(feature = "bluetoothd")]
+macro_rules! zbus_interface {
+    ($interface:expr) => {
+        #[allow(dead_code)]
+        async fn get_property<R>(&self, name: &str) -> crate::Result<R>
+        where
+            R: TryFrom<zbus::zvariant::OwnedValue>,
+            R::Error: Into<zbus::Error>,
+        {
+            let proxy = zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            Ok(proxy.get_property(name).await?)
+        }
+
+        #[allow(dead_code)]
+        async fn set_property<T: 'static>(&self, name: &str, value: T) -> crate::Result<()>
+        where
+            T: Into<$crate::zbus::zvariant::Value<'static>>,
+        {
+            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            Ok(proxy.set_property(name, value).await?)
+        }
+
+        #[allow(dead_code)]
+        async fn call_method<B, R>(&self, name: &str, body: &B) -> crate::Result<R>
+        where
+            B: serde::Serialize + zbus::zvariant::DynamicType,
+            R: serde::de::DeserializeOwned + zbus::zvariant::Type,
+        {
+            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            Ok(proxy.call(name, body).await?)
+        }
+    };
+}
+
+#[cfg(feature = "bluetoothd")]
 #[macro_export]
 macro_rules! define_properties {
     (@get
@@ -363,12 +401,14 @@ macro_rules! define_properties {
             #[allow(dead_code)]
             fn from_variant_property(
                 name: &str,
-                var_value: $crate::zbus::zvariant::OwnedValue
+                var_value: &$crate::zbus::zvariant::OwnedValue
             ) -> $crate::Result<Option<Self>> {
+                use std::ops::Deref;
                 match name {
                     $(
                         $dbus_name => {
-                            let val_res: $crate::zbus::Result<$dbus_type> = var_value.try_into().map_err(Into::into);
+                            let value: $crate::zbus::zvariant::OwnedValue = var_value.try_clone().map_err(|e| $crate::zbus::Error::Variant(e))?;
+                            let val_res: $crate::zbus::Result<$dbus_type> = <$dbus_type>::try_from(value).map_err(Into::into);
                             match val_res {
                                 Ok(v) => {
                                     let $dbus_value = v;
@@ -384,9 +424,9 @@ macro_rules! define_properties {
             }
 
             #[allow(dead_code)]
-            fn from_prop_map(prop_map: std::collections::HashMap<String, $crate::zbus::zvariant::OwnedValue>) -> Vec<Self> {
-                prop_map.into_iter().filter_map(|(name, value)|
-                    Self::from_variant_property(&name, value).ok().flatten()
+            fn from_prop_map(prop_map: &std::collections::HashMap<String, $crate::zbus::zvariant::OwnedValue>) -> Vec<Self> {
+                prop_map.iter().filter_map(|(name, value)|
+                    Self::from_variant_property(name, value).ok().flatten()
                 ).collect()
             }
         }
@@ -531,8 +571,8 @@ pub mod adv;
 // #[cfg(feature = "bluetoothd")]
 // #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 // pub mod agent;
-// #[cfg(feature = "bluetoothd")]
-// mod device;
+#[cfg(feature = "bluetoothd")]
+pub mod device;
 // #[cfg(feature = "bluetoothd")]
 // #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 // pub mod gatt;
@@ -553,7 +593,7 @@ mod session;
 mod sys;
 
 #[cfg(feature = "bluetoothd")]
-pub use crate::{adapter::*, session::*};
+pub use crate::{adapter::*, session::*, device::*};
 
 #[doc(no_inline)]
 pub use uuid::Uuid;
@@ -687,6 +727,8 @@ pub enum InternalErrorKind {
     MissingKey(String),
     /// join error
     JoinError,
+    /// cancelled
+    Cancelled,
     /// IO error {0:?}
     // The error kind is not preserved during serialization.
     #[cfg_attr(feature = "serde", serde(with = "io_errorkind_serde"))]
@@ -1045,14 +1087,27 @@ impl FromStr for Modalias {
     }
 }
 
-// /// Gets all D-Bus objects from the BlueZ service.
-// #[cfg(feature = "bluetoothd")]
-// async fn all_dbus_objects(
-//     connection: &SyncConnection,
-// ) -> Result<HashMap<Path<'static>, HashMap<String, PropMap>>> {
-//     let p = Proxy::new(SERVICE_NAME, "/", TIMEOUT, connection);
-//     Ok(p.get_managed_objects().await?)
-// }
+/// Gets all D-Bus objects from the BlueZ service.
+#[cfg(feature = "bluetoothd")]
+pub(crate) async fn all_dbus_objects(
+    connection: &zbus::Connection,
+) -> Result<std::collections::HashMap<zbus::zvariant::OwnedObjectPath, std::collections::HashMap<String, std::collections::HashMap<String, zbus::zvariant::OwnedValue>>>> {
+    let object_manager = zbus::fdo::ObjectManagerProxy::builder(connection)
+        .destination(SERVICE_NAME)?
+        .path("/")?
+        .build()
+        .await?;
+    let objects = object_manager.get_managed_objects().await?;
+    let mut res = std::collections::HashMap::new();
+    for (path, interfaces) in objects {
+        let mut intfs = std::collections::HashMap::new();
+        for (interface, props) in interfaces {
+            intfs.insert(interface.to_string(), props);
+        }
+        res.insert(path, intfs);
+    }
+    Ok(res)
+}
 
 /// Read value from D-Bus dictionary.
 #[cfg(feature = "bluetoothd")]
@@ -1072,17 +1127,17 @@ where
     })
 }
 
-// /// Returns the parent path of the specified D-Bus path.
-// #[cfg(feature = "bluetoothd")]
-// pub(crate) fn parent_path<'a>(path: &Path<'a>) -> Path<'a> {
-//     let mut comps: Vec<_> = path.split('/').collect();
-//     comps.pop();
-//     if comps.is_empty() {
-//         Path::new("/").unwrap()
-//     } else {
-//         Path::new(comps.join("/")).unwrap()
-//     }
-// }
+/// Returns the parent path of the specified D-Bus path.
+#[cfg(feature = "bluetoothd")]
+pub(crate) fn parent_path(path: &zbus::zvariant::ObjectPath) -> zbus::zvariant::OwnedObjectPath {
+    let path_str = path.as_str();
+    let parent_str = match path_str.rfind('/') {
+        Some(0) => "/",
+        Some(idx) => &path_str[..idx],
+        None => "/",
+    };
+    zbus::zvariant::ObjectPath::try_from(parent_str).unwrap().into()
+}
 
 // /// Result of calling one of our D-Bus methods.
 // #[cfg(feature = "bluetoothd")]
