@@ -1,7 +1,9 @@
 //! Bluetooth authorization agent.
 
-use dbus::nonblock::Proxy;
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
+use zbus::{
+    zvariant::{ObjectPath, OwnedObjectPath},
+    Proxy,
+};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
 use strum::IntoStaticStr;
@@ -11,12 +13,11 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{method_call, Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME, TIMEOUT};
+use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
 
-pub(crate) const INTERFACE: &str = "org.bluez.Agent1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AgentManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const AGENT_PREFIX: &str = publish_path!("agent/");
+pub(crate) const AGENT_PREFIX: &str = "/org/bluez/agent/";
 
 /// Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
@@ -37,10 +38,10 @@ impl Default for ReqError {
     }
 }
 
-impl From<ReqError> for dbus::MethodErr {
+impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
         let name: &'static str = err.into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+        zbus::fdo::Error::Failed(format!("{}.{}", ERR_PREFIX, name))
     }
 }
 
@@ -317,7 +318,7 @@ impl RegisteredAgent {
         }
     }
 
-    fn parse_device_path(device: &dbus::Path<'static>) -> ReqResult<(String, Address)> {
+    fn parse_device_path(device: &ObjectPath) -> ReqResult<(String, Address)> {
         match Device::parse_dbus_path(device) {
             Some((adapter, addr)) => Ok((adapter.to_string(), addr)),
             None => {
@@ -327,169 +328,122 @@ impl RegisteredAgent {
         }
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            ib.method_with_cr_async("Cancel", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                    if let Some(cancel_tx) = reg.cancel.lock().await.take() {
-                        let _ = cancel_tx.send(());
-                    }
-                    Ok(())
-                })
-            });
-            ib.method_with_cr_async(
-                "RequestPinCode",
-                ("device",),
-                ("value",),
-                |ctx, cr, (device,): (dbus::Path<'static>,)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        Ok((reg
-                            .call_with_cancel(&reg.a.request_pin_code, RequestPinCode { adapter, device })
-                            .await?,))
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "DisplayPinCode",
-                ("device", "pincode"),
-                (),
-                |ctx, cr, (device, pincode): (dbus::Path<'static>, String)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        reg.call(
-                            &reg.a.display_pin_code,
-                            DisplayPinCode { adapter, device, pincode, cancel: reg.get_cancel().await },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "RequestPasskey",
-                ("device",),
-                ("value",),
-                |ctx, cr, (device,): (dbus::Path<'static>,)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        Ok((reg
-                            .call_with_cancel(&reg.a.request_passkey, RequestPasskey { adapter, device })
-                            .await?,))
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "DisplayPasskey",
-                ("device", "passkey", "entered"),
-                (),
-                |ctx, cr, (device, passkey, entered): (dbus::Path<'static>, u32, u16)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        reg.call(
-                            &reg.a.display_passkey,
-                            DisplayPasskey { adapter, device, passkey, entered, cancel: reg.get_cancel().await },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "RequestConfirmation",
-                ("device", "passkey"),
-                (),
-                |ctx, cr, (device, passkey): (dbus::Path<'static>, u32)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        reg.call_with_cancel(
-                            &reg.a.request_confirmation,
-                            RequestConfirmation { adapter, device, passkey },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "RequestAuthorization",
-                ("device",),
-                (),
-                |ctx, cr, (device,): (dbus::Path<'static>,)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        reg.call_with_cancel(
-                            &reg.a.request_authorization,
-                            RequestAuthorization { adapter, device },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "AuthorizeService",
-                ("device", "uuid"),
-                (),
-                |ctx, cr, (device, uuid): (dbus::Path<'static>, String)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let (adapter, device) = Self::parse_device_path(&device)?;
-                        let service: Uuid = match uuid.parse() {
-                            Ok(service) => service,
-                            Err(_) => {
-                                log::error!("Invalid UUID: {}", &uuid);
-                                return Err(ReqError::Rejected.into());
-                            }
-                        };
-                        reg.call_with_cancel(
-                            &reg.a.authorize_service,
-                            AuthorizeService { adapter, device, service },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-        })
-    }
-
     pub(crate) async fn register(self, inner: Arc<SessionInner>) -> Result<AgentHandle> {
-        let name = dbus::Path::new(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
+        let name = OwnedObjectPath::try_from(format!("{}{}", AGENT_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         let capability = self.a.capability();
         let request_default = self.a.request_default;
         log::trace!("Publishing agent at {} with capability {}", &name, &capability);
 
-        {
-            let mut cr = inner.crossroads.lock().await;
-            cr.insert(name.clone(), &[inner.agent_token], Arc::new(self));
-        }
+        inner.connection.object_server().at(name.clone(), self).await?;
 
         log::trace!("Registering agent at {}", &name);
-        let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, inner.connection.clone());
-        let () = proxy.method_call(MANAGER_INTERFACE, "RegisterAgent", (name.clone(), capability)).await?;
-        let connection = inner.connection.clone();
+        let proxy = Proxy::new(&inner.connection, SERVICE_NAME, MANAGER_PATH, MANAGER_INTERFACE).await?;
+        let () = proxy.call("RegisterAgent", &(name.clone(), capability)).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();
+        let connection = inner.connection.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering agent at {}", &unreg_name);
-            let _: std::result::Result<(), dbus::Error> =
-                proxy.method_call(MANAGER_INTERFACE, "UnregisterAgent", (unreg_name.clone(),)).await;
+            let proxy = Proxy::new(&connection, SERVICE_NAME, MANAGER_PATH, MANAGER_INTERFACE).await;
+            if let Ok(proxy) = proxy {
+                let _: std::result::Result<(), zbus::Error> =
+                    proxy.call("UnregisterAgent", &(unreg_name.clone(),)).await;
+            }
 
             log::trace!("Unpublishing agent at {}", &unreg_name);
-            let mut cr = inner.crossroads.lock().await;
-            let _: Option<Self> = cr.remove(&unreg_name);
+            let _ = connection.object_server().remove::<RegisteredAgent, _>(&unreg_name).await;
         });
 
         if request_default {
             log::trace!("Requesting default agent for {}", &name);
-            let proxy = Proxy::new(SERVICE_NAME, MANAGER_PATH, TIMEOUT, connection);
-            let () = proxy.method_call(MANAGER_INTERFACE, "RequestDefaultAgent", (name.clone(),)).await?;
+            let () = proxy.call("RequestDefaultAgent", &(name.clone(),)).await?;
         }
 
         Ok(AgentHandle { name, _drop_tx: drop_tx })
+    }
+}
+
+#[zbus::interface(name = "org.bluez.Agent1")]
+impl RegisteredAgent {
+    async fn release(&self) {
+        log::trace!("Agent released");
+    }
+
+    async fn cancel(&self) -> zbus::fdo::Result<()> {
+        if let Some(cancel_tx) = self.cancel.lock().await.take() {
+            let _ = cancel_tx.send(());
+        }
+        Ok(())
+    }
+
+    async fn request_pin_code(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<String> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_pin_code, RequestPinCode { adapter, device }).await.map_err(Into::into)
+    }
+
+    async fn display_pin_code(&self, device: ObjectPath<'_>, pincode: String) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call(
+            &self.a.display_pin_code,
+            DisplayPinCode { adapter, device, pincode, cancel: self.get_cancel().await },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn request_passkey(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<u32> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_passkey, RequestPasskey { adapter, device }).await.map_err(Into::into)
+    }
+
+    async fn display_passkey(&self, device: ObjectPath<'_>, passkey: u32, entered: u16) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call(
+            &self.a.display_passkey,
+            DisplayPasskey { adapter, device, passkey, entered, cancel: self.get_cancel().await },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn request_confirmation(&self, device: ObjectPath<'_>, passkey: u32) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(
+            &self.a.request_confirmation,
+            RequestConfirmation { adapter, device, passkey },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn request_authorization(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(
+            &self.a.request_authorization,
+            RequestAuthorization { adapter, device },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn authorize_service(&self, device: ObjectPath<'_>, uuid: String) -> zbus::fdo::Result<()> {
+        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let service: Uuid = match uuid.parse() {
+            Ok(service) => service,
+            Err(_) => {
+                log::error!("Invalid UUID: {}", &uuid);
+                return Err(zbus::fdo::Error::Failed("Invalid UUID".to_string()));
+            }
+        };
+        self.call_with_cancel(
+            &self.a.authorize_service,
+            AuthorizeService { adapter, device, service },
+        )
+        .await
+        .map_err(Into::into)
     }
 }
 
@@ -498,7 +452,7 @@ impl RegisteredAgent {
 /// Drop to unregister agent.
 #[must_use = "AgentHandle must be held for agent to be registered"]
 pub struct AgentHandle {
-    name: dbus::Path<'static>,
+    name: OwnedObjectPath,
     _drop_tx: oneshot::Sender<()>,
 }
 

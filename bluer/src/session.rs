@@ -24,21 +24,17 @@ use futures::{
     lock::Mutex,
     Future, SinkExt, Stream, StreamExt,
 };
-use lazy_static::lazy_static;
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Debug, Formatter},
     sync::{Arc, Weak},
 };
-use tokio::{
-    select,
-    task::{spawn_blocking, JoinHandle},
-};
+use tokio::select;
 
 use crate::{
     // adapter,
     // adv::Advertisement,
-    // agent::{Agent, AgentHandle, RegisteredAgent},
+    agent::{Agent, AgentHandle, RegisteredAgent},
     // all_dbus_objects, gatt,
     // monitor::RegisteredMonitor,
     // parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
@@ -317,17 +313,29 @@ impl Session {
     // /// an agent. If an application chooses not to
     // /// register an agent, the default agent is used. This
     // /// is in most cases a good idea. Only applications
-    // /// like a pairing wizard should register their own
-    // // agent.
-    // //
-    // // An application can only register one agent. Multiple
-    // // agents per application are not supported.
-    // //
-    // // Drop the returned [AgentHandle] to unregister the agent.
-    // pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
-    //     let reg_agent = RegisteredAgent::new(agent);
-    //     reg_agent.register(self.inner.clone()).await
-    // }
+    /// Register a [Bluetooth agent](Agent).
+    ///
+    /// This registers a Bluetooth agent that handles authentication
+    /// requests (pairing) from the Bluetooth daemon.
+    ///
+    /// The agent is registered with the Bluetooth daemon and will
+    /// receive requests for all adapters.
+    ///
+    /// Applications that want to handle pairing requests or provide
+    /// a PIN code or passkey should register an agent.
+    ///
+    /// Applications that just want to initiate a pairing process
+    /// like a pairing wizard should register their own
+    /// agent.
+    ///
+    /// An application can only register one agent. Multiple
+    /// agents per application are not supported.
+    ///
+    /// Drop the returned [AgentHandle] to unregister the agent.
+    pub async fn register_agent(&self, agent: Agent) -> Result<AgentHandle> {
+        let reg_agent = RegisteredAgent::new(agent);
+        reg_agent.register(self.inner.clone()).await
+    }
 
     // TODO: re-enable when rfcomm module is ported
 // This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
@@ -386,7 +394,6 @@ impl Event {
     pub(crate) async fn handle_connection(
         connection: zbus::Connection, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
     ) -> Result<()> {
-        use zbus::Message;
         use zbus::message::Type;
         use zbus::MessageStream;
 
