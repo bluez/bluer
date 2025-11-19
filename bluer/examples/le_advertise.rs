@@ -20,6 +20,7 @@ async fn main() -> bluer::Result<()> {
         service_uuids: vec!["123e4567-e89b-12d3-a456-426614174000".parse().unwrap()].into_iter().collect(),
         discoverable: Some(true),
         local_name: Some("le_advertise".to_string()),
+        manufacturer_data: vec![(0xffff, vec![0x00, 0x01, 0x02, 0x03])].into_iter().collect(),
         ..Default::default()
     };
     println!("{:?}", &le_advertisement);
