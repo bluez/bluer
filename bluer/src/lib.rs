@@ -573,9 +573,9 @@ pub mod adv;
 pub mod agent;
 #[cfg(feature = "bluetoothd")]
 pub mod device;
-// #[cfg(feature = "bluetoothd")]
-// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-// pub mod gatt;
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
+pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;

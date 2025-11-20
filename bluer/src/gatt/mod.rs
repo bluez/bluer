@@ -1,6 +1,5 @@
 //! Local and remote GATT services.
 
-use dbus::arg::OwnedFd;
 use futures::ready;
 use libc::{AF_LOCAL, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_SEQPACKET};
 use pin_project::pin_project;
@@ -15,10 +14,11 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::UnixDatagram,
 };
+use zbus::zvariant::OwnedFd;
 
 use crate::Address;
 
-pub mod local;
+// pub mod local;
 pub mod remote;
 
 pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";
@@ -346,7 +346,7 @@ pub(crate) fn make_socket_pair(non_block: bool) -> std::io::Result<(OwnedFd, Uni
     }
     let [fd1, fd2] = sv;
 
-    let fd1 = unsafe { OwnedFd::new(fd1) };
+    let fd1 = zbus::zvariant::OwnedFd::from(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd1) });
     let us = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd2) };
 
     us.set_nonblocking(true)?;

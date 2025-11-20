@@ -14,10 +14,10 @@ use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
 
 use crate::{
-    // all_dbus_objects,
-    // gatt::{self, remote::Service, SERVICE_INTERFACE},
+    all_dbus_objects,
+    gatt::{self, remote::Service, SERVICE_INTERFACE},
     Adapter, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
-    SERVICE_NAME, // TIMEOUT,
+    SERVICE_NAME, TIMEOUT,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";
@@ -106,7 +106,6 @@ impl Device {
         Ok(stream)
     }
 
-    /*
     /// Wait until remote GATT services are resolved.
     async fn wait_for_services_resolved(&self) -> Result<()> {
         let mut changes = self.events().await?.fuse();
@@ -166,7 +165,6 @@ impl Device {
     pub async fn service(&self, service_id: u16) -> Result<gatt::remote::Service> {
         gatt::remote::Service::new(self.inner.clone(), self.adapter_name.clone(), self.address, service_id)
     }
-    */
 
     async fn call_method<B, R>(&self, method: &str, body: B) -> Result<R>
     where

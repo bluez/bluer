@@ -1,12 +1,11 @@
 //! Consume remote GATT services of connected devices.
 
-use dbus::{
-    arg::{OwnedFd, PropMap, RefArg, Variant},
-    nonblock::{Proxy, SyncConnection},
-    Path,
+use zbus::{
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
+    Proxy,
 };
 use futures::{Stream, StreamExt};
-use std::{fmt, os::unix::prelude::FromRawFd, sync::Arc};
+use std::{collections::HashMap, fmt, os::unix::prelude::{FromRawFd, IntoRawFd}, sync::Arc};
 use tokio::net::UnixDatagram;
 use uuid::Uuid;
 
@@ -27,7 +26,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Service {
     inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
+    dbus_path: OwnedObjectPath,
     adapter_name: Arc<String>,
     device_address: Address,
     id: u16,
@@ -58,16 +57,16 @@ impl Service {
         })
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
+    async fn proxy(&self) -> Result<Proxy<'_>> {
+        Ok(Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, SERVICE_INTERFACE).await?)
     }
 
-    pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<Path<'static>> {
+    pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<OwnedObjectPath> {
         let device_path = Device::dbus_path(adapter_name, device_address)?;
-        Ok(Path::new(format!("{device_path}/service{id:04x}")).unwrap())
+        Ok(OwnedObjectPath::try_from(format!("{device_path}/service{id:04x}")).unwrap())
     }
 
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a OwnedObjectPath) -> Option<((&'a str, Address, u16), &'a str)> {
         match Device::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address), p)) => match p.strip_prefix("/service") {
                 Some(p) => {
@@ -83,7 +82,7 @@ impl Service {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<(&'a str, Address, u16)> {
+    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -137,8 +136,7 @@ impl Service {
         )
     }
 
-    dbus_interface!();
-    dbus_default_interface!(SERVICE_INTERFACE);
+    zbus_interface!(SERVICE_INTERFACE);
 }
 
 define_properties!(
@@ -165,7 +163,7 @@ define_properties!(
         /// Service ids of included services of this service.
         property(
             Includes, Vec<u16>,
-            dbus: (SERVICE_INTERFACE, "Includes", Vec<Path>, MANDATORY),
+            dbus: (SERVICE_INTERFACE, "Includes", Vec<OwnedObjectPath>, MANDATORY),
             get: (includes, v => {
                 v.iter().filter_map(|path| Service::parse_dbus_path(path).map(|(_, _, service_id)| service_id)).collect()
             }),
@@ -181,7 +179,7 @@ define_properties!(
 #[derive(Clone)]
 pub struct Characteristic {
     inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
+    dbus_path: OwnedObjectPath,
     adapter_name: Arc<String>,
     device_address: Address,
     service_id: u16,
@@ -215,19 +213,19 @@ impl Characteristic {
         })
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
+    async fn proxy(&self) -> Result<Proxy<'_>> {
+        Ok(Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, CHARACTERISTIC_INTERFACE).await?)
     }
 
     pub(crate) fn dbus_path(
         adapter_name: &str, device_address: Address, service_id: u16, id: u16,
-    ) -> Result<Path<'static>> {
+    ) -> Result<OwnedObjectPath> {
         let service_path = Service::dbus_path(adapter_name, device_address, service_id)?;
-        Ok(Path::new(format!("{service_path}/char{id:04x}")).unwrap())
+        Ok(OwnedObjectPath::try_from(format!("{service_path}/char{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a Path) -> Option<((&'a str, Address, u16, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a OwnedObjectPath) -> Option<((&'a str, Address, u16, u16), &'a str)> {
         match Service::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("/char") {
                 Some(p) => {
@@ -243,7 +241,7 @@ impl Characteristic {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<(&'a str, Address, u16, u16)> {
+    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -317,7 +315,8 @@ impl Characteristic {
     ///
     /// Takes extended options for the read operation.
     pub async fn read_ext(&self, req: &CharacteristicReadRequest) -> Result<Vec<u8>> {
-        let (value,): (Vec<u8>,) = self.call_method("ReadValue", (req.to_dict(),)).await?;
+        let proxy = self.proxy().await?;
+        let (value,): (Vec<u8>,) = proxy.call("ReadValue", &(req.to_dict(),)).await?;
         Ok(value)
     }
 
@@ -330,7 +329,8 @@ impl Characteristic {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &CharacteristicWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        let proxy = self.proxy().await?;
+        let () = proxy.call("WriteValue", &(value, req.to_dict())).await?;
         Ok(())
     }
 
@@ -349,9 +349,11 @@ impl Characteristic {
     /// that the file descriptor is closed during
     /// reconnections as the MTU has to be renegotiated.
     pub async fn write_io(&self) -> Result<CharacteristicWriter> {
-        let options = PropMap::new();
-        let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireWrite", (options,)).await?;
-        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
+        let options: HashMap<String, OwnedValue> = HashMap::new();
+        let proxy = self.proxy().await?;
+        let (fd, mtu): (OwnedFd, u16) = proxy.call("AcquireWrite", &(options,)).await?;
+        let fd: std::os::unix::io::OwnedFd = fd.into();
+        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_raw_fd()) };
         socket.set_nonblocking(true)?;
         let socket = UnixDatagram::from_std(socket)?;
         let mtu = mtu_workaround(mtu.into());
@@ -374,7 +376,7 @@ impl Characteristic {
             let _token = &token;
             async move {
                 if let Event::PropertiesChanged { changed, .. } = evt {
-                    for property in CharacteristicProperty::from_prop_map(changed) {
+                    for property in CharacteristicProperty::from_prop_map(&changed) {
                         if let CharacteristicProperty::CachedValue(value) = property {
                             return Some(value);
                         }
@@ -389,19 +391,23 @@ impl Characteristic {
     async fn notify_session(&self) -> Result<SingleSessionToken> {
         let dbus_path = self.dbus_path.clone();
         let connection = self.inner.connection.clone();
+        let dbus_path2 = dbus_path.clone();
+        let connection2 = connection.clone();
         self.inner
             .single_session(
                 &self.dbus_path,
                 async move {
-                    let () = self.call_method("StartNotify", ()).await?;
+                    let proxy = Proxy::new(&connection, SERVICE_NAME, &dbus_path, CHARACTERISTIC_INTERFACE).await?;
+                    let () = proxy.call("StartNotify", &()).await?;
                     Ok(())
                 },
                 async move {
-                    log::trace!("{}: {}.StopNotify ()", &dbus_path, SERVICE_NAME);
-                    let proxy = Proxy::new(SERVICE_NAME, &dbus_path, TIMEOUT, &*connection);
-                    let result: std::result::Result<(), dbus::Error> =
-                        proxy.method_call(CHARACTERISTIC_INTERFACE, "StopNotify", ()).await;
-                    log::trace!("{}: {}.StopNotify () -> {:?}", &dbus_path, SERVICE_NAME, &result);
+                    log::trace!("{}: {}.StopNotify ()", &dbus_path2, SERVICE_NAME);
+                    let proxy = Proxy::new(&connection2, SERVICE_NAME, &dbus_path2, CHARACTERISTIC_INTERFACE).await;
+                    if let Ok(proxy) = proxy {
+                        let result: zbus::Result<()> = proxy.call("StopNotify", &()).await;
+                        log::trace!("{}: {}.StopNotify () -> {:?}", &dbus_path2, SERVICE_NAME, &result);
+                    }
                 },
             )
             .await
@@ -429,9 +435,11 @@ impl Characteristic {
     /// that the file descriptor is closed during
     /// reconnections as the MTU has to be renegotiated.
     pub async fn notify_io(&self) -> Result<CharacteristicReader> {
-        let options = PropMap::new();
-        let (fd, mtu): (OwnedFd, u16) = self.call_method("AcquireNotify", (options,)).await?;
-        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_fd()) };
+        let options: HashMap<String, OwnedValue> = HashMap::new();
+        let proxy = self.proxy().await?;
+        let (fd, mtu): (OwnedFd, u16) = proxy.call("AcquireNotify", &(options,)).await?;
+        let fd: std::os::unix::io::OwnedFd = fd.into();
+        let socket = unsafe { std::os::unix::net::UnixDatagram::from_raw_fd(fd.into_raw_fd()) };
         socket.set_nonblocking(true)?;
         let socket = UnixDatagram::from_std(socket)?;
         Ok(CharacteristicReader {
@@ -443,8 +451,7 @@ impl Characteristic {
         })
     }
 
-    dbus_interface!();
-    dbus_default_interface!(CHARACTERISTIC_INTERFACE);
+    zbus_interface!(CHARACTERISTIC_INTERFACE);
 }
 
 /// Read characteristic value extended request.
@@ -457,9 +464,9 @@ pub struct CharacteristicReadRequest {
 }
 
 impl CharacteristicReadRequest {
-    fn to_dict(&self) -> PropMap {
-        let mut pm = PropMap::new();
-        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
+    fn to_dict(&self) -> HashMap<String, OwnedValue> {
+        let mut pm = HashMap::new();
+        pm.insert("offset".to_string(), OwnedValue::from(self.offset));
         pm
     }
 }
@@ -478,11 +485,11 @@ pub struct CharacteristicWriteRequest {
 }
 
 impl CharacteristicWriteRequest {
-    fn to_dict(&self) -> PropMap {
-        let mut pm = PropMap::new();
-        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
-        pm.insert("type".to_string(), Variant(self.op_type.to_string().box_clone()));
-        pm.insert("prepare-authorize".to_string(), Variant(self.prepare_authorize.box_clone()));
+    fn to_dict(&self) -> HashMap<String, OwnedValue> {
+        let mut pm = HashMap::new();
+        pm.insert("offset".to_string(), OwnedValue::from(self.offset));
+        pm.insert("type".to_string(), OwnedValue::from(zbus::zvariant::Str::from(self.op_type.to_string())));
+        pm.insert("prepare-authorize".to_string(), OwnedValue::from(self.prepare_authorize));
         pm
     }
 }
@@ -518,7 +525,7 @@ define_properties!(
         property(
             Flags, CharacteristicFlags,
             dbus: (CHARACTERISTIC_INTERFACE, "Flags", Vec<String>, MANDATORY),
-            get: (flags, v => {CharacteristicFlags::from_slice(v)}),
+            get: (flags, v => {CharacteristicFlags::from_slice(&v)}),
         );
 
         /// The cached value of the characteristic.
@@ -540,7 +547,7 @@ define_properties!(
         property(
             Mtu, usize,
             dbus: (CHARACTERISTIC_INTERFACE, "MTU", u16, MANDATORY),
-            get: (mtu, v => { mtu_workaround((*v).into()) }),
+            get: (mtu, v => { mtu_workaround(v.into()) }),
         );
     }
 );
@@ -553,7 +560,7 @@ define_properties!(
 #[derive(Clone)]
 pub struct Descriptor {
     inner: Arc<SessionInner>,
-    dbus_path: Path<'static>,
+    dbus_path: OwnedObjectPath,
     adapter_name: Arc<String>,
     device_address: Address,
     service_id: u16,
@@ -584,20 +591,20 @@ impl Descriptor {
         })
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, &self.dbus_path, TIMEOUT, &*self.inner.connection)
+    async fn proxy(&self) -> Result<Proxy<'_>> {
+        Ok(Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, DESCRIPTOR_INTERFACE).await?)
     }
 
     pub(crate) fn dbus_path(
         adapter_name: &str, device_address: Address, service_id: u16, characteristic_id: u16, id: u16,
-    ) -> Result<Path<'static>> {
+    ) -> Result<OwnedObjectPath> {
         let char_path = Characteristic::dbus_path(adapter_name, device_address, service_id, characteristic_id)?;
-        Ok(Path::new(format!("{char_path}/desc{id:04x}")).unwrap())
+        Ok(OwnedObjectPath::try_from(format!("{char_path}/desc{id:04x}")).unwrap())
     }
 
     #[allow(clippy::type_complexity)]
     pub(crate) fn parse_dbus_path_prefix<'a>(
-        path: &'a Path,
+        path: &'a OwnedObjectPath,
     ) -> Option<((&'a str, Address, u16, u16, u16), &'a str)> {
         match Characteristic::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id, char_id), p)) => match p.strip_prefix("/desc") {
@@ -614,7 +621,7 @@ impl Descriptor {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a Path) -> Option<(&'a str, Address, u16, u16, u16)> {
+    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16, u16, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -648,8 +655,7 @@ impl Descriptor {
         self.id
     }
 
-    dbus_interface!();
-    dbus_default_interface!(DESCRIPTOR_INTERFACE);
+    zbus_interface!(DESCRIPTOR_INTERFACE);
 
     /// Issues a request to read the value of the
     /// descriptor and returns the value if the
@@ -664,7 +670,8 @@ impl Descriptor {
     ///
     /// Takes extended options for the read operation.
     pub async fn read_ext(&self, req: &DescriptorReadRequest) -> Result<Vec<u8>> {
-        let (value,): (Vec<u8>,) = self.call_method("ReadValue", (req.to_dict(),)).await?;
+        let proxy = self.proxy().await?;
+        let (value,): (Vec<u8>,) = proxy.call("ReadValue", &(req.to_dict(),)).await?;
         Ok(value)
     }
 
@@ -677,7 +684,8 @@ impl Descriptor {
     ///
     /// Takes extended options for the write operation.
     pub async fn write_ext(&self, value: &[u8], req: &DescriptorWriteRequest) -> Result<()> {
-        let () = self.call_method("WriteValue", (value, req.to_dict())).await?;
+        let proxy = self.proxy().await?;
+        let () = proxy.call("WriteValue", &(value, req.to_dict())).await?;
         Ok(())
     }
 }
@@ -692,9 +700,9 @@ pub struct DescriptorReadRequest {
 }
 
 impl DescriptorReadRequest {
-    fn to_dict(&self) -> PropMap {
-        let mut pm = PropMap::new();
-        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
+    fn to_dict(&self) -> HashMap<String, OwnedValue> {
+        let mut pm = HashMap::new();
+        pm.insert("offset".to_string(), OwnedValue::from(self.offset));
         pm
     }
 }
@@ -711,10 +719,10 @@ pub struct DescriptorWriteRequest {
 }
 
 impl DescriptorWriteRequest {
-    fn to_dict(&self) -> PropMap {
-        let mut pm = PropMap::new();
-        pm.insert("offset".to_string(), Variant(self.offset.box_clone()));
-        pm.insert("prepare-authorize".to_string(), Variant(self.prepare_authorize.box_clone()));
+    fn to_dict(&self) -> HashMap<String, OwnedValue> {
+        let mut pm = HashMap::new();
+        pm.insert("offset".to_string(), OwnedValue::from(self.offset));
+        pm.insert("prepare-authorize".to_string(), OwnedValue::from(self.prepare_authorize));
         pm
     }
 }
