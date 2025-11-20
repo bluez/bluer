@@ -20,7 +20,7 @@ use tokio::{
 
 include!("gatt.inc");
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;

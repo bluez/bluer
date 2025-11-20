@@ -1,8 +1,9 @@
 //! Connects to the Bluetooth GATT echo service and tests it.
 
-use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
+use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, DeviceEvent, DeviceProperty, Result, AddressType};
 use futures::{pin_mut, StreamExt};
 use rand::Rng;
+use std::collections::HashSet;
 use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -11,10 +12,19 @@ use tokio::{
 
 include!("gatt_echo.inc");
 
-async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristic>> {
+async fn find_our_characteristic(adapter: &bluer::Adapter, device: &Device) -> Result<Option<Characteristic>> {
     let addr = device.address();
-    let uuids = device.uuids().await?.unwrap_or_default();
-    println!("Discovered device {} with service UUIDs {:?}", addr, &uuids);
+    let mut uuids = device.uuids().await?.unwrap_or_default();
+    let addr_type = device.address_type().await?;
+    println!("Discovered device {} ({}) with service UUIDs {:?}", addr, addr_type, &uuids);
+
+    if !uuids.contains(&SERVICE_UUID) {
+        println!("    Target UUID not found immediately, waiting...");
+        sleep(Duration::from_secs(2)).await;
+        uuids = device.uuids().await?.unwrap_or_default();
+        println!("    UUIDs after wait: {:?}", &uuids);
+    }
+
     let md = device.manufacturer_data().await?;
     println!("    Manufacturer data: {:x?}", &md);
 
@@ -22,15 +32,34 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
         println!("    Device provides our service!");
         if !device.is_connected().await? {
             println!("    Connecting...");
-            let mut retries = 2;
+            let mut retries = 5;
             loop {
-                match device.connect().await {
-                    Ok(()) => break,
-                    Err(err) if retries > 0 => {
-                        println!("    Connect error: {}", &err);
-                        retries -= 1;
+                // Try to force LE connection if address type is LePublic
+                let connect_result = if addr_type == AddressType::LePublic {
+                    println!("    Forcing LE connection...");
+                    match adapter.connect_device(addr, AddressType::LePublic).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            println!("    connect_device failed: {}", &e);
+                            device.connect().await
+                        }
                     }
-                    Err(err) => return Err(err),
+                } else {
+                    device.connect().await
+                };
+
+                match connect_result {
+                    Ok(()) => break,
+                    Err(err) => {
+                        println!("    Connect error: {}", &err);
+
+                        if retries > 0 {
+                            retries -= 1;
+                            sleep(Duration::from_secs(2)).await;
+                        } else {
+                            return Err(err);
+                        }
+                    }
                 }
             }
             println!("    Connected");
@@ -39,21 +68,33 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
         }
 
         println!("    Enumerating services...");
-        for service in device.services().await? {
-            let uuid = service.uuid().await?;
-            println!("    Service UUID: {}", &uuid);
-            if uuid == SERVICE_UUID {
-                println!("    Found our service!");
-                for char in service.characteristics().await? {
-                    let uuid = char.uuid().await?;
-                    println!("    Characteristic UUID: {}", &uuid);
-                    if uuid == CHARACTERISTIC_UUID {
-                        println!("    Found our characteristic!");
-                        return Ok(Some(char));
+        for i in 0..10 {
+                let services = device.services().await?;
+                println!("    Found {} services (attempt {})", services.len(), i + 1);
+                
+                let mut found_service = false;
+                for service in services {
+                    let uuid = service.uuid().await?;
+                    println!("    Service UUID: {}", &uuid);
+                    if uuid == SERVICE_UUID {
+                        println!("    Found our service!");
+                        found_service = true;
+                        for char in service.characteristics().await? {
+                            let uuid = char.uuid().await?;
+                            println!("    Characteristic UUID: {}", &uuid);
+                            if uuid == CHARACTERISTIC_UUID {
+                                println!("    Found our characteristic!");
+                                return Ok(Some(char));
+                            }
+                        }
                     }
                 }
+                
+                if !found_service {
+                    println!("    Target service not found, retrying...");
+                    sleep(Duration::from_secs(2)).await;
+                }
             }
-        }
 
         println!("    Not found!");
     }
@@ -72,8 +113,8 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     while let Ok(Ok(_)) = timeout(Duration::from_secs(1), notify_io.read(&mut buf)).await {}
 
     let mut rng = rand::thread_rng();
-    for i in 0..1024 {
-        let mut len = rng.gen_range(0..20000);
+    for i in 0..100 {
+        let mut len = rng.gen_range(0..100000);
 
         // Try to trigger packet reordering over EATT.
         if i % 10 == 0 {
@@ -104,12 +145,12 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
 
         // Note that write_all will automatically split the buffer into
         // multiple writes of MTU size.
-        write_io.write_all(&data).await.expect("write failed");
+        write_io.write_all(&data).await?;
 
         println!("    Waiting for echo");
         let (notify_io_back, res) = read_task.await.unwrap();
         notify_io = notify_io_back;
-        let echo_buf = res.expect("read failed");
+        let echo_buf = res?;
 
         if echo_buf != data {
             println!();
@@ -149,27 +190,59 @@ async fn main() -> bluer::Result<()> {
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
+    let filter = bluer::DiscoveryFilter {
+        transport: bluer::DiscoveryTransport::Le,
+        uuids: vec![SERVICE_UUID].into_iter().collect(),
+        ..Default::default()
+    };
+    adapter.set_discovery_filter(filter).await?;
+
     {
         println!(
             "Discovering on Bluetooth adapter {} with address {}\n",
             adapter.name(),
             adapter.address().await?
         );
+
+        // Check existing devices first
+        let device_addresses = adapter.device_addresses().await?;
+        for addr in device_addresses {
+            let device = adapter.device(addr)?;
+            match find_our_characteristic(&adapter, &device).await {
+                Ok(Some(char)) => match exercise_characteristic(&char).await {
+                    Ok(()) => {
+                        println!("    Characteristic exercise completed");
+                        return Ok(());
+                    }
+                    Err(err) => {
+                        println!("    Characteristic exercise failed: {}", &err);
+                        let _ = adapter.remove_device(device.address()).await;
+                    }
+                },
+                Ok(None) => (),
+                Err(err) => {
+                    println!("    Device failed: {}", &err);
+                    let _ = adapter.remove_device(device.address()).await;
+                }
+            }
+        }
+
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
-        let mut done = false;
+        
         while let Some(evt) = discover.next().await {
             match evt {
                 AdapterEvent::DeviceAdded(addr) => {
                     let device = adapter.device(addr)?;
-                    match find_our_characteristic(&device).await {
+                    match find_our_characteristic(&adapter, &device).await {
                         Ok(Some(char)) => match exercise_characteristic(&char).await {
                             Ok(()) => {
                                 println!("    Characteristic exercise completed");
-                                done = true;
+                                break;
                             }
                             Err(err) => {
                                 println!("    Characteristic exercise failed: {}", &err);
+                                let _ = adapter.remove_device(device.address()).await;
                             }
                         },
                         Ok(None) => (),
@@ -188,9 +261,6 @@ async fn main() -> bluer::Result<()> {
                     println!("Device removed {addr}");
                 }
                 _ => (),
-            }
-            if done {
-                break;
             }
         }
         println!("Stopping discovery");

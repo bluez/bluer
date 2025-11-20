@@ -18,7 +18,7 @@ use zbus::zvariant::OwnedFd;
 
 use crate::Address;
 
-// pub mod local;
+pub mod local;
 pub mod remote;
 
 pub(crate) const SERVICE_INTERFACE: &str = "org.bluez.GattService1";

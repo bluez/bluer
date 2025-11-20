@@ -1,6 +1,6 @@
 //! Connects to our Bluetooth GATT service and exercises the characteristic.
 
-use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, Result};
+use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, Result, AddressType};
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
 use tokio::{
@@ -10,10 +10,11 @@ use tokio::{
 
 include!("gatt.inc");
 
-async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristic>> {
+async fn find_our_characteristic(adapter: &bluer::Adapter, device: &Device) -> Result<Option<Characteristic>> {
     let addr = device.address();
     let uuids = device.uuids().await?.unwrap_or_default();
-    println!("Discovered device {} with service UUIDs {:?}", addr, &uuids);
+    let addr_type = device.address_type().await?;
+    println!("Discovered device {} ({}) with service UUIDs {:?}", addr, addr_type, &uuids);
     let md = device.manufacturer_data().await?;
     println!("    Manufacturer data: {:x?}", &md);
 
@@ -23,15 +24,34 @@ async fn find_our_characteristic(device: &Device) -> Result<Option<Characteristi
         sleep(Duration::from_secs(2)).await;
         if !device.is_connected().await? {
             println!("    Connecting...");
-            let mut retries = 2;
+            let mut retries = 5;
             loop {
-                match device.connect().await {
-                    Ok(()) => break,
-                    Err(err) if retries > 0 => {
-                        println!("    Connect error: {}", &err);
-                        retries -= 1;
+                // Try to force LE connection if address type is LePublic
+                let connect_result = if addr_type == AddressType::LePublic {
+                    println!("    Forcing LE connection...");
+                    match adapter.connect_device(addr, AddressType::LePublic).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            println!("    connect_device failed: {}", &e);
+                            device.connect().await
+                        }
                     }
-                    Err(err) => return Err(err),
+                } else {
+                    device.connect().await
+                };
+
+                match connect_result {
+                    Ok(()) => break,
+                    Err(err) => {
+                        println!("    Connect error: {}", &err);
+
+                        if retries > 0 {
+                            retries -= 1;
+                            sleep(Duration::from_secs(2)).await;
+                        } else {
+                            return Err(err);
+                        }
+                    }
                 }
             }
             println!("    Connected");
@@ -103,13 +123,8 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
         let notify = char.notify().await?;
         pin_mut!(notify);
         for _ in 0..5u8 {
-            match notify.next().await {
-                Some(value) => {
-                    println!("    Notification value: {:x?}", &value);
-                }
-                None => {
-                    println!("    Notification session was terminated");
-                }
+            if let Some(value) = notify.next().await {
+                println!("    Notification value: {:x?}", &value);
             }
         }
         println!("    Stopping notification session");
@@ -122,10 +137,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     for _ in 0..5u8 {
         let mut buf = vec![0; notify_io.mtu()];
         match notify_io.read(&mut buf).await {
-            Ok(0) => {
-                println!("    Notification IO end of stream");
-                break;
-            }
+            Ok(0) => break,
             Ok(read) => {
                 println!("    Notified with {} bytes: {:x?}", read, &buf[0..read]);
             }
@@ -138,6 +150,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     println!("    Stopping notification IO");
     drop(notify_io);
     sleep(Duration::from_secs(1)).await;
+    println!("    Client exiting");
 
     Ok(())
 }
@@ -162,7 +175,7 @@ async fn main() -> bluer::Result<()> {
             match evt {
                 AdapterEvent::DeviceAdded(addr) => {
                     let device = adapter.device(addr)?;
-                    match find_our_characteristic(&device).await {
+                    match find_our_characteristic(&adapter, &device).await {
                         Ok(Some(char)) => match exercise_characteristic(&char).await {
                             Ok(()) => {
                                 println!("    Characteristic exercise completed");

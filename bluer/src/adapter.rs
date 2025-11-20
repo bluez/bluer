@@ -26,6 +26,7 @@ use uuid::Uuid;
 
 use crate::{
     adv,
+    gatt,
     adv::{Advertisement, Capabilities, Feature, PlatformFeature, SecondaryChannel},
     // all_dbus_objects, device,
     // device::Device,
@@ -318,13 +319,12 @@ impl Adapter {
     /// which then becomes available to remote devices.
     ///
     /// Drop the returned [ApplicationHandle](gatt::local::ApplicationHandle) to unregister the application.
-    // pub async fn serve_gatt_application(
-    //     &self, gatt_application: gatt::local::Application,
-    // ) -> Result<gatt::local::ApplicationHandle> {
-    //     gatt_application.register(self.inner.clone(), self.name.clone()).await
-    // }
+    pub async fn serve_gatt_application(
+        &self, gatt_application: gatt::local::Application,
+    ) -> Result<gatt::local::ApplicationHandle> {
+        gatt_application.register(self.inner.clone(), self.name.clone()).await
+    }
 
-    /*
     /// Registers a GATT application.
     ///
     /// By registering this type of object
@@ -338,7 +338,6 @@ impl Adapter {
     ) -> Result<gatt::local::ProfileHandle> {
         gatt_profile.register(self.inner.clone(), self.name.clone()).await
     }
-    */
 
     // ===========================================================================================
     // Methods

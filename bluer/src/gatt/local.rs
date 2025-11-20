@@ -1,17 +1,13 @@
 //! Publish local GATT services to remove devices.
 
-use dbus::{
-    arg::{OwnedFd, PropMap, Variant},
-    channel::Sender,
-    message::SignalArgs,
-    nonblock::{stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged, Proxy, SyncConnection},
-    MethodErr, Path,
+use zbus::{
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Type},
+    Interface,
 };
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
 use pin_project::pin_project;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     mem::take,
     num::NonZeroU16,
@@ -29,7 +25,7 @@ use super::{
     DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
 };
 use crate::{
-    method_call, parent_path, Adapter, Address, DbusResult, Device, Error, ErrorKind, Result, SessionInner,
+    Adapter, Address, Device, Error, ErrorKind, Result, SessionInner,
     ERR_PREFIX, SERVICE_NAME, TIMEOUT,
 };
 
@@ -80,10 +76,10 @@ impl Default for ReqError {
     }
 }
 
-impl From<ReqError> for dbus::MethodErr {
+impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
         let name: &'static str = err.into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+        zbus::fdo::Error::Failed(format!("{}.{}", ERR_PREFIX, name))
     }
 }
 
@@ -191,24 +187,31 @@ impl RegisteredService {
         }
         Self { s }
     }
+}
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(SERVICE_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            cr_property!(ib, "UUID", reg => {
-                Some(reg.s.uuid.to_string())
-            });
-            cr_property!(ib, "Primary", reg => {
-                Some(reg.s.primary)
-            });
-            ib.property("Handle").get(|_ctx, reg| Ok(reg.s.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |ctx, reg, handle| {
-                    log::trace!("{}: {}.Handle <- {}", ctx.path(), SERVICE_INTERFACE, handle);
-                    let handle = NonZeroU16::new(handle);
-                    let _ = reg.s.control_handle.handle_tx.send(handle);
-                    Ok(None)
-                },
-            );
-        })
+#[zbus::interface(name = "org.bluez.GattService1")]
+impl RegisteredService {
+    #[zbus(property, name = "UUID")]
+    fn uuid(&self) -> String {
+        self.s.uuid.to_string()
+    }
+
+    #[zbus(property)]
+    fn primary(&self) -> bool {
+        self.s.primary
+    }
+
+    #[zbus(property)]
+    fn handle(&self) -> u16 {
+        self.s.handle.map(|h| h.get()).unwrap_or_default()
+    }
+
+    #[zbus(property)]
+    fn set_handle(&self, handle: u16) -> zbus::Result<()> {
+        log::trace!("Set handle: {}", handle);
+        let handle = NonZeroU16::new(handle);
+        let _ = self.s.control_handle.handle_tx.send(handle);
+        Ok(())
     }
 }
 
@@ -431,11 +434,12 @@ impl Characteristic {
 // ------------------
 
 /// Parse the `device` option.
-fn parse_device(dict: &PropMap) -> DbusResult<(String, Address)> {
-    let path = read_prop!(dict, "device", Path);
+fn parse_device(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<(String, Address)> {
+    let path = dict.get("device").ok_or_else(|| zbus::fdo::Error::InvalidArgs("device missing".to_string()))?;
+    let path: OwnedObjectPath = (*path).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("device invalid".to_string()))?;
     let (adapter, addr) = Device::parse_dbus_path(&path).ok_or_else(|| {
         log::warn!("cannot parse device path: {}", path);
-        MethodErr::invalid_arg("device")
+        zbus::fdo::Error::InvalidArgs("device path invalid".to_string())
     })?;
     Ok((adapter.to_string(), addr))
 }
@@ -457,14 +461,29 @@ pub struct CharacteristicReadRequest {
 }
 
 impl CharacteristicReadRequest {
-    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+    fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
+        
+        let offset = dict.get("offset")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+            
+        let mtu = dict.get("mtu")
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
+            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
+            
+        let link = dict.get("link")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .transpose()?
+            .and_then(|v: String| v.parse().ok());
+
         Ok(Self {
             adapter_name,
             device_address,
-            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
-            mtu: read_prop!(dict, "mtu", u16),
-            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
+            offset,
+            mtu,
+            link,
         })
     }
 }
@@ -490,19 +509,43 @@ pub struct CharacteristicWriteRequest {
 }
 
 impl CharacteristicWriteRequest {
-    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+    fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
+        
+        let offset = dict.get("offset")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+            
+        let op_type = dict.get("type")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("type invalid".to_string())))
+            .transpose()?
+            .map(|s: String| s.parse().map_err(|_| zbus::fdo::Error::InvalidArgs("type invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+            
+        let mtu = dict.get("mtu")
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
+            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
+            
+        let link = dict.get("link")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .transpose()?
+            .and_then(|v: String| v.parse().ok());
+            
+        let prepare_authorize = dict.get("prepare-authorize")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+
         Ok(Self {
             adapter_name,
             device_address,
-            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
-            op_type: read_opt_prop!(dict, "type", String)
-                .map(|s| s.parse().map_err(|_| MethodErr::invalid_arg("type")))
-                .transpose()?
-                .unwrap_or_default(),
-            mtu: read_prop!(dict, "mtu", u16),
-            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
-            prepare_authorize: read_opt_prop!(dict, "prepare-authorize", bool).unwrap_or_default(),
+            offset,
+            op_type,
+            mtu,
+            link,
+            prepare_authorize,
         })
     }
 }
@@ -511,8 +554,8 @@ impl CharacteristicWriteRequest {
 ///
 /// Use this to send notifications or indications.
 pub struct CharacteristicNotifier {
-    connection: Weak<SyncConnection>,
-    path: Path<'static>,
+    connection: zbus::Connection,
+    path: OwnedObjectPath,
     stop_notify_tx: mpsc::Sender<()>,
     confirm_rx: Option<mpsc::Receiver<()>>,
 }
@@ -543,8 +586,6 @@ impl CharacteristicNotifier {
     ///
     /// This fails when the notification session has been stopped by the receiving device.
     pub async fn notify(&mut self, value: Vec<u8>) -> Result<()> {
-        let connection =
-            self.connection.upgrade().ok_or_else(|| Error::new(ErrorKind::NotificationSessionStopped))?;
         if self.is_stopped() {
             return Err(Error::new(ErrorKind::NotificationSessionStopped));
         }
@@ -557,16 +598,18 @@ impl CharacteristicNotifier {
         }
 
         // Send notification.
-        let mut changed_properties = PropMap::new();
-        changed_properties.insert("Value".to_string(), Variant(Box::new(value)));
-        let ppc = PropertiesPropertiesChanged {
-            interface_name: CHARACTERISTIC_INTERFACE.to_string(),
-            changed_properties,
-            invalidated_properties: Vec::new(),
-        };
-        let msg = ppc.to_emit_message(&self.path);
-        connection.send(msg).map_err(|_| Error::new(ErrorKind::NotificationSessionStopped))?;
-        drop(connection);
+        let changed_properties: HashMap<String, OwnedValue> = [
+            ("Value".to_string(), zbus::zvariant::Value::from(value).try_into().expect("value conversion"))
+        ].into_iter().collect();
+        let invalidated_properties: Vec<String> = Vec::new();
+
+        self.connection.emit_signal(
+            Option::<&str>::None,
+            &self.path,
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            &(CHARACTERISTIC_INTERFACE, changed_properties, invalidated_properties),
+        ).await.map_err(|_| Error::new(ErrorKind::NotificationSessionStopped))?;
 
         // Wait for confirmation if this is an indication session.
         // Note that we can be aborted before we receive the confirmation.
@@ -743,13 +786,23 @@ struct CharacteristicAcquireRequest {
 }
 
 impl CharacteristicAcquireRequest {
-    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
-        let (adapter, device) = parse_device(dict)?;
+    fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
+        let (adapter_name, device_address) = parse_device(dict)?;
+        
+        let mtu = dict.get("mtu")
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
+            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
+            
+        let link = dict.get("link")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .transpose()?
+            .and_then(|v: String| v.parse().ok());
+
         Ok(Self {
-            adapter_name: adapter,
-            device_address: device,
-            mtu: read_prop!(dict, "mtu", u16),
-            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
+            adapter_name,
+            device_address,
+            mtu,
+            link,
         })
     }
 }
@@ -764,205 +817,194 @@ struct CharacteristicNotifyState {
 pub(crate) struct RegisteredCharacteristic {
     c: Characteristic,
     notify: Mutex<Option<CharacteristicNotifyState>>,
-    connection: Weak<SyncConnection>,
+    service_path: OwnedObjectPath,
 }
 
 impl RegisteredCharacteristic {
-    fn new(c: Characteristic, connection: &Arc<SyncConnection>) -> Self {
+    fn new(c: Characteristic, service_path: OwnedObjectPath) -> Self {
         if let Some(handle) = c.handle {
             let _ = c.control_handle.handle_tx.send(Some(handle));
         }
-        Self { c, notify: Mutex::new(None), connection: Arc::downgrade(connection) }
+        Self { c, notify: Mutex::new(None), service_path }
+    }
+}
+
+#[zbus::interface(name = "org.bluez.GattCharacteristic1")]
+impl RegisteredCharacteristic {
+    #[zbus(property, name = "UUID")]
+    fn uuid(&self) -> String {
+        self.c.uuid.to_string()
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(CHARACTERISTIC_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            cr_property!(ib, "UUID", reg => {
-                Some(reg.c.uuid.to_string())
-            });
-            cr_property!(ib, "Flags", reg => {
-                let mut flags = CharacteristicFlags::default();
-                reg.c.set_characteristic_flags(&mut flags);
-                if let Some(read) = &reg.c.read {
-                    read.set_characteristic_flags(&mut flags);
+    #[zbus(property)]
+    fn service(&self) -> OwnedObjectPath {
+        self.service_path.clone()
+    }
+
+    #[zbus(property)]
+    fn flags(&self) -> Vec<String> {
+        let mut flags = CharacteristicFlags::default();
+        self.c.set_characteristic_flags(&mut flags);
+        if let Some(read) = &self.c.read {
+            read.set_characteristic_flags(&mut flags);
+        }
+        if let Some(write) = &self.c.write {
+            write.set_characteristic_flags(&mut flags);
+        }
+        if let Some(notify) = &self.c.notify {
+            notify.set_characteristic_flags(&mut flags);
+        }
+        flags.as_vec()
+    }
+
+    #[zbus(property)]
+    fn handle(&self) -> u16 {
+        self.c.handle.map(|h| h.get()).unwrap_or_default()
+    }
+
+    #[zbus(property)]
+    fn set_handle(&self, handle: u16) -> zbus::Result<()> {
+        log::trace!("Set handle: {}", handle);
+        let handle = NonZeroU16::new(handle);
+        let _ = self.c.control_handle.handle_tx.send(handle);
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn write_acquired(&self) -> bool {
+        match &self.c.write {
+            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => false,
+            _ => false,
+        }
+    }
+
+    #[zbus(property, name = "NotifyAcquired")]
+    fn notify_acquired(&self) -> bool {
+        match &self.c.notify {
+            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => false,
+            _ => false,
+        }
+    }
+
+    async fn read_value(&self, options: HashMap<String, OwnedValue>) -> zbus::fdo::Result<Vec<u8>> {
+        let options = CharacteristicReadRequest::from_dict(&options)?;
+        match &self.c.read {
+            Some(read) => {
+                let value = (read.fun)(options).await?;
+                Ok(value)
+            }
+            None => Err(ReqError::NotSupported.into()),
+        }
+    }
+
+    async fn write_value(&self, value: Vec<u8>, options: HashMap<String, OwnedValue>) -> zbus::fdo::Result<()> {
+        let options = CharacteristicWriteRequest::from_dict(&options)?;
+        match &self.c.write {
+            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Fun(fun), .. }) => {
+                fun(value, options).await?;
+                Ok(())
+            }
+            _ => Err(ReqError::NotSupported.into()),
+        }
+    }
+
+    async fn start_notify(&self, #[zbus(object_server)] _server: &zbus::ObjectServer, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>) -> zbus::fdo::Result<()> {
+        let path = ctxt.path().to_owned();
+        let connection = ctxt.connection().clone();
+        match &self.c.notify {
+            Some(CharacteristicNotify {
+                method: CharacteristicNotifyMethod::Fun(notify_fn),
+                indicate,
+                notify,
+                _non_exhaustive: (),
+            }) => {
+                let (stop_notify_tx, stop_notify_rx) = mpsc::channel(1);
+                let (confirm_tx, confirm_rx) = if *indicate && !*notify {
+                    let (tx, rx) = mpsc::channel(1);
+                    (Some(tx), Some(rx))
+                } else {
+                    (None, None)
+                };
+                {
+                    let mut notify = self.notify.lock().await;
+                    *notify = Some(CharacteristicNotifyState {
+                        _stop_notify_rx: stop_notify_rx,
+                        confirm_tx,
+                    });
                 }
-                if let Some(write) = &reg.c.write {
-                    write.set_characteristic_flags(&mut flags);
-                }
-                if let Some(notify) = &reg.c.notify {
-                    notify.set_characteristic_flags(&mut flags);
-                }
-                Some(flags.as_vec())
-            });
-            ib.property("Service").get(|ctx, _| Ok(parent_path(ctx.path())));
-            ib.property("Handle").get(|_ctx, reg| Ok(reg.c.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |ctx, reg, handle| {
-                    log::trace!("{}: {}.Handle <- {}", ctx.path(), CHARACTERISTIC_INTERFACE, handle);
-                    let handle = NonZeroU16::new(handle);
-                    let _ = reg.c.control_handle.handle_tx.send(handle);
-                    Ok(None)
-                },
-            );
-            cr_property!(ib, "WriteAcquired", reg => {
-                match &reg.c.write {
-                    Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) =>
-                        Some(false),
-                    _ => None,
-                }
-            });
-            cr_property!(ib, "NotifyAcquired", reg => {
-                match &reg.c.notify {
-                    Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) =>
-                        Some(false),
-                    _ => None,
-                }
-            });
-            ib.method_with_cr_async("ReadValue", ("options",), ("value",), |ctx, cr, (options,): (PropMap,)| {
-                method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    let options = CharacteristicReadRequest::from_dict(&options)?;
-                    match &reg.c.read {
-                        Some(read) => {
-                            let value = (read.fun)(options).await?;
-                            Ok((value,))
-                        }
-                        None => Err(ReqError::NotSupported.into()),
-                    }
-                })
-            });
-            ib.method_with_cr_async(
-                "WriteValue",
-                ("value", "options"),
-                (),
-                |ctx, cr, (value, options): (Vec<u8>, PropMap)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let options = CharacteristicWriteRequest::from_dict(&options)?;
-                        match &reg.c.write {
-                            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Fun(fun), .. }) => {
-                                fun(value, options).await?;
-                                Ok(())
-                            }
-                            _ => Err(ReqError::NotSupported.into()),
-                        }
-                    })
-                },
-            );
-            ib.method_with_cr_async("StartNotify", (), (), |ctx, cr, ()| {
-                let path = ctx.path().clone();
-                method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    match &reg.c.notify {
-                        Some(CharacteristicNotify {
-                            method: CharacteristicNotifyMethod::Fun(notify_fn),
-                            indicate,
-                            notify,
-                            _non_exhaustive: (),
-                        }) => {
-                            let (stop_notify_tx, stop_notify_rx) = mpsc::channel(1);
-                            let (confirm_tx, confirm_rx) = if *indicate && !*notify {
-                                let (tx, rx) = mpsc::channel(1);
-                                (Some(tx), Some(rx))
-                            } else {
-                                (None, None)
-                            };
-                            {
-                                let mut notify = reg.notify.lock().await;
-                                *notify = Some(CharacteristicNotifyState {
-                                    _stop_notify_rx: stop_notify_rx,
-                                    confirm_tx,
-                                });
-                            }
-                            let notifier = CharacteristicNotifier {
-                                connection: reg.connection.clone(),
-                                path,
-                                stop_notify_tx,
-                                confirm_rx,
-                            };
-                            notify_fn(notifier).await;
-                            Ok(())
-                        }
-                        _ => Err(ReqError::NotSupported.into()),
-                    }
-                })
-            });
-            ib.method_with_cr_async("StopNotify", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    let mut notify = reg.notify.lock().await;
-                    *notify = None;
-                    Ok(())
-                })
-            });
-            ib.method_with_cr_async("Confirm", (), (), |ctx, cr, ()| {
-                method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    let mut notify = reg.notify.lock().await;
-                    if let Some(CharacteristicNotifyState { confirm_tx: Some(confirm_tx), .. }) = &mut *notify {
-                        let _ = confirm_tx.send(()).await;
-                    }
-                    Ok(())
-                })
-            });
-            ib.method_with_cr_async(
-                "AcquireWrite",
-                ("options",),
-                ("fd", "mtu"),
-                |ctx, cr, (options,): (PropMap,)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let options = CharacteristicAcquireRequest::from_dict(&options)?;
-                        match &reg.c.write {
-                            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
-                                let (tx, rx) = oneshot::channel();
-                                let req = CharacteristicWriteIoRequest {
-                                    adapter_name: options.adapter_name.clone(),
-                                    device_address: options.device_address,
-                                    mtu: options.mtu,
-                                    link: options.link,
-                                    tx,
-                                };
-                                reg.c
-                                    .control_handle
-                                    .events_tx
-                                    .send(CharacteristicControlEvent::Write(req))
-                                    .await
-                                    .map_err(|_| ReqError::Failed)?;
-                                let fd = rx.await.map_err(|_| ReqError::Failed)??;
-                                Ok((fd, options.mtu))
-                            }
-                            _ => Err(ReqError::NotSupported.into()),
-                        }
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "AcquireNotify",
-                ("options",),
-                ("fd", "mtu"),
-                |ctx, cr, (options,): (PropMap,)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let options = CharacteristicAcquireRequest::from_dict(&options)?;
-                        match &reg.c.notify {
-                            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
-                                // BlueZ has already confirmed the start of the notification session.
-                                // So there is no point in making this fail-able by our users.
-                                let (fd, socket) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
-                                let mtu = mtu_workaround(options.mtu.into());
-                                let writer = CharacteristicWriter {
-                                    adapter_name: options.adapter_name.clone(),
-                                    device_address: options.device_address,
-                                    mtu,
-                                    socket,
-                                };
-                                let _ = reg
-                                    .c
-                                    .control_handle
-                                    .events_tx
-                                    .send(CharacteristicControlEvent::Notify(writer))
-                                    .await;
-                                Ok((fd, options.mtu))
-                            }
-                            _ => Err(ReqError::NotSupported.into()),
-                        }
-                    })
-                },
-            );
-        })
+                let notifier = CharacteristicNotifier {
+                    connection,
+                    path: path.into(),
+                    stop_notify_tx,
+                    confirm_rx,
+                };
+                notify_fn(notifier).await;
+                Ok(())
+            }
+            _ => Err(ReqError::NotSupported.into()),
+        }
+    }
+
+    async fn stop_notify(&self) -> zbus::fdo::Result<()> {
+        let mut notify = self.notify.lock().await;
+        *notify = None;
+        Ok(())
+    }
+
+    async fn confirm(&self) -> zbus::fdo::Result<()> {
+        let mut notify = self.notify.lock().await;
+        if let Some(CharacteristicNotifyState { confirm_tx: Some(confirm_tx), .. }) = &mut *notify {
+            let _ = confirm_tx.send(()).await;
+        }
+        Ok(())
+    }
+
+    async fn acquire_write(&self, options: HashMap<String, OwnedValue>) -> zbus::fdo::Result<(OwnedFd, u16)> {
+        let options = CharacteristicAcquireRequest::from_dict(&options)?;
+        match &self.c.write {
+            Some(CharacteristicWrite { method: CharacteristicWriteMethod::Io, .. }) => {
+                let (tx, rx) = oneshot::channel();
+                let req = CharacteristicWriteIoRequest {
+                    adapter_name: options.adapter_name.clone(),
+                    device_address: options.device_address,
+                    mtu: options.mtu,
+                    link: options.link,
+                    tx,
+                };
+                self.c
+                    .control_handle
+                    .events_tx
+                    .send(CharacteristicControlEvent::Write(req))
+                    .await
+                    .map_err(|_| ReqError::Failed)?;
+                let fd = rx.await.map_err(|_| ReqError::Failed)??;
+                Ok((fd, options.mtu))
+            }
+            _ => Err(ReqError::NotSupported.into()),
+        }
+    }
+
+    async fn acquire_notify(&self, options: HashMap<String, OwnedValue>) -> zbus::fdo::Result<(OwnedFd, u16)> {
+        let options = CharacteristicAcquireRequest::from_dict(&options)?;
+        match &self.c.notify {
+            Some(CharacteristicNotify { method: CharacteristicNotifyMethod::Io, .. }) => {
+                let (fd, socket) = make_socket_pair(true).map_err(|_| ReqError::Failed)?;
+                let mtu = mtu_workaround(options.mtu.into());
+                let writer = CharacteristicWriter {
+                    adapter_name: options.adapter_name.clone(),
+                    device_address: options.device_address,
+                    mtu,
+                    socket,
+                };
+                let _ = self.c
+                    .control_handle
+                    .events_tx
+                    .send(CharacteristicControlEvent::Notify(writer))
+                    .await;
+                Ok((fd, options.mtu))
+            }
+            _ => Err(ReqError::NotSupported.into()),
+        }
     }
 }
 
@@ -1109,13 +1151,24 @@ pub struct DescriptorReadRequest {
 }
 
 impl DescriptorReadRequest {
-    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+    fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
+        
+        let offset = dict.get("offset")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+            
+        let link = dict.get("link")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .transpose()?
+            .and_then(|v: String| v.parse().ok());
+
         Ok(Self {
             adapter_name,
             device_address,
-            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
-            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
+            offset,
+            link,
         })
     }
 }
@@ -1137,14 +1190,29 @@ pub struct DescriptorWriteRequest {
 }
 
 impl DescriptorWriteRequest {
-    fn from_dict(dict: &PropMap) -> DbusResult<Self> {
+    fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
+        
+        let offset = dict.get("offset")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+            .transpose()?
+            .unwrap_or_default();
+            
+        let link = dict.get("link")
+            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .transpose()?
+            .and_then(|v: String| v.parse().ok());
+            
+        let prepare_authorize = dict.get("prepare-authorize")
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("prepare-authorize missing".to_string()))
+            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string())))?;
+
         Ok(Self {
             adapter_name,
             device_address,
-            offset: read_opt_prop!(dict, "offset", u16).unwrap_or_default(),
-            link: read_opt_prop!(dict, "link", String).and_then(|v| v.parse().ok()),
-            prepare_authorize: read_prop!(dict, "prepare_authorize", bool),
+            offset,
+            link,
+            prepare_authorize,
         })
     }
 }
@@ -1211,71 +1279,76 @@ pub fn descriptor_control() -> (DescriptorControl, DescriptorControlHandle) {
 /// A characteristic descriptor exposed over D-Bus to bluez.
 pub(crate) struct RegisteredDescriptor {
     d: Descriptor,
+    characteristic_path: OwnedObjectPath,
 }
 
 impl RegisteredDescriptor {
-    fn new(d: Descriptor) -> Self {
+    fn new(d: Descriptor, characteristic_path: OwnedObjectPath) -> Self {
         if let Some(handle) = d.handle {
             let _ = d.control_handle.handle_tx.send(Some(handle));
         }
-        Self { d }
+        Self { d, characteristic_path }
+    }
+}
+
+#[zbus::interface(name = "org.bluez.GattDescriptor1")]
+impl RegisteredDescriptor {
+    #[zbus(property, name = "UUID")]
+    fn uuid(&self) -> String {
+        self.d.uuid.to_string()
     }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(DESCRIPTOR_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            cr_property!(ib, "UUID", reg => {
-                Some(reg.d.uuid.to_string())
-            });
-            cr_property!(ib, "Flags", reg => {
-                let mut flags = DescriptorFlags::default();
-                reg.d.set_descriptor_flags(&mut flags);
-                if let Some(read) = &reg.d.read {
-                    read.set_descriptor_flags(&mut flags);
-                }
-                if let Some(write) = &reg.d.write {
-                    write.set_descriptor_flags(&mut flags);
-                }
-                Some(flags.as_vec())
-            });
-            ib.property("Characteristic").get(|ctx, _| Ok(parent_path(ctx.path())));
-            ib.property("Handle").get(|_ctx, reg| Ok(reg.d.handle.map(|h| h.get()).unwrap_or_default())).set(
-                |ctx, reg, handle| {
-                    log::trace!("{}: {}.Handle <- {}", ctx.path(), DESCRIPTOR_INTERFACE, handle);
-                    let handle = NonZeroU16::new(handle);
-                    let _ = reg.d.control_handle.handle_tx.send(handle);
-                    Ok(None)
-                },
-            );
-            ib.method_with_cr_async("ReadValue", ("flags",), ("value",), |ctx, cr, (flags,): (PropMap,)| {
-                method_call(ctx, cr, |reg: Arc<Self>| async move {
-                    let options = DescriptorReadRequest::from_dict(&flags)?;
-                    match &reg.d.read {
-                        Some(read) => {
-                            let value = (read.fun)(options).await?;
-                            Ok((value,))
-                        }
-                        None => Err(ReqError::NotSupported.into()),
-                    }
-                })
-            });
-            ib.method_with_cr_async(
-                "WriteValue",
-                ("value", "flags"),
-                (),
-                |ctx, cr, (value, flags): (Vec<u8>, PropMap)| {
-                    method_call(ctx, cr, |reg: Arc<Self>| async move {
-                        let options = DescriptorWriteRequest::from_dict(&flags)?;
-                        match &reg.d.write {
-                            Some(write) => {
-                                (write.fun)(value, options).await?;
-                                Ok(())
-                            }
-                            None => Err(ReqError::NotSupported.into()),
-                        }
-                    })
-                },
-            );
-        })
+    #[zbus(property)]
+    fn characteristic(&self) -> OwnedObjectPath {
+        self.characteristic_path.clone()
+    }
+
+    #[zbus(property)]
+    fn flags(&self) -> Vec<String> {
+        let mut flags = DescriptorFlags::default();
+        self.d.set_descriptor_flags(&mut flags);
+        if let Some(read) = &self.d.read {
+            read.set_descriptor_flags(&mut flags);
+        }
+        if let Some(write) = &self.d.write {
+            write.set_descriptor_flags(&mut flags);
+        }
+        flags.as_vec()
+    }
+
+    #[zbus(property)]
+    fn handle(&self) -> u16 {
+        self.d.handle.map(|h| h.get()).unwrap_or_default()
+    }
+
+    #[zbus(property)]
+    fn set_handle(&self, handle: u16) -> zbus::Result<()> {
+        log::trace!("Set handle: {}", handle);
+        let handle = NonZeroU16::new(handle);
+        let _ = self.d.control_handle.handle_tx.send(handle);
+        Ok(())
+    }
+
+    async fn read_value(&self, flags: HashMap<String, OwnedValue>) -> zbus::fdo::Result<Vec<u8>> {
+        let options = DescriptorReadRequest::from_dict(&flags)?;
+        match &self.d.read {
+            Some(read) => {
+                let value = (read.fun)(options).await?;
+                Ok(value)
+            }
+            None => Err(ReqError::NotSupported.into()),
+        }
+    }
+
+    async fn write_value(&self, value: Vec<u8>, flags: HashMap<String, OwnedValue>) -> zbus::fdo::Result<()> {
+        let options = DescriptorWriteRequest::from_dict(&flags)?;
+        match &self.d.write {
+            Some(write) => {
+                (write.fun)(value, options).await?;
+                Ok(())
+            }
+            None => Err(ReqError::NotSupported.into()),
+        }
     }
 }
 
@@ -1283,7 +1356,7 @@ impl RegisteredDescriptor {
 // Application
 // ===========================================================================================
 
-pub(crate) const GATT_APP_PREFIX: &str = publish_path!("gatt/app/");
+pub(crate) const GATT_APP_PREFIX: &str = "/org/bluez/gatt/app/";
 
 /// Definition of local GATT application to publish over Bluetooth.
 #[derive(Debug, Default)]
@@ -1298,75 +1371,84 @@ impl Application {
     pub(crate) async fn register(
         mut self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ApplicationHandle> {
-        let mut reg_paths = Vec::new();
-        let app_path = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().as_simple());
-        let app_path = dbus::Path::new(app_path).unwrap();
+        let mut cleanup_actions: Vec<Box<dyn FnOnce(zbus::Connection) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>> = Vec::new();
+        let app_path_str = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().as_simple());
+        let app_path = OwnedObjectPath::try_from(app_path_str.clone()).unwrap();
         log::trace!("Publishing application at {}", &app_path);
 
-        {
-            let mut cr = inner.crossroads.lock().await;
+        let server = inner.connection.object_server();
 
-            let services = take(&mut self.services);
-            reg_paths.push(app_path.clone());
-            let om = cr.object_manager::<Self>();
-            cr.insert(app_path.clone(), &[om], self);
+        let object_manager = zbus::fdo::ObjectManager;
+        server.at(&app_path, object_manager).await?;
+        let app_path_clone = app_path.clone();
+        cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
+            let server = connection.object_server();
+            let _ = server.remove::<zbus::fdo::ObjectManager, _>(&app_path_clone).await;
+        })));
 
-            for (service_idx, mut service) in services.into_iter().enumerate() {
-                let chars = take(&mut service.characteristics);
+        let services = take(&mut self.services);
 
-                let reg_service = RegisteredService::new(service);
-                let service_path = format!("{}/service{}", &app_path, service_idx);
-                let service_path = dbus::Path::new(service_path).unwrap();
-                log::trace!("Publishing service at {}", &service_path);
-                reg_paths.push(service_path.clone());
-                cr.insert(service_path.clone(), &[inner.gatt_reg_service_token], Arc::new(reg_service));
+        for (service_idx, mut service) in services.into_iter().enumerate() {
+            let chars = take(&mut service.characteristics);
 
-                for (char_idx, mut char) in chars.into_iter().enumerate() {
-                    let descs = take(&mut char.descriptors);
+            let reg_service = RegisteredService::new(service);
+            let service_path_str = format!("{}/service{}", &app_path_str, service_idx);
+            let service_path = OwnedObjectPath::try_from(service_path_str.clone()).unwrap();
+            log::trace!("Publishing service at {}", &service_path);
+            server.at(&service_path, reg_service).await?;
+            let service_path_clone = service_path.clone();
+            cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
+                let server = connection.object_server();
+                let _ = server.remove::<RegisteredService, _>(&service_path_clone).await;
+            })));
 
-                    let reg_char = RegisteredCharacteristic::new(char, &inner.connection);
-                    let char_path = format!("{}/char{}", &service_path, char_idx);
-                    let char_path = dbus::Path::new(char_path).unwrap();
-                    log::trace!("Publishing characteristic at {}", &char_path);
-                    reg_paths.push(char_path.clone());
-                    cr.insert(char_path.clone(), &[inner.gatt_reg_characteristic_token], Arc::new(reg_char));
+            for (char_idx, mut char) in chars.into_iter().enumerate() {
+                let descs = take(&mut char.descriptors);
 
-                    for (desc_idx, desc) in descs.into_iter().enumerate() {
-                        let reg_desc = RegisteredDescriptor::new(desc);
-                        let desc_path = format!("{}/desc{}", &char_path, desc_idx);
-                        let desc_path = dbus::Path::new(desc_path).unwrap();
-                        log::trace!("Publishing descriptor at {}", &desc_path);
-                        reg_paths.push(desc_path.clone());
-                        cr.insert(
-                            desc_path,
-                            &[inner.gatt_reg_characteristic_descriptor_token],
-                            Arc::new(reg_desc),
-                        );
-                    }
+                let reg_char = RegisteredCharacteristic::new(char, service_path.clone());
+                let char_path_str = format!("{}/char{}", &service_path_str, char_idx);
+                let char_path = OwnedObjectPath::try_from(char_path_str.clone()).unwrap();
+                log::trace!("Publishing characteristic at {}", &char_path);
+                server.at(&char_path, reg_char).await?;
+                let char_path_clone = char_path.clone();
+                cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
+                    let server = connection.object_server();
+                    let _ = server.remove::<RegisteredCharacteristic, _>(&char_path_clone).await;
+                })));
+
+                for (desc_idx, desc) in descs.into_iter().enumerate() {
+                    let reg_desc = RegisteredDescriptor::new(desc, char_path.clone());
+                    let desc_path_str = format!("{}/desc{}", &char_path_str, desc_idx);
+                    let desc_path = OwnedObjectPath::try_from(desc_path_str.clone()).unwrap();
+                    log::trace!("Publishing descriptor at {}", &desc_path);
+                    server.at(&desc_path, reg_desc).await?;
+                    let desc_path_clone = desc_path.clone();
+                    cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
+                        let server = connection.object_server();
+                        let _ = server.remove::<RegisteredDescriptor, _>(&desc_path_clone).await;
+                    })));
                 }
             }
         }
 
         log::trace!("Registering application at {}", &app_path);
-        let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
-        let () = proxy
-            .method_call(MANAGER_INTERFACE, "RegisterApplication", (app_path.clone(), PropMap::new()))
-            .await?;
+        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
+        let () = proxy.call("RegisterApplication", &(app_path.clone(), HashMap::<String, OwnedValue>::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let app_path_unreg = app_path.clone();
+        let connection = inner.connection.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering application at {}", &app_path_unreg);
-            let _: std::result::Result<(), dbus::Error> =
-                proxy.method_call(MANAGER_INTERFACE, "UnregisterApplication", (app_path_unreg,)).await;
+            let proxy = zbus::Proxy::new(&connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name).unwrap(), MANAGER_INTERFACE).await;
+            if let Ok(proxy) = proxy {
+                let _: zbus::Result<()> = proxy.call("UnregisterApplication", &(app_path_unreg,)).await;
+            }
 
-            let mut cr = inner.crossroads.lock().await;
-            for reg_path in reg_paths.into_iter().rev() {
-                log::trace!("Unpublishing {}", &reg_path);
-                let _: Option<Self> = cr.remove(&reg_path);
+            for action in cleanup_actions.into_iter().rev() {
+                action(connection.clone()).await;
             }
         });
 
@@ -1378,7 +1460,7 @@ impl Application {
 ///
 /// Drop this handle to unpublish.
 pub struct ApplicationHandle {
-    name: dbus::Path<'static>,
+    name: OwnedObjectPath,
     _drop_tx: oneshot::Sender<()>,
 }
 
@@ -1398,7 +1480,7 @@ impl fmt::Debug for ApplicationHandle {
 // GATT profile
 // ===========================================================================================
 
-pub(crate) const GATT_PROFILE_PREFIX: &str = publish_path!("gatt/profile/");
+pub(crate) const GATT_PROFILE_PREFIX: &str = "/org/bluez/gatt/profile/";
 
 /// Definition of local profile (GATT client) instance.
 ///
@@ -1414,48 +1496,44 @@ pub struct Profile {
     pub _non_exhaustive: (),
 }
 
+#[zbus::interface(name = "org.bluez.GattProfile1")]
 impl Profile {
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Self> {
-        cr.register("org.bluez.GattProfile1", |ib: &mut IfaceBuilder<Self>| {
-            cr_property!(ib, "UUIDs", p => {
-                Some(p.uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
-            });
-        })
+    #[zbus(property, name = "UUIDs")]
+    fn uuids(&self) -> Vec<String> {
+        self.uuids.iter().map(|uuid| uuid.to_string()).collect()
     }
+}
 
+impl Profile {
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ProfileHandle> {
-        let profile_path = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().as_simple());
-        let profile_path = dbus::Path::new(profile_path).unwrap();
+        let profile_path_str = format!("{}{}", GATT_PROFILE_PREFIX, Uuid::new_v4().as_simple());
+        let profile_path = OwnedObjectPath::try_from(profile_path_str.clone()).unwrap();
         log::trace!("Publishing profile at {}", &profile_path);
 
-        {
-            let mut cr = inner.crossroads.lock().await;
-            let om = cr.object_manager::<Self>();
-            cr.insert(profile_path.clone(), &[inner.gatt_profile_token, om], self);
-        }
+        let server = inner.connection.object_server();
+        server.at(&profile_path, self).await?;
 
         log::trace!("Registering profile at {}", &profile_path);
-        let proxy =
-            Proxy::new(SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, TIMEOUT, inner.connection.clone());
-        let () = proxy
-            .method_call(MANAGER_INTERFACE, "RegisterApplication", (profile_path.clone(), PropMap::new()))
-            .await?;
+        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
+        let () = proxy.call("RegisterApplication", &(profile_path.clone(), HashMap::<String, OwnedValue>::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let profile_path_unreg = profile_path.clone();
+        let connection = inner.connection.clone();
         tokio::spawn(async move {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering profile at {}", &profile_path_unreg);
-            let _: std::result::Result<(), dbus::Error> = proxy
-                .method_call(MANAGER_INTERFACE, "UnregisterApplication", (profile_path_unreg.clone(),))
-                .await;
+            let proxy = zbus::Proxy::new(&connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name).unwrap(), MANAGER_INTERFACE).await;
+            if let Ok(proxy) = proxy {
+                let _: zbus::Result<()> = proxy.call("UnregisterApplication", &(profile_path_unreg.clone(),)).await;
+            }
 
             log::trace!("Unpublishing profile at {}", &profile_path_unreg);
-            let mut cr = inner.crossroads.lock().await;
-            let _: Option<Self> = cr.remove(&profile_path_unreg);
+            let server = connection.object_server();
+            let _ = server.remove::<Self, _>(&profile_path_unreg).await;
         });
 
         Ok(ProfileHandle { name: profile_path, _drop_tx: drop_tx })
@@ -1467,7 +1545,7 @@ impl Profile {
 /// Drop this handle to unpublish.
 #[must_use = "ProfileHandle must be held for profile to be published"]
 pub struct ProfileHandle {
-    name: dbus::Path<'static>,
+    name: OwnedObjectPath,
     _drop_tx: oneshot::Sender<()>,
 }
 

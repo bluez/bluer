@@ -17,6 +17,7 @@ async fn main() -> bluer::Result<()> {
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
+    adapter.set_pairable(false).await?;
 
     let args: Vec<_> = env::args().collect();
     if args.len() != 2 {
@@ -58,7 +59,6 @@ async fn main() -> bluer::Result<()> {
 
     println!("Connecting to device...");
     // Trigger connection
-    let mut retries = 0;
     loop {
         tokio::select! {
             res = async {
@@ -67,11 +67,6 @@ async fn main() -> bluer::Result<()> {
             } => {
                 if let Err(err) = res {
                     println!("Connect profile failed: {err}, retrying...");
-                    retries += 1;
-                    if retries > 10 {
-                        eprintln!("Retry limit exceeded");
-                        exit(1);
-                    }
                 }
                 sleep(Duration::from_secs(3)).await;
             },

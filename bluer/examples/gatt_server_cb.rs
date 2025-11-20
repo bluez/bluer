@@ -17,7 +17,7 @@ use tokio::{
 
 include!("gatt.inc");
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> bluer::Result<()> {
     env_logger::init();
     let session = bluer::Session::new().await?;
@@ -88,17 +88,15 @@ async fn main() -> bluer::Result<()> {
                                 loop {
                                     {
                                         let mut value = value.lock().await;
-                                        println!("Notifying with value {:x?}", &*value);
                                         if let Err(err) = notifier.notify(value.to_vec()).await {
                                             println!("Notification error: {}", &err);
                                             break;
                                         }
-                                        println!("Decrementing each element by one");
                                         for v in &mut *value {
                                             *v = v.saturating_sub(1);
                                         }
                                     }
-                                    sleep(Duration::from_secs(5)).await;
+                                    sleep(Duration::from_secs(1)).await;
                                 }
                                 println!("Notification session stop");
                             });
