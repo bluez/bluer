@@ -36,7 +36,7 @@ use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 pub(crate) mod profile;
 
 #[cfg(feature = "bluetoothd")]
-pub use profile::{ConnectRequest, Profile, ProfileHandle, ReqError, ReqResult, Role};
+pub use profile::{Channel, ConnectRequest, Profile, ProfileHandle, ReqError, ReqResult, Role};
 
 use crate::{
     sock::{self, OwnedFd},

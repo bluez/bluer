@@ -2,7 +2,7 @@
 
 use bluer::{
     agent::Agent,
-    rfcomm::{Profile, Role},
+    rfcomm::{Profile, Role, Channel},
     Session, Uuid,
 };
 use futures::StreamExt;
@@ -17,6 +17,8 @@ async fn main() -> bluer::Result<()> {
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
     adapter.set_discoverable(true).await?;
+    adapter.set_discoverable_timeout(0).await?;
+    adapter.set_pairable(false).await?;
     let adapter_addr = adapter.address().await?;
 
     let agent = Agent::default();
@@ -30,6 +32,7 @@ async fn main() -> bluer::Result<()> {
         uuid,
         name: Some("Test Profile".to_string()),
         role: Some(Role::Server),
+        channel: Channel::Auto,
         require_authentication: Some(false),
         require_authorization: Some(false),
         auto_connect: Some(true),

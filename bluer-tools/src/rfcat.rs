@@ -3,7 +3,7 @@
 use bluer::{
     agent::Agent,
     id::ServiceClass,
-    rfcomm::{Listener, Profile, ReqError, Role, Socket, SocketAddr, Stream},
+    rfcomm::{Listener, Profile, ReqError, Role, Channel, Socket, SocketAddr, Stream},
     AdapterEvent, Address, Uuid,
 };
 use bytes::BytesMut;
@@ -238,7 +238,7 @@ impl ListenOpts {
                 let profile = Profile {
                     uuid,
                     name: Some("rfcat listener".to_string()),
-                    channel: Some(0),
+                    channel: Channel::Auto,
                     role: Some(Role::Server),
                     require_authentication: Some(false),
                     require_authorization: Some(false),
@@ -338,7 +338,7 @@ impl ServeOpts {
                 let profile = Profile {
                     uuid,
                     name: Some("rfcat server".to_string()),
-                    channel: Some(0),
+                    channel: Channel::Auto,
                     role: Some(Role::Server),
                     require_authentication: Some(false),
                     require_authorization: Some(false),

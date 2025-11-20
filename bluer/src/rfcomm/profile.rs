@@ -71,6 +71,29 @@ pub enum Role {
     Server,
 }
 
+/// RFCOMM channel for the profile.
+#[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Channel {
+    /// Do not specify a channel.
+    ///
+    /// The daemon will not listen on RFCOMM unless the UUID implies a fixed channel.
+    None,
+    /// Automatically allocate a channel.
+    ///
+    /// This sends channel 0 to the daemon.
+    Auto,
+    /// Use a specific channel.
+    Specific(u16),
+}
+
+impl Default for Channel {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 /// Bluetooth RFCOMM profile definition.
 ///
 /// Use [Session::register_profile](crate::Session::register_profile) to register a profile.
@@ -111,10 +134,10 @@ pub struct Profile {
     /// For asymmetric profiles that do not have UUIDs available to uniquely identify
     /// each side this parameter allows specifying the precise local role.
     pub role: Option<Role>,
-    /// RFCOMM channel number that is used for client and server UUIDs.
+    /// RFCOMM channel number.
     ///
     /// If applicable it will be used in the SDP record as well.
-    pub channel: Option<u16>,
+    pub channel: Channel,
     /// PSM number that is used for client and server UUIDs.
     ///
     /// If applicable it will be used in the SDP record as well.
@@ -149,8 +172,14 @@ impl Profile {
         if let Some(role) = &self.role {
             pm.insert("Role".to_string(), OwnedValue::from(zbus::zvariant::Str::from(role.to_string())));
         }
-        if let Some(channel) = &self.channel {
-            pm.insert("Channel".to_string(), OwnedValue::from(*channel));
+        match self.channel {
+            Channel::None => {}
+            Channel::Auto => {
+                pm.insert("Channel".to_string(), OwnedValue::from(0u16));
+            }
+            Channel::Specific(channel) => {
+                pm.insert("Channel".to_string(), OwnedValue::from(channel));
+            }
         }
         if let Some(psm) = &self.psm {
             pm.insert("PSM".to_string(), OwnedValue::from(*psm));
