@@ -98,7 +98,7 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
-    pub(crate) fn from_dict(dict: &HashMap<String, crate::zbus::zvariant::OwnedValue>) -> Result<Self> {
+    pub(crate) fn from_dict(dict: &HashMap<String, zbus::zvariant::OwnedValue>) -> Result<Self> {
         Ok(Self {
             max_advertisement_length: crate::read_dict(dict, "MaxAdvLen")?,
             max_scan_response_length: crate::read_dict(dict, "MaxScnRspLen")?,

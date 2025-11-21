@@ -93,9 +93,6 @@
 compile_error!("BlueR only supports the Linux operating system.");
 
 #[cfg(feature = "bluetoothd")]
-pub use zbus;
-
-#[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod monitor;
 
@@ -142,9 +139,9 @@ macro_rules! zbus_interface {
         #[allow(dead_code)]
         async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
         where
-            T: Into<$crate::zbus::zvariant::Value<'static>> + 'static,
+            T: Into<zbus::zvariant::Value<'static>> + 'static,
         {
-            let proxy = $crate::zbus::proxy::Proxy::new(
+            let proxy = zbus::proxy::Proxy::new(
                 &self.inner.connection,
                 crate::SERVICE_NAME,
                 &self.dbus_path,
@@ -160,7 +157,7 @@ macro_rules! zbus_interface {
             B: serde::Serialize + zbus::zvariant::DynamicType,
             R: serde::de::DeserializeOwned + zbus::zvariant::Type,
         {
-            let proxy = $crate::zbus::proxy::Proxy::new(
+            let proxy = zbus::proxy::Proxy::new(
                 &self.inner.connection,
                 crate::SERVICE_NAME,
                 &self.dbus_path,
@@ -173,8 +170,6 @@ macro_rules! zbus_interface {
 }
 
 #[cfg(feature = "bluetoothd")]
-#[macro_export]
-/// Define properties for a D-Bus interface.
 macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
@@ -183,8 +178,8 @@ macro_rules! define_properties {
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> $crate::Result<Option<$type>> {
-            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
-            let res: $crate::zbus::Result<$dbus_type> = proxy.get_property($dbus_name).await;
+            let proxy = zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
+            let res: zbus::Result<$dbus_type> = proxy.get_property($dbus_name).await;
             match res {
                 Ok(v) => {
                     let $dbus_value = v;
@@ -203,7 +198,7 @@ macro_rules! define_properties {
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> $crate::Result<$type> {
-            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
+            let proxy = zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
             let v: $dbus_type = proxy.get_property($dbus_name).await?;
             let $dbus_value = v;
             let value: $type = $getter_transform;
@@ -218,7 +213,7 @@ macro_rules! define_properties {
     ) => {
         $(#[$outer])*
         pub async fn $setter_name(&self, $value: $type) -> $crate::Result<()> {
-            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
+            let proxy = zbus::proxy::Proxy::new(&self.inner.connection, $crate::SERVICE_NAME, &self.dbus_path, $dbus_interface).await?;
             let dbus_value: $dbus_type = $setter_transform;
             proxy.set_property($dbus_name, dbus_value).await?;
             Ok(())
@@ -303,15 +298,15 @@ macro_rules! define_properties {
             #[allow(dead_code)]
             fn from_variant_property(
                 name: &str,
-                var_value: &$crate::zbus::zvariant::OwnedValue
+                var_value: &zbus::zvariant::OwnedValue
             ) -> $crate::Result<Option<Self>> {
                 #[allow(unused_imports)]
                 use std::ops::Deref;
                 match name {
                     $(
                         $dbus_name => {
-                            let value: $crate::zbus::zvariant::OwnedValue = var_value.try_clone().map_err(|e| $crate::zbus::Error::Variant(e))?;
-                            let val_res: $crate::zbus::Result<$dbus_type> = <$dbus_type>::try_from(value).map_err(Into::into);
+                            let value: zbus::zvariant::OwnedValue = var_value.try_clone().map_err(|e| zbus::Error::Variant(e))?;
+                            let val_res: zbus::Result<$dbus_type> = <$dbus_type>::try_from(value).map_err(Into::into);
                             match val_res {
                                 Ok(v) => {
                                     let $dbus_value = v;
@@ -327,7 +322,7 @@ macro_rules! define_properties {
             }
 
             #[allow(dead_code)]
-            fn from_prop_map(prop_map: &std::collections::HashMap<String, $crate::zbus::zvariant::OwnedValue>) -> Vec<Self> {
+            fn from_prop_map(prop_map: &std::collections::HashMap<String, zbus::zvariant::OwnedValue>) -> Vec<Self> {
                 prop_map.iter().filter_map(|(name, value)|
                     Self::from_variant_property(name, value).ok().flatten()
                 ).collect()

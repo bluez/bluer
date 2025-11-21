@@ -617,9 +617,9 @@ define_properties!(
 );
 
 /// Bluetooth adapter event.
-/// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub enum AdapterEvent {
     /// Bluetooth device with specified address was added.
     DeviceAdded(Address),
