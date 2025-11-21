@@ -605,7 +605,7 @@ impl CharacteristicNotifier {
     }
 
     /// Resolves once the notification session has been stopped by the receiving device.
-    pub fn stopped(&self) -> impl Future<Output = ()> {
+    pub fn stopped(&self) -> impl Future<Output = ()> + use<> {
         let stop_notify_tx = self.stop_notify_tx.clone();
         async move { stop_notify_tx.closed().await }
     }

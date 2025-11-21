@@ -157,7 +157,7 @@ impl Session {
     }
 
     /// Streams session events.
-    pub async fn events(&self) -> Result<impl Stream<Item = SessionEvent>> {
+    pub async fn events(&self) -> Result<impl Stream<Item = SessionEvent> + use<>> {
         let object_manager = ObjectManagerProxy::builder(&self.inner.connection)
             .destination(SERVICE_NAME)?
             .path("/")?

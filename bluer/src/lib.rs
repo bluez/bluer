@@ -239,7 +239,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(120);
 
 #[cfg(feature = "bluetoothd")]
 macro_rules! zbus_interface {
-    ($interface:expr) => {
+    ($interface:expr_2021) => {
         #[allow(dead_code)]
         async fn get_property<R>(&self, name: &str) -> crate::Result<R>
         where
@@ -291,8 +291,8 @@ macro_rules! zbus_interface {
 macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
-        $getter_name:ident, $dbus_name:expr, OPTIONAL ;
-        $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+        $getter_name:ident, $dbus_name:expr_2021, OPTIONAL ;
+        $dbus_interface:expr_2021, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> $crate::Result<Option<$type>> {
@@ -311,8 +311,8 @@ macro_rules! define_properties {
 
     (@get
         $(#[$outer:meta])*
-        $getter_name:ident, $dbus_name:expr, MANDATORY ;
-        $dbus_interface:expr, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
+        $getter_name:ident, $dbus_name:expr_2021, MANDATORY ;
+        $dbus_interface:expr_2021, $dbus_value:ident : $dbus_type:ty => $getter_transform:block => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $getter_name(&self) -> $crate::Result<$type> {
@@ -327,7 +327,7 @@ macro_rules! define_properties {
     (@set
         $(#[$outer:meta])*
         set: ($setter_name:ident, $value:ident => $setter_transform:block),,
-        $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
+        $dbus_interface:expr_2021, $dbus_name:expr_2021, $dbus_type:ty => $type:ty
     ) => {
         $(#[$outer])*
         pub async fn $setter_name(&self, $value: $type) -> $crate::Result<()> {
@@ -341,7 +341,7 @@ macro_rules! define_properties {
     (@set
         $(#[$outer:meta])*
         ,
-        $dbus_interface:expr, $dbus_name:expr, $dbus_type:ty => $type:ty
+        $dbus_interface:expr_2021, $dbus_name:expr_2021, $dbus_type:ty => $type:ty
     ) => {};
 
     (@fetch_prop
@@ -364,7 +364,7 @@ macro_rules! define_properties {
             $(#[$outer:meta])*
             property(
                 $name:ident, $type:ty,
-                dbus: ($dbus_interface:expr, $dbus_name:expr, $dbus_type:ty, $opt:tt),
+                dbus: ($dbus_interface:expr_2021, $dbus_name:expr_2021, $dbus_type:ty, $opt:tt),
                 get: ($getter_name:ident, $dbus_value:ident => $getter_transform:block),
                 $( $set_tt:tt )*
             );
@@ -521,7 +521,7 @@ macro_rules! define_flags {
     ($vis:vis $name:ident, $doc:tt => {
         $(
             $(#[$field_outer:meta])*
-            $field:ident ($dbus_name:expr),
+            $field:ident ($dbus_name:expr_2021),
         )*
     }) => {
         #[derive(Clone, Copy, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

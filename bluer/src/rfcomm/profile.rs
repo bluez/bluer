@@ -244,7 +244,7 @@ impl ConnectRequest {
     /// The file descriptor is no longer owned by the service
     /// daemon and the profile implementation needs to take
     /// care of cleaning up all connections.
-    pub fn closed(&self) -> impl Future<Output = ()> {
+    pub fn closed(&self) -> impl Future<Output = ()> + use<> {
         let closed_tx = self.closed_tx.clone();
         async move { closed_tx.closed().await }
     }

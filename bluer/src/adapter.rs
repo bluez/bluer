@@ -165,7 +165,7 @@ impl Adapter {
     /// when you want to be notified when the device properties change.
     ///
     /// The discovery filter can be configured using [set_discovery_filter](Self::set_discovery_filter).
-    pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent>> {
+    pub async fn discover_devices(&self) -> Result<impl Stream<Item = AdapterEvent> + use<>> {
         let discovery = self.discovery_session().await?;
         let events = self.events().await?;
         Ok(events.map(move |item| {
@@ -187,7 +187,7 @@ impl Adapter {
     /// Check the [Device::rssi] property to see if the device is currently present.
     ///
     /// The discovery filter can be configured using [set_discovery_filter](Self::set_discovery_filter).
-    pub async fn discover_devices_with_changes(&self) -> Result<impl Stream<Item = AdapterEvent>> {
+    pub async fn discover_devices_with_changes(&self) -> Result<impl Stream<Item = AdapterEvent> + use<>> {
         let (tx, rx) = mpsc::channel(1);
         let mut discovery = self.discover_devices().await?;
         let adapter = self.clone();
@@ -255,7 +255,7 @@ impl Adapter {
     /// Streams adapter property and device changes.
     ///
     /// The stream ends when the adapter is removed.
-    pub async fn events(&self) -> Result<impl Stream<Item = AdapterEvent>> {
+    pub async fn events(&self) -> Result<impl Stream<Item = AdapterEvent> + use<>> {
         let name = self.name.clone();
         let events = self.inner.events(self.dbus_path.clone(), true).await?;
         let stream = events.flat_map(move |event| match event {

@@ -341,7 +341,7 @@ impl Socket {
     /// # Safety
     /// If the passed file descriptor is invalid, undefined behavior may occur.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
-        Ok(Self { fd: AsyncFd::new(OwnedFd::new(fd))? })
+        unsafe { Ok(Self { fd: AsyncFd::new(OwnedFd::new(fd))? }) }
     }
 
     fn from_owned_fd(fd: OwnedFd) -> Result<Self> {
@@ -373,7 +373,7 @@ impl FromRawFd for Socket {
     /// Panics when the conversion fails.
     /// Use [Socket::from_raw_fd] for a non-panicking variant.
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from_raw_fd(fd).expect("from_raw_fd failed")
+        unsafe { Self::from_raw_fd(fd).expect("from_raw_fd failed") }
     }
 }
 
@@ -418,7 +418,7 @@ impl Listener {
     /// # Safety
     /// If the passed file descriptor is invalid, undefined behavior may occur.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
-        Ok(Self { socket: Socket::from_raw_fd(fd)? })
+        unsafe { Ok(Self { socket: Socket::from_raw_fd(fd)? }) }
     }
 }
 
@@ -444,7 +444,7 @@ impl FromRawFd for Listener {
     /// Panics when the conversion fails.
     /// Use [Listener::from_raw_fd] for a non-panicking variant.
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from_raw_fd(fd).expect("from_raw_fd failed")
+        unsafe { Self::from_raw_fd(fd).expect("from_raw_fd failed") }
     }
 }
 
@@ -525,7 +525,7 @@ impl Stream {
     /// # Safety
     /// If the passed file descriptor is invalid, undefined behavior may occur.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self> {
-        Self::from_socket(Socket::from_raw_fd(fd)?)
+        unsafe { Self::from_socket(Socket::from_raw_fd(fd)?) }
     }
 }
 
@@ -551,7 +551,7 @@ impl FromRawFd for Stream {
     /// Panics when the conversion fails.
     /// Use [Stream::from_raw_fd] for a non-panicking variant.
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        Self::from_raw_fd(fd).expect("from_raw_fd failed")
+        unsafe { Self::from_raw_fd(fd).expect("from_raw_fd failed") }
     }
 }
 

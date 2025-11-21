@@ -1417,7 +1417,11 @@ impl ServeOpts {
 
 async fn make_app(
     adapter: &Adapter, no_advertise: bool, nordic_uart: bool, service: Uuid, characteristic: Uuid,
-) -> Result<(Option<AdvertisementHandle>, ApplicationHandle, impl Stream<Item = CharacteristicControlEvent>)> {
+) -> Result<(
+    Option<AdvertisementHandle>,
+    ApplicationHandle,
+    impl Stream<Item = CharacteristicControlEvent> + use<>,
+)> {
     let service = if nordic_uart { id::Service::ComNordicsemiServiceUart.into() } else { service };
     let le_advertisement = Advertisement {
         service_uuids: vec![service].into_iter().collect(),

@@ -370,7 +370,7 @@ impl Characteristic {
     /// if it supports value notifications or indications.
     ///
     /// This will also notify after a read operation.
-    pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>>> {
+    pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>> + use<>> {
         let token = self.notify_session().await?;
         let events = self.inner.events(self.dbus_path.clone(), false).await?;
         let values = events.filter_map(move |evt| {
