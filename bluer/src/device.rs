@@ -9,7 +9,7 @@ use std::{
 use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
 use zbus::{
-    Proxy, ProxyBuilder,
+    Proxy,
     zvariant::{ObjectPath, OwnedObjectPath},
 };
 
@@ -265,7 +265,7 @@ impl Device {
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
             if done_rx.await.is_err() {
-                let proxy = ProxyBuilder::<Proxy>::new(&connection)
+                let proxy = zbus::proxy::Builder::<Proxy>::new(&connection)
                     .destination(SERVICE_NAME)
                     .unwrap()
                     .path(dbus_path)

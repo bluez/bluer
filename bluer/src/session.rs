@@ -183,7 +183,7 @@ impl Session {
             let args = msg.args().ok()?;
             let path = args.object_path;
             let interfaces = args.interfaces;
-            if interfaces.contains(&"org.bluez.Adapter1") {
+            if interfaces.iter().any(|i| i.as_str() == "org.bluez.Adapter1") {
                 let name = path.split('/').next_back()?.to_string();
                 Some(SessionEvent::AdapterRemoved(name))
             } else {

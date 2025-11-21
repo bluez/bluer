@@ -952,7 +952,7 @@ impl RegisteredCharacteristic {
 
     async fn start_notify(
         &self, #[zbus(object_server)] _server: &zbus::ObjectServer,
-        #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>,
+        #[zbus(signal_context)] ctxt: zbus::object_server::SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         let path = ctxt.path().to_owned();
         let connection = ctxt.connection().clone();

@@ -45,7 +45,7 @@ mesh = ["bluetoothd"]
 serde = ["uuid/serde", "dep:serde"]
 
 [dependencies]
-zbus = { version = "4", features = ["tokio"], optional = true }
+zbus = { version = "5", features = ["tokio"], optional = true }
 futures = "0.3"
 pin-project = { version = "1", optional = true }
 tokio = { version = "1", features = ["net", "io-util"] }
