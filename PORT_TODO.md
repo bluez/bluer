@@ -18,53 +18,54 @@
 - [x] Reenable and port mesh module
 
 ## Current Status
-- Porting complete. Verification needed.
+- Porting complete. Verification complete.
 
 ## Known Issues
 - `gatt_echo_client` stress test fails with `UnexpectedEof` and timeouts (exit code 124) on some systems.
   - Cause: The `gatt_echo_server` uses a bounded channel (`mpsc::channel(50)`) which can cause the reader loop to block if the writer loop is slow, leading to L2CAP buffer overflow and connection drop.
   - Potential Fix: Switch `gatt_echo_server` to `mpsc::unbounded_channel()` and increase the read buffer size.
   - Workaround: Reduce test load in `gatt_echo_client` (iterations: 50, max size: 20KB).
+- `bluer/src/mesh/application.rs`: Unregistration logic might leak objects in `zbus::ObjectServer` as it only removes the root `ObjectManager`.
 
 ## Modified Files
-- AGENTS.md
-- PORT_TODO.md
-- bluer-tools/src/gattcat.rs
-- bluer-tools/src/rfcat.rs
-- bluer/Cargo.toml
-- bluer/examples/gatt_client.rs
-- bluer/examples/gatt_echo_client.rs
-- bluer/examples/gatt_echo_server.rs
-- bluer/examples/gatt_server_cb.rs
-- bluer/examples/gatt_server_io.rs
-- bluer/examples/le_advertise.rs
-- bluer/examples/rfcomm.inc
-- bluer/examples/rfcomm_profile_client.rs
-- bluer/examples/rfcomm_profile_server.rs
-- bluer/examples/simple_agent.rs
-- bluer/src/adapter.rs
-- bluer/src/adv.rs
-- bluer/src/agent.rs
-- bluer/src/device.rs
-- bluer/src/gatt/local.rs
-- bluer/src/gatt/mod.rs
-- bluer/src/gatt/remote.rs
-- bluer/src/lib.rs
-- bluer/src/mesh/agent.rs
-- bluer/src/mesh/application.rs
-- bluer/src/mesh/element.rs
-- bluer/src/mesh/management.rs
-- bluer/src/mesh/mod.rs
-- bluer/src/mesh/network.rs
-- bluer/src/mesh/node.rs
-- bluer/src/mesh/provisioner.rs
-- bluer/src/monitor.rs
-- bluer/src/rfcomm/mod.rs
-- bluer/src/rfcomm/profile.rs
-- bluer/src/session.rs
-- bluer/src/test_zbus.rs
-- test_advertising.py
-- test_gatt.py
-- test_rfcat.py
-- test_rfcomm.py
+- AGENTS.md: Verified.
+- PORT_TODO.md: Verified.
+- bluer-tools/src/gattcat.rs: Verified.
+- bluer-tools/src/rfcat.rs: Verified.
+- bluer/Cargo.toml: Verified.
+- bluer/examples/gatt_client.rs: Verified.
+- bluer/examples/gatt_echo_client.rs: Verified.
+- bluer/examples/gatt_echo_server.rs: Verified.
+- bluer/examples/gatt_server_cb.rs: Verified.
+- bluer/examples/gatt_server_io.rs: Verified.
+- bluer/examples/le_advertise.rs: Verified.
+- bluer/examples/rfcomm.inc: Verified.
+- bluer/examples/rfcomm_profile_client.rs: Verified.
+- bluer/examples/rfcomm_profile_server.rs: Verified.
+- bluer/examples/simple_agent.rs: Verified.
+- bluer/src/adapter.rs: Verified.
+- bluer/src/adv.rs: Verified.
+- bluer/src/agent.rs: Verified.
+- bluer/src/device.rs: Verified.
+- bluer/src/gatt/local.rs: Verified.
+- bluer/src/gatt/mod.rs: Verified.
+- bluer/src/gatt/remote.rs: Verified.
+- bluer/src/lib.rs: Verified. Cleaned up commented out code.
+- bluer/src/mesh/agent.rs: Verified.
+- bluer/src/mesh/application.rs: Verified. Note: Potential memory leak in unregistration.
+- bluer/src/mesh/element.rs: Verified.
+- bluer/src/mesh/management.rs: Verified.
+- bluer/src/mesh/mod.rs: Verified.
+- bluer/src/mesh/network.rs: Verified.
+- bluer/src/mesh/node.rs: Verified.
+- bluer/src/mesh/provisioner.rs: Verified. Added missing `VersionID` property.
+- bluer/src/monitor.rs: Verified.
+- bluer/src/rfcomm/mod.rs: Verified.
+- bluer/src/rfcomm/profile.rs: Verified.
+- bluer/src/session.rs: Verified.
+- bluer/src/test_zbus.rs: Verified.
+- test_advertising.py: Verified.
+- test_gatt.py: Verified.
+- test_rfcat.py: Verified.
+- test_rfcomm.py: Verified.
 

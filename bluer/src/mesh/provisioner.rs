@@ -77,4 +77,9 @@ impl RegisteredProvisioner {
         *next_addr += u16::from(count) + 1;
         Ok((self.provisioner.net_index, addr))
     }
+
+    #[zbus(property)]
+    fn version_id(&self) -> u16 {
+        1
+    }
 }
