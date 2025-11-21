@@ -632,7 +632,7 @@ impl SpeedServerOpts {
                     println!("Connection from {} with {:?}", peer_sa.addr, &conn_info,);
 
                     loop {
-                        let mut rng = rand::thread_rng();
+                        let mut rng = rand::rng();
                         let mut buf = vec![0; 4096];
                         rng.fill_bytes(&mut buf);
 

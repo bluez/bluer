@@ -3,7 +3,7 @@
 use bluer::{
     agent::Agent,
     rfcomm::{Channel, Profile, Role},
-    Session, Uuid,
+    Session,
 };
 use futures::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

@@ -41,10 +41,10 @@ async fn main() -> bluer::Result<()> {
     }
 
     let (mut rh, mut wh) = stream.into_split();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for i in 0..15 {
-        let len = rng.gen_range(0..50000);
-        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+        let len = rng.random_range(0..50000);
+        let data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
 
         println!("\nTest iteration {i} with data size {len}");
 

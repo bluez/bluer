@@ -573,7 +573,7 @@ impl SpeedServerOpts {
                     println!("Send MTU is {send_mtu} bytes");
 
                     loop {
-                        let mut rng = rand::thread_rng();
+                        let mut rng = rand::rng();
                         let mut buf = vec![0; 4096];
                         rng.fill_bytes(&mut buf);
 

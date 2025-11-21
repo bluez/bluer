@@ -1,11 +1,9 @@
 //! Connects to the Bluetooth GATT echo service and tests it.
 
-use bluer::{
-    gatt::remote::Characteristic, AdapterEvent, AddressType, Device, DeviceEvent, DeviceProperty, Result,
-};
+use bluer::{gatt::remote::Characteristic, AdapterEvent, AddressType, Device, Result};
 use futures::{pin_mut, StreamExt};
 use rand::Rng;
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::{sleep, timeout},
@@ -113,9 +111,9 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
     let mut buf = [0; 1024];
     while let Ok(Ok(_)) = timeout(Duration::from_secs(1), notify_io.read(&mut buf)).await {}
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     for i in 0..100 {
-        let mut len = rng.gen_range(0..100000);
+        let mut len = rng.random_range(0..100000);
 
         // Try to trigger packet reordering over EATT.
         if i % 10 == 0 {
@@ -131,7 +129,7 @@ async fn exercise_characteristic(char: &Characteristic) -> Result<()> {
         // The solution is to disable EATT in /etc/bluetooth/main.conf.
 
         println!("    Test iteration {i} with data size {len}");
-        let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+        let data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
 
         // We must read back the data while sending, otherwise the connection
         // buffer will overrun and we will lose data.
