@@ -67,12 +67,13 @@ pub struct NodeAdded {
 }
 
 /// Reason why adding node has failed.
-#[derive(Debug, displaydoc::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumString)]
+#[derive(Debug, displaydoc::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum AddNodeFailedReason {
     /// aborted
     #[strum(serialize = "aborted")]
+    #[default]
     Aborted,
     /// timeout
     #[strum(serialize = "timeout")]
@@ -97,10 +98,4 @@ pub enum AddNodeFailedReason {
     CannotAssignAddresses,
     /// unknown reason
     Unknown,
-}
-
-impl Default for AddNodeFailedReason {
-    fn default() -> Self {
-        Self::Aborted
-    }
 }

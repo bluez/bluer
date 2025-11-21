@@ -16,6 +16,8 @@ use crate::{
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
 
+type AttachResult = (OwnedObjectPath, Vec<(u8, Vec<(u16, ElementConfig)>)>);
+
 #[proxy(interface = "org.bluez.mesh.Network1")]
 trait Network {
     /// Join.
@@ -23,9 +25,7 @@ trait Network {
     /// Cancel.
     fn cancel(&self) -> zbus::Result<()>;
     /// Attach.
-    fn attach(
-        &self, app: &zbus::zvariant::ObjectPath<'_>, token: u64,
-    ) -> zbus::Result<(OwnedObjectPath, Vec<(u8, Vec<(u16, ElementConfig)>)>)>;
+    fn attach(&self, app: &zbus::zvariant::ObjectPath<'_>, token: u64) -> zbus::Result<AttachResult>;
     /// Leave.
     fn leave(&self, token: u64) -> zbus::Result<()>;
 }

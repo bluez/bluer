@@ -44,11 +44,14 @@ pub enum LinkType {
 // ===========================================================================================
 
 /// Error response from us to a Bluetooth request.
-#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr, Default,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Bluetooth request failed
+    #[default]
     Failed,
     /// Bluetooth request already in progress
     InProgress,
@@ -65,12 +68,6 @@ pub enum ReqError {
 }
 
 impl std::error::Error for ReqError {}
-
-impl Default for ReqError {
-    fn default() -> Self {
-        Self::Failed
-    }
-}
 
 impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
@@ -1427,9 +1424,8 @@ impl Application {
     pub(crate) async fn register(
         mut self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ApplicationHandle> {
-        let mut cleanup_actions: Vec<
-            Box<dyn FnOnce(zbus::Connection) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>,
-        > = Vec::new();
+        type CleanupAction = Box<dyn FnOnce(zbus::Connection) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>;
+        let mut cleanup_actions: Vec<CleanupAction> = Vec::new();
         let app_path_str = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().as_simple());
         let app_path = OwnedObjectPath::try_from(app_path_str.clone()).unwrap();
         log::trace!("Publishing application at {}", &app_path);

@@ -20,23 +20,20 @@ pub(crate) const MANAGER_PATH: &str = "/org/bluez";
 pub(crate) const AGENT_PREFIX: &str = "/org/bluez/agent/";
 
 /// Error response from us to a Bluetooth agent request.
-#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr, Default,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Request was rejected.
     Rejected,
     /// Request was canceled.
+    #[default]
     Canceled,
 }
 
 impl std::error::Error for ReqError {}
-
-impl Default for ReqError {
-    fn default() -> Self {
-        Self::Canceled
-    }
-}
 
 impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {

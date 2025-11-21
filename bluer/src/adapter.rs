@@ -78,8 +78,7 @@ impl Adapter {
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a ObjectPath) -> Option<(&'a str, &'a str)> {
         let p = path.as_str();
-        if p.starts_with(PREFIX) {
-            let p = &p[PREFIX.len()..];
+        if let Some(p) = p.strip_prefix(PREFIX) {
             let sep = p.find('/').unwrap_or(p.len());
             Some((&p[0..sep], &p[sep..]))
         } else {
@@ -351,8 +350,8 @@ impl Adapter {
     /// This method is only available on BlueZ 5.49 and later.
     pub async fn connect_device(&self, address: Address, address_type: AddressType) -> Result<Device> {
         let mut m: HashMap<String, zbus::zvariant::Value> = HashMap::new();
-        m.insert("Address".to_string(), zbus::zvariant::Value::from(address.to_string()).into());
-        m.insert("AddressType".to_string(), zbus::zvariant::Value::from(address_type.to_string()).into());
+        m.insert("Address".to_string(), zbus::zvariant::Value::from(address.to_string()));
+        m.insert("AddressType".to_string(), zbus::zvariant::Value::from(address_type.to_string()));
         let _path: zbus::zvariant::OwnedObjectPath = self.call_method("ConnectDevice", &(m,)).await?;
         self.device(address)
     }
@@ -633,12 +632,13 @@ pub enum AdapterEvent {
 
 /// Transport parameter determines the type of scan.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Display, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum DiscoveryTransport {
     /// interleaved scan
     #[strum(serialize = "auto")]
+    #[default]
     Auto,
     /// BR/EDR inquiry
     #[strum(serialize = "bredr")]
@@ -646,12 +646,6 @@ pub enum DiscoveryTransport {
     /// LE scan only
     #[strum(serialize = "le")]
     Le,
-}
-
-impl Default for DiscoveryTransport {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 /// Bluetooth device discovery filter.
@@ -744,25 +738,25 @@ impl DiscoveryFilter {
 
         let uuids: Vec<String> = uuids.into_iter().map(|uuid| uuid.to_string()).collect();
         if !uuids.is_empty() {
-            hm.insert("UUIDs".to_string(), zbus::zvariant::Value::from(uuids).into());
+            hm.insert("UUIDs".to_string(), zbus::zvariant::Value::from(uuids));
         }
         if let Some(rssi) = rssi {
-            hm.insert("RSSI".to_string(), zbus::zvariant::Value::from(rssi).into());
+            hm.insert("RSSI".to_string(), zbus::zvariant::Value::from(rssi));
         }
         if let Some(pathloss) = pathloss {
-            hm.insert("Pathloss".to_string(), zbus::zvariant::Value::from(pathloss).into());
+            hm.insert("Pathloss".to_string(), zbus::zvariant::Value::from(pathloss));
         }
-        hm.insert("Transport".to_string(), zbus::zvariant::Value::from(transport.to_string()).into());
+        hm.insert("Transport".to_string(), zbus::zvariant::Value::from(transport.to_string()));
 
         if duplicate_data {
-            hm.insert("DuplicateData".to_string(), zbus::zvariant::Value::from(true).into());
+            hm.insert("DuplicateData".to_string(), zbus::zvariant::Value::from(true));
         }
         if discoverable {
-            hm.insert("Discoverable".to_string(), zbus::zvariant::Value::from(true).into());
+            hm.insert("Discoverable".to_string(), zbus::zvariant::Value::from(true));
         }
 
         if let Some(pattern) = pattern {
-            hm.insert("Pattern".to_string(), zbus::zvariant::Value::from(pattern).into());
+            hm.insert("Pattern".to_string(), zbus::zvariant::Value::from(pattern));
         }
         hm
     }

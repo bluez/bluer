@@ -67,9 +67,7 @@ impl Service {
         Ok(OwnedObjectPath::try_from(format!("{device_path}/service{id:04x}")).unwrap())
     }
 
-    pub(crate) fn parse_dbus_path_prefix<'a>(
-        path: &'a OwnedObjectPath,
-    ) -> Option<((&'a str, Address, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix(path: &OwnedObjectPath) -> Option<((&str, Address, u16), &str)> {
         match Device::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address), p)) => match p.strip_prefix("/service") {
                 Some(p) => {
@@ -85,7 +83,7 @@ impl Service {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16)> {
+    pub(crate) fn parse_dbus_path(path: &OwnedObjectPath) -> Option<(&str, Address, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -228,9 +226,7 @@ impl Characteristic {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn parse_dbus_path_prefix<'a>(
-        path: &'a OwnedObjectPath,
-    ) -> Option<((&'a str, Address, u16, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix(path: &OwnedObjectPath) -> Option<((&str, Address, u16, u16), &str)> {
         match Service::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("/char") {
                 Some(p) => {
@@ -246,7 +242,7 @@ impl Characteristic {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16, u16)> {
+    pub(crate) fn parse_dbus_path(path: &OwnedObjectPath) -> Option<(&str, Address, u16, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,
@@ -610,9 +606,9 @@ impl Descriptor {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn parse_dbus_path_prefix<'a>(
-        path: &'a OwnedObjectPath,
-    ) -> Option<((&'a str, Address, u16, u16, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix(
+        path: &OwnedObjectPath,
+    ) -> Option<((&str, Address, u16, u16, u16), &str)> {
         match Characteristic::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id, char_id), p)) => match p.strip_prefix("/desc") {
                 Some(p) => {
@@ -628,7 +624,7 @@ impl Descriptor {
         }
     }
 
-    pub(crate) fn parse_dbus_path<'a>(path: &'a OwnedObjectPath) -> Option<(&'a str, Address, u16, u16, u16)> {
+    pub(crate) fn parse_dbus_path(path: &OwnedObjectPath) -> Option<(&str, Address, u16, u16, u16)> {
         match Self::parse_dbus_path_prefix(path) {
             Some((v, "")) => Some(v),
             _ => None,

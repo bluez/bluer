@@ -172,7 +172,7 @@ impl Session {
             let path = args.object_path;
             let interfaces = args.interfaces_and_properties;
             if interfaces.contains_key("org.bluez.Adapter1") {
-                let name = path.split('/').last()?.to_string();
+                let name = path.split('/').next_back()?.to_string();
                 Some(SessionEvent::AdapterAdded(name))
             } else {
                 None
@@ -184,7 +184,7 @@ impl Session {
             let path = args.object_path;
             let interfaces = args.interfaces;
             if interfaces.contains(&"org.bluez.Adapter1") {
-                let name = path.split('/').last()?.to_string();
+                let name = path.split('/').next_back()?.to_string();
                 Some(SessionEvent::AdapterRemoved(name))
             } else {
                 None
@@ -206,7 +206,7 @@ impl Session {
         let mut names = Vec::new();
         for (path, interfaces) in objects {
             if interfaces.contains_key("org.bluez.Adapter1") {
-                if let Some(name) = path.split('/').last() {
+                if let Some(name) = path.split('/').next_back() {
                     names.push(name.to_string());
                 }
             }
@@ -381,7 +381,7 @@ impl Event {
                                         let parent = crate::parent_path(&object);
                                         if let Some(parent_subs) = subs.get_mut(parent.as_str()) {
                                             let evt = Self::ObjectAdded {
-                                                object: object.into(),
+                                                object,
                                                 interfaces: interfaces.into_keys().collect(),
                                             };
                                             log::trace!("Event: {:?}", &evt);
@@ -403,7 +403,7 @@ impl Event {
                                         let parent = crate::parent_path(&object);
                                         if let Some(parent_subs) = subs.get_mut(parent.as_str()) {
                                             let evt = Self::ObjectRemoved {
-                                                object: object.into(),
+                                                object,
                                                 interfaces: interfaces.into_iter().collect(),
                                             };
                                             log::trace!("Event: {:?}", &evt);

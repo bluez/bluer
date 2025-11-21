@@ -20,7 +20,7 @@ pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 pub(crate) const ADVERTISEMENT_PREFIX: &str = "/org/bluez/bluer/advertisement";
 
 /// Determines the type of advertising packet requested.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Type {
     /// Broadcast
@@ -28,22 +28,18 @@ pub enum Type {
     Broadcast,
     /// Peripheral
     #[strum(serialize = "peripheral")]
+    #[default]
     Peripheral,
 }
 
-impl Default for Type {
-    fn default() -> Self {
-        Self::Peripheral
-    }
-}
-
 /// Secondary channel for advertisement.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum SecondaryChannel {
     /// 1M
     #[strum(serialize = "1M")]
+    #[default]
     OneM,
     /// 2M
     #[strum(serialize = "2M")]
@@ -51,12 +47,6 @@ pub enum SecondaryChannel {
     /// Coded
     #[strum(serialize = "Coded")]
     Coded,
-}
-
-impl Default for SecondaryChannel {
-    fn default() -> Self {
-        Self::OneM
-    }
 }
 
 /// Advertisement feature.

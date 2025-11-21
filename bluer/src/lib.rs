@@ -253,9 +253,9 @@ macro_rules! zbus_interface {
         }
 
         #[allow(dead_code)]
-        async fn set_property<T: 'static>(&self, name: &str, value: T) -> crate::Result<()>
+        async fn set_property<T>(&self, name: &str, value: T) -> crate::Result<()>
         where
-            T: Into<$crate::zbus::zvariant::Value<'static>>,
+            T: Into<$crate::zbus::zvariant::Value<'static>> + 'static,
         {
             let proxy = $crate::zbus::proxy::Proxy::new(
                 &self.inner.connection,
@@ -712,13 +712,14 @@ pub enum ErrorKind {
 /// and the version of the Bluetooth daemon.
 #[cfg(feature = "bluetoothd")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-#[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum InternalErrorKind {
     /// invalid UUID: {0}
     InvalidUuid(String),
     /// invalid value
+    #[default]
     InvalidValue,
     /// invalid modalias: {0}
     InvalidModalias(String),
@@ -736,12 +737,6 @@ pub enum InternalErrorKind {
     DBus(String),
     /// lost connection to D-Bus
     DBusConnectionLost,
-}
-
-impl Default for InternalErrorKind {
-    fn default() -> Self {
-        Self::InvalidValue
-    }
 }
 
 #[cfg(feature = "bluetoothd")]
@@ -1029,7 +1024,9 @@ impl<'de> serde::Deserialize<'de> for Address {
 }
 
 /// Bluetooth device address type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Display, EnumString, FromPrimitive, Default,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum AddressType {
@@ -1038,16 +1035,11 @@ pub enum AddressType {
     BrEdr = sys::BDADDR_BREDR,
     /// Bluetooth Low Energy (LE) public address.
     #[strum(serialize = "public")]
+    #[default]
     LePublic = sys::BDADDR_LE_PUBLIC,
     /// Bluetooth Low Energy (LE) random address.
     #[strum(serialize = "random")]
     LeRandom = sys::BDADDR_LE_RANDOM,
-}
-
-impl Default for AddressType {
-    fn default() -> Self {
-        Self::LePublic
-    }
 }
 
 /// Linux kernel modalias information.

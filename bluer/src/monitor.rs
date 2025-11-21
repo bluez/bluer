@@ -30,19 +30,14 @@ pub(crate) const MANAGER_PATH: &str = "/org/bluez";
 pub(crate) const MONITOR_PREFIX: &str = "/org/bluez/bluer/monitor";
 
 /// Determines the type of advertisement monitor.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Display, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum Type {
     /// Patterns with logic OR applied.
     #[strum(serialize = "or_patterns")]
+    #[default]
     OrPatterns,
-}
-
-impl Default for Type {
-    fn default() -> Self {
-        Self::OrPatterns
-    }
 }
 
 /// Common advertising data types for [`Pattern::data_type`].

@@ -29,23 +29,20 @@ pub(crate) const PROFILE_PREFIX: &str = "/org/bluez/profile/";
 
 /// Error response from us to a Bluetooth profile request.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
-#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr, Default,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Request was rejected.
     Rejected,
     /// Request was canceled.
+    #[default]
     Canceled,
 }
 
 impl std::error::Error for ReqError {}
-
-impl Default for ReqError {
-    fn default() -> Self {
-        Self::Canceled
-    }
-}
 
 impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
@@ -73,12 +70,13 @@ pub enum Role {
 
 /// RFCOMM channel for the profile.
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rfcomm", feature = "bluetoothd"))))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Channel {
     /// Do not specify a channel.
     ///
     /// The daemon will not listen on RFCOMM unless the UUID implies a fixed channel.
+    #[default]
     None,
     /// Automatically allocate a channel.
     ///
@@ -86,12 +84,6 @@ pub enum Channel {
     Auto,
     /// Use a specific channel.
     Specific(u16),
-}
-
-impl Default for Channel {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Bluetooth RFCOMM profile definition.

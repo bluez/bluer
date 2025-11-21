@@ -85,10 +85,11 @@ define_flags!(DescriptorFlags, "Bluetooth GATT characteristic descriptor flags."
 });
 
 /// Write operation type.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, EnumString, Display, Default)]
 pub enum WriteOp {
     /// Write without response.
     #[strum(serialize = "command")]
+    #[default]
     Command,
     /// Write with response.
     #[strum(serialize = "request")]
@@ -96,12 +97,6 @@ pub enum WriteOp {
     /// Reliable write.
     #[strum(serialize = "reliable")]
     Reliable,
-}
-
-impl Default for WriteOp {
-    fn default() -> Self {
-        Self::Command
-    }
 }
 
 /// Streams data from a characteristic with low overhead.

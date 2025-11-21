@@ -55,7 +55,7 @@ pub struct Properties {
 // ---------------
 
 /// Reason why node provisioning initiated by joining has failed.
-#[derive(Debug, displaydoc::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumString)]
+#[derive(Debug, displaydoc::Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumString, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum JoinFailedReason {
@@ -76,18 +76,13 @@ pub enum JoinFailedReason {
     DecryptionError,
     /// unexpected error
     #[strum(serialize = "unexpected-error")]
+    #[default]
     UnexpectedError,
     /// cannot assign addresses
     #[strum(serialize = "cannot-assign-addresses")]
     CannotAssignAddresses,
     /// Unknown reason
     Unknown,
-}
-
-impl Default for JoinFailedReason {
-    fn default() -> Self {
-        Self::UnexpectedError
-    }
 }
 
 impl From<JoinFailedReason> for Error {

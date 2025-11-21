@@ -25,11 +25,14 @@ pub(crate) const PATH: &str = "/org/bluez/mesh";
 // ===========================================================================================
 
 /// Error response from us to a Bluetooth request.
-#[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr, Default,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum ReqError {
     /// Bluetooth request failed
+    #[default]
     Failed,
     /// Bluetooth request already in progress
     InProgress,
@@ -46,27 +49,6 @@ pub enum ReqError {
 }
 
 impl std::error::Error for ReqError {}
-
-impl Default for ReqError {
-    fn default() -> Self {
-        Self::Failed
-    }
-}
-
-impl From<ReqError> for crate::Error {
-    fn from(err: ReqError) -> Self {
-        let kind = match err {
-            ReqError::Failed => crate::ErrorKind::Failed,
-            ReqError::InProgress => crate::ErrorKind::InProgress,
-            ReqError::InvalidOffset => crate::ErrorKind::InvalidOffset,
-            ReqError::InvalidValueLength => crate::ErrorKind::InvalidLength,
-            ReqError::NotPermitted => crate::ErrorKind::NotPermitted,
-            ReqError::NotAuthorized => crate::ErrorKind::NotAuthorized,
-            ReqError::NotSupported => crate::ErrorKind::NotSupported,
-        };
-        crate::Error::new(kind)
-    }
-}
 
 impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
