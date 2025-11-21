@@ -7,7 +7,7 @@ use crossterm::{
     style::{self, Stylize},
     terminal::{self, ClearType},
 };
-use futures::{pin_mut, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, pin_mut};
 use serde::Serialize;
 use serde_jsonlines::AsyncJsonLinesWriter;
 use std::{
@@ -21,7 +21,7 @@ use std::{
 use tokio::{fs::File, time::sleep};
 use uuid::Uuid;
 
-use bluer::{id, Adapter, AdapterEvent, Address, AddressType, Device};
+use bluer::{Adapter, AdapterEvent, Address, AddressType, Device, id};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

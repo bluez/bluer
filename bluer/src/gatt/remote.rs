@@ -10,17 +10,17 @@ use std::{
 use tokio::net::UnixDatagram;
 use uuid::Uuid;
 use zbus::{
-    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
     Proxy,
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
 };
 
 use super::{
-    mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
-    CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    CHARACTERISTIC_INTERFACE, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
+    DESCRIPTOR_INTERFACE, SERVICE_INTERFACE, WriteOp, mtu_workaround,
 };
 use crate::{
-    all_dbus_objects, Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SessionInner,
-    SingleSessionToken, SERVICE_NAME,
+    Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SERVICE_NAME, SessionInner,
+    SingleSessionToken, all_dbus_objects,
 };
 
 // ===========================================================================================
@@ -573,8 +573,15 @@ pub struct Descriptor {
 
 impl fmt::Debug for Descriptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Descriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}",
-            self.adapter_name(), self.device_address(), self.service_id(), self.characteristic_id(), self.id())
+        write!(
+            f,
+            "Descriptor {{ adapter_name: {}, device_address: {}, service_id: {}, characteristic_id: {}, id: {} }}",
+            self.adapter_name(),
+            self.device_address(),
+            self.service_id(),
+            self.characteristic_id(),
+            self.id()
+        )
     }
 }
 

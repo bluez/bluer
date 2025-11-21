@@ -1,9 +1,9 @@
 //! System socket base.
 
-use libc::{c_int, sockaddr, socklen_t, Ioctl, SOCK_CLOEXEC, SOCK_NONBLOCK};
+use libc::{Ioctl, SOCK_CLOEXEC, SOCK_NONBLOCK, c_int, sockaddr, socklen_t};
 use std::{
     io::{Error, ErrorKind, Result},
-    mem::{size_of, MaybeUninit},
+    mem::{MaybeUninit, size_of},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
 };
 use tokio::io::ReadBuf;
@@ -126,11 +126,7 @@ where
 
 /// Puts socket in listen mode.
 pub fn listen(socket: &OwnedFd, backlog: i32) -> Result<()> {
-    if unsafe { libc::listen(socket.as_raw_fd(), backlog) } == 0 {
-        Ok(())
-    } else {
-        Err(Error::last_os_error())
-    }
+    if unsafe { libc::listen(socket.as_raw_fd(), backlog) } == 0 { Ok(()) } else { Err(Error::last_os_error()) }
 }
 
 /// Accept a connection on the provided socket.
@@ -263,11 +259,7 @@ where
 
 /// Shut down part of a socket.
 pub fn shutdown(socket: &OwnedFd, how: c_int) -> Result<()> {
-    if unsafe { libc::shutdown(socket.as_raw_fd(), how) } == 0 {
-        Ok(())
-    } else {
-        Err(Error::last_os_error())
-    }
+    if unsafe { libc::shutdown(socket.as_raw_fd(), how) } == 0 { Ok(()) } else { Err(Error::last_os_error()) }
 }
 
 /// Get socket option.

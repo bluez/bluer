@@ -3,15 +3,15 @@
 use bluer::{
     adv::Advertisement,
     gatt::{
-        local::{
-            characteristic_control, service_control, Application, Characteristic, CharacteristicControlEvent,
-            CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicWrite, CharacteristicWriteMethod,
-            Service,
-        },
         CharacteristicReader, CharacteristicWriter,
+        local::{
+            Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify,
+            CharacteristicNotifyMethod, CharacteristicWrite, CharacteristicWriteMethod, Service,
+            characteristic_control, service_control,
+        },
     },
 };
-use futures::{future, pin_mut, StreamExt};
+use futures::{StreamExt, future, pin_mut};
 use std::{collections::BTreeMap, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},

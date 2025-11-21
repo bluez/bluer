@@ -1,21 +1,21 @@
 //! Arbitrary RFCOMM connections and listens.
 
 use bluer::{
+    AdapterEvent, Address, Uuid,
     agent::Agent,
     id::ServiceClass,
     rfcomm::{Channel, Listener, Profile, ReqError, Role, Socket, SocketAddr, Stream},
-    AdapterEvent, Address, Uuid,
 };
 use bytes::BytesMut;
 use clap::Parser;
 use crossterm::{terminal, tty::IsTty};
-use futures::{future, pin_mut, StreamExt};
+use futures::{StreamExt, future, pin_mut};
 use libc::{STDIN_FILENO, STDOUT_FILENO};
 use rand::prelude::*;
 use std::{
     collections::VecDeque,
     ffi::OsString,
-    process::{exit, Command, Stdio},
+    process::{Command, Stdio, exit},
     time::{Duration, Instant},
 };
 use tab_pty_process::AsyncPtyMaster;
@@ -116,10 +116,10 @@ impl ConnectOpts {
                 eprintln!("Discovering device...");
                 let mut devs = adapter.discover_devices().await?;
                 while let Some(evt) = devs.next().await {
-                    if let AdapterEvent::DeviceAdded(addr) = evt {
-                        if addr == self.address {
-                            break;
-                        }
+                    if let AdapterEvent::DeviceAdded(addr) = evt
+                        && addr == self.address
+                    {
+                        break;
                     }
                 }
                 let dev = adapter.device(self.address)?;

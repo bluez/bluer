@@ -3,15 +3,15 @@
 use bluer::{
     adv::Advertisement,
     gatt::{
-        local::{
-            characteristic_control, Application, Characteristic, CharacteristicControlEvent,
-            CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicWrite, CharacteristicWriteMethod,
-            Service,
-        },
         CharacteristicReader, CharacteristicWriter,
+        local::{
+            Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify,
+            CharacteristicNotifyMethod, CharacteristicWrite, CharacteristicWriteMethod, Service,
+            characteristic_control,
+        },
     },
 };
-use futures::{future, pin_mut, StreamExt};
+use futures::{StreamExt, future, pin_mut};
 use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -92,12 +92,12 @@ async fn main() -> bluer::Result<()> {
                     }
                 }
                 WriterMsg::Data(data) => {
-                    if let Some(writer) = &mut writer_opt {
-                        if let Err(err) = writer.write_all(&data).await {
-                            println!("Write failed: {}", &err);
-                            // Stop processing messages to signal failure to the sender
-                            break;
-                        }
+                    if let Some(writer) = &mut writer_opt
+                        && let Err(err) = writer.write_all(&data).await
+                    {
+                        println!("Write failed: {}", &err);
+                        // Stop processing messages to signal failure to the sender
+                        break;
                     }
                 }
             }

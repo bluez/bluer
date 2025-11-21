@@ -8,18 +8,18 @@
 //!
 
 use crate::{
+    Address, AddressType,
     sock::{self, OwnedFd},
     sys::{
-        bt_power, bt_security, sockaddr_l2, BTPROTO_L2CAP, BT_MODE, BT_PHY, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF,
-        BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU, BT_SECURITY, BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW,
-        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU, L2CAP_CONNINFO, L2CAP_LM, L2CAP_OPTIONS, SOL_L2CAP,
+        BT_MODE, BT_PHY, BT_POWER, BT_POWER_FORCE_ACTIVE_OFF, BT_POWER_FORCE_ACTIVE_ON, BT_RCVMTU, BT_SECURITY,
+        BT_SECURITY_FIPS, BT_SECURITY_HIGH, BT_SECURITY_LOW, BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BT_SNDMTU,
+        BTPROTO_L2CAP, L2CAP_CONNINFO, L2CAP_LM, L2CAP_OPTIONS, SOL_L2CAP, bt_power, bt_security, sockaddr_l2,
     },
-    Address, AddressType,
 };
 use futures::ready;
 use libc::{
-    AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_DGRAM, SOCK_SEQPACKET,
-    SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, SO_RCVBUF, TIOCINQ, TIOCOUTQ,
+    AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SO_ERROR, SO_RCVBUF, SOCK_DGRAM,
+    SOCK_SEQPACKET, SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, TIOCINQ, TIOCOUTQ,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -36,12 +36,12 @@ use std::{
     },
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Poll},
 };
-use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
 pub use crate::sys::{l2cap_conninfo as ConnInfo, l2cap_options as Opts};
 

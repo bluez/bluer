@@ -1,9 +1,9 @@
 //! Client using Profile API.
 
 use bluer::{
+    AdapterEvent, Address, Session,
     agent::Agent,
     rfcomm::{Profile, ReqError, Role},
-    AdapterEvent, Address, Session,
 };
 use futures::StreamExt;
 use std::{env, process::exit, time::Duration};
@@ -51,10 +51,10 @@ async fn main() -> bluer::Result<()> {
     let mut devs = adapter.discover_devices().await?;
     // Wait for device to be found
     while let Some(evt) = devs.next().await {
-        if let AdapterEvent::DeviceAdded(addr) = evt {
-            if addr == target_addr {
-                break;
-            }
+        if let AdapterEvent::DeviceAdded(addr) = evt
+            && addr == target_addr
+        {
+            break;
         }
     }
     let dev = adapter.device(target_addr)?;

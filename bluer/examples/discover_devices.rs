@@ -1,7 +1,7 @@
 //! Discover Bluetooth devices and list them.
 
 use bluer::{Adapter, AdapterEvent, Address, DeviceEvent, DiscoveryFilter, DiscoveryTransport};
-use futures::{pin_mut, stream::SelectAll, StreamExt};
+use futures::{StreamExt, pin_mut, stream::SelectAll};
 use std::{collections::HashSet, env};
 
 async fn query_device(adapter: &Adapter, addr: Address) -> bluer::Result<()> {

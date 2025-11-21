@@ -1,44 +1,45 @@
 //! Swiss army knife for GATT services.
 
 use bluer::{
+    Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
+    Uuid, UuidExt,
     adv::{Advertisement, AdvertisementHandle},
     agent::{
         Agent, AgentHandle, AuthorizeService, DisplayPasskey, DisplayPinCode, ReqError, ReqResult,
         RequestAuthorization, RequestConfirmation, RequestPasskey, RequestPinCode,
     },
     gatt::{
+        CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
         local::{
-            self, characteristic_control, Application, ApplicationHandle, CharacteristicControlEvent,
-            CharacteristicNotify, CharacteristicWrite, Service,
+            self, Application, ApplicationHandle, CharacteristicControlEvent, CharacteristicNotify,
+            CharacteristicWrite, Service, characteristic_control,
         },
-        remote, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
+        remote,
     },
-    id, Adapter, AdapterEvent, Address, AddressType, Device, DeviceEvent, DeviceProperty, Session, SessionEvent,
-    Uuid, UuidExt,
+    id,
 };
 use bytes::BytesMut;
 use clap::Parser;
 use crossterm::{terminal, tty::IsTty};
 use futures::{
-    future, pin_mut,
+    FutureExt, Stream, StreamExt, TryFutureExt, future, pin_mut,
     stream::{self, SelectAll},
-    FutureExt, Stream, StreamExt, TryFutureExt,
 };
 use libc::{STDIN_FILENO, STDOUT_FILENO};
-use pretty_hex::{hex_write, HexConfig};
+use pretty_hex::{HexConfig, hex_write};
 use std::{
     collections::HashSet,
     convert::TryFrom,
     ffi::OsString,
     fmt::{self, Display},
     iter,
-    process::{exit, Command, Stdio},
+    process::{Command, Stdio, exit},
     str::FromStr,
     time::Duration,
 };
 use tab_pty_process::AsyncPtyMaster;
 use tokio::{
-    io::{stdin, stdout, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, stdin, stdout},
     select,
     sync::oneshot,
     time::{sleep, timeout},
@@ -78,11 +79,7 @@ impl From<Uuid> for UuidOrShort {
 
 impl fmt::Display for UuidOrShort {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(s) = self.0.as_u16() {
-            write!(f, "{s:04x}")
-        } else {
-            write!(f, "{}", self.0)
-        }
+        if let Some(s) = self.0.as_u16() { write!(f, "{s:04x}") } else { write!(f, "{}", self.0) }
     }
 }
 
@@ -94,11 +91,10 @@ async fn find_device(adapter: &Adapter, address: Address) -> Result<Device> {
     loop {
         select! {
             Some(evt) = disco.next() => {
-                if let AdapterEvent::DeviceAdded(addr) = evt {
-                    if addr == address {
+                if let AdapterEvent::DeviceAdded(addr) = evt
+                    && addr == address {
                         return Ok(adapter.device(addr)?);
                     }
-                }
             }
             _ = &mut timeout => {
                 return Err("device not found".into());
@@ -645,17 +641,17 @@ impl DiscoverOpts {
 
                 let flags = char.flags().await?;
                 print_if_some(6, "Flags", Some(char_flags_to_vec(&flags).join(", ")), "");
-                if flags.read {
-                    if let Ok(value) = char.read().await {
-                        print_list(6, "Read", to_hex(&value));
-                    }
+                if flags.read
+                    && let Ok(value) = char.read().await
+                {
+                    print_list(6, "Read", to_hex(&value));
                 }
-                if flags.notify || flags.indicate {
-                    if let Ok(ns) = char.notify().await {
-                        pin_mut!(ns);
-                        if let Ok(Some(value)) = timeout(Duration::from_secs(5), ns.next()).await {
-                            print_list(6, "Notify", to_hex(&value));
-                        }
+                if (flags.notify || flags.indicate)
+                    && let Ok(ns) = char.notify().await
+                {
+                    pin_mut!(ns);
+                    if let Ok(Some(value)) = timeout(Duration::from_secs(5), ns.next()).await {
+                        print_list(6, "Notify", to_hex(&value));
                     }
                 }
 

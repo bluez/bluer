@@ -6,7 +6,7 @@ use uuid::Uuid;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 use super::application::ApplicationInner;
-use crate::{mesh::SERVICE_NAME, Error, ErrorKind, Result, SessionInner};
+use crate::{Error, ErrorKind, Result, SessionInner, mesh::SERVICE_NAME};
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Management1";
 
@@ -47,7 +47,7 @@ impl Management {
             match rx.recv().await {
                 Ok((res_uuid, Ok(node))) if res_uuid == uuid => break Ok(node),
                 Ok((res_uuid, Err(reason))) if res_uuid == uuid => {
-                    break Err(Error::new(ErrorKind::MeshAddNodeFailed(reason)))
+                    break Err(Error::new(ErrorKind::MeshAddNodeFailed(reason)));
                 }
                 Ok(_) => (),
                 Err(_) => break Err(Error::new(ErrorKind::Failed)),

@@ -14,7 +14,7 @@ use zbus::{
     zvariant::{OwnedObjectPath, Value},
 };
 
-use crate::{Adapter, Result, SessionInner, SERVICE_NAME};
+use crate::{Adapter, Result, SERVICE_NAME, SessionInner};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
 pub(crate) const ADVERTISEMENT_PREFIX: &str = "/org/bluez/bluer/advertisement";
@@ -369,13 +369,12 @@ impl Advertisement {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering advertisement at {}", &unreg_path);
-            if let Ok(adapter_path) = Adapter::dbus_path(&adapter_name) {
-                if let Ok(proxy) =
+            if let Ok(adapter_path) = Adapter::dbus_path(&adapter_name)
+                && let Ok(proxy) =
                     zbus::Proxy::new(&connection, SERVICE_NAME, adapter_path, MANAGER_INTERFACE).await
-                {
-                    let _: std::result::Result<(), zbus::Error> =
-                        proxy.call("UnregisterAdvertisement", &(&unreg_path,)).await;
-                }
+            {
+                let _: std::result::Result<(), zbus::Error> =
+                    proxy.call("UnregisterAdvertisement", &(&unreg_path,)).await;
             }
 
             log::trace!("Unpublishing advertisement at {}", &unreg_path);

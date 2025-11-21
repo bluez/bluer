@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use zbus::{fdo, interface, zvariant::OwnedValue};
 
-use crate::{mesh::ReqError, Error, ErrorKind, Result, SessionInner};
+use crate::{Error, ErrorKind, Result, SessionInner, mesh::ReqError};
 
 // pub(crate) const ELEMENT_INTERFACE: &str = "org.bluez.mesh.Element1";
 

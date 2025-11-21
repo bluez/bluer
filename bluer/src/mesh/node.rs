@@ -11,8 +11,8 @@ use super::{
     element::{ElementConfigs, ElementRef},
 };
 use crate::{
-    mesh::{management::Management, SERVICE_NAME},
     Result, SessionInner,
+    mesh::{SERVICE_NAME, management::Management},
 };
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";

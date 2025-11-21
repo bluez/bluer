@@ -3,13 +3,13 @@
 use clap::{Parser, ValueEnum};
 use std::{future::pending, str::FromStr, time::Duration};
 use tokio::{
-    signal::unix::{signal, SignalKind},
+    signal::unix::{SignalKind, signal},
     time::sleep,
 };
 
 use bluer::{
-    adv::{Advertisement, Type},
     Adapter, Address, Session, Uuid,
+    adv::{Advertisement, Type},
 };
 
 type AnyResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;

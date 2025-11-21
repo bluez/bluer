@@ -1,8 +1,8 @@
 //! Bluetooth adapter.
 
 use futures::{
-    stream::{self, SelectAll},
     Stream, StreamExt,
+    stream::{self, SelectAll},
 };
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -19,13 +19,6 @@ use zbus::{
 };
 
 use crate::{
-    adv,
-    adv::{Advertisement, Capabilities, Feature, PlatformFeature, SecondaryChannel},
-    gatt,
-    // all_dbus_objects, device,
-    // device::Device,
-    // gatt,
-    monitor::MonitorManager,
     Address,
     AddressType,
     Device,
@@ -35,9 +28,16 @@ use crate::{
     InternalErrorKind,
     Modalias,
     Result,
+    SERVICE_NAME,
     SessionInner,
     SingleSessionToken,
-    SERVICE_NAME,
+    adv,
+    adv::{Advertisement, Capabilities, Feature, PlatformFeature, SecondaryChannel},
+    gatt,
+    // all_dbus_objects, device,
+    // device::Device,
+    // gatt,
+    monitor::MonitorManager,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -200,11 +200,10 @@ impl Adapter {
                     evt = discovery.next() => {
                         match evt {
                             Some(AdapterEvent::DeviceAdded(addr)) => {
-                                if let Ok(dev) = adapter.device(addr) {
-                                    if let Ok(dev_evts) = dev.events().await {
+                                if let Ok(dev) = adapter.device(addr)
+                                    && let Ok(dev_evts) = dev.events().await {
                                         changes.push(dev_evts.map(move |_| addr));
                                     }
-                                }
                                 let _ = tx.send(AdapterEvent::DeviceAdded(addr)).await;
                             },
                             Some(AdapterEvent::DeviceRemoved(addr)) => {

@@ -1,6 +1,6 @@
 //! Remote Bluetooth device.
 
-use futures::{pin_mut, select, stream, FutureExt, Stream, StreamExt};
+use futures::{FutureExt, Stream, StreamExt, pin_mut, select, stream};
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -9,15 +9,14 @@ use std::{
 use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
 use zbus::{
-    zvariant::{ObjectPath, OwnedObjectPath},
     Proxy, ProxyBuilder,
+    zvariant::{ObjectPath, OwnedObjectPath},
 };
 
 use crate::{
-    all_dbus_objects,
-    gatt::{self, remote::Service, SERVICE_INTERFACE},
-    Adapter, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SessionInner,
-    SERVICE_NAME, TIMEOUT,
+    Adapter, Address, AddressType, Error, ErrorKind, Event, InternalErrorKind, Modalias, Result, SERVICE_NAME,
+    SessionInner, TIMEOUT, all_dbus_objects,
+    gatt::{self, SERVICE_INTERFACE, remote::Service},
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Device1";

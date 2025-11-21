@@ -6,11 +6,11 @@ use uuid::Uuid;
 use zbus::{fdo, interface};
 
 use crate::{
-    mesh::{
-        management::{AddNodeFailedReason, NodeAdded},
-        ReqError,
-    },
     SessionInner,
+    mesh::{
+        ReqError,
+        management::{AddNodeFailedReason, NodeAdded},
+    },
 };
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Provisioner1";

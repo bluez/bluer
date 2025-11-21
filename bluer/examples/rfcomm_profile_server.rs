@@ -1,9 +1,9 @@
 //! Server using Profile API.
 
 use bluer::{
+    Session,
     agent::Agent,
     rfcomm::{Channel, Profile, Role},
-    Session,
 };
 use futures::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

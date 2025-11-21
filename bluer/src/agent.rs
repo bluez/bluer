@@ -1,19 +1,19 @@
 //! Bluetooth authorization agent.
 
-use futures::{pin_mut, Future};
+use futures::{Future, pin_mut};
 use std::{fmt, pin::Pin, sync::Arc};
 use strum::IntoStaticStr;
 use tokio::{
     select,
-    sync::{oneshot, Mutex},
+    sync::{Mutex, oneshot},
 };
 use uuid::Uuid;
 use zbus::{
-    zvariant::{ObjectPath, OwnedObjectPath},
     Proxy,
+    zvariant::{ObjectPath, OwnedObjectPath},
 };
 
-use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
+use crate::{Address, Device, ERR_PREFIX, Result, SERVICE_NAME, SessionInner};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AgentManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";

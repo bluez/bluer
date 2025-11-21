@@ -11,16 +11,16 @@ use std::{
     task::{Context, Poll},
 };
 use strum::{Display, EnumString, IntoStaticStr};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 use zbus::{
-    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
     Proxy,
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
 };
 
 use super::{Socket, Stream};
-use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
+use crate::{Address, Device, ERR_PREFIX, Result, SERVICE_NAME, SessionInner};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.ProfileManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";

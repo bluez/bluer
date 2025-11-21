@@ -1,9 +1,9 @@
 //! Arbitrary L2CAP connections and listens.
 
 use bluer::{
+    Address, AddressType, Uuid,
     adv::{Advertisement, AdvertisementHandle},
     l2cap::{Socket, SocketAddr, Stream, StreamListener},
-    Address, AddressType, Uuid,
 };
 use bytes::BytesMut;
 use clap::Parser;
@@ -14,7 +14,7 @@ use rand::prelude::*;
 use std::{
     collections::VecDeque,
     ffi::OsString,
-    process::{exit, Command, Stdio},
+    process::{Command, Stdio, exit},
     time::{Duration, Instant},
 };
 use tab_pty_process::AsyncPtyMaster;
@@ -150,7 +150,10 @@ impl ListenOpts {
 
         // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
         if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
-            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+            eprintln!(
+                "The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.",
+                local_sa.psm
+            );
         }
         let listen = StreamListener::bind(local_sa).await?;
         let local_sa = listen.as_ref().local_addr()?;
@@ -233,7 +236,10 @@ impl ServeOpts {
 
         // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
         if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
-            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+            eprintln!(
+                "The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.",
+                local_sa.psm
+            );
         }
 
         let listen = StreamListener::bind(local_sa).await?;
@@ -448,7 +454,10 @@ impl SpeedClientOpts {
 
         // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
         if self.verbose && !self.br_edr && self.psm > MAX_LE_PSM {
-            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+            eprintln!(
+                "The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.",
+                local_sa.psm
+            );
         }
         socket.bind(local_sa)?;
 
@@ -551,7 +560,10 @@ impl SpeedServerOpts {
 
         // a Bluetooth LE SPSM above 255 (0xFF) which at present is a violation of the Bluetooth Spec (v6.0 Vol 3, Part A Table 4.15: L2CAP_LE_CREDIT_BASED_CONNECTION_REQ SPSM ranges)
         if self.verbose && !self.br_edr && local_sa.psm > MAX_LE_PSM {
-            eprintln!("The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.", local_sa.psm);
+            eprintln!(
+                "The Bluetooth LE PSM value of {} exceeds the valid maximum range of 255 and may cause the program to terminate with an error.",
+                local_sa.psm
+            );
         }
         let listen = StreamListener::bind(local_sa).await?;
 

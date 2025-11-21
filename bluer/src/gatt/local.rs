@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
+use futures::{Future, FutureExt, Stream, channel::oneshot, lock::Mutex};
 use pin_project::pin_project;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,10 +20,10 @@ use uuid::Uuid;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
 
 use super::{
-    make_socket_pair, mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
-    DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE,
+    CHARACTERISTIC_INTERFACE, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, DescriptorFlags,
+    WriteOp, make_socket_pair, mtu_workaround,
 };
-use crate::{Adapter, Address, Device, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
+use crate::{Adapter, Address, Device, ERR_PREFIX, Error, ErrorKind, Result, SERVICE_NAME, SessionInner};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 

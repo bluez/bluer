@@ -1,8 +1,8 @@
 //! Connects to l2cap_server and sends and receives test data.
 
 use bluer::{
-    l2cap::{SocketAddr, Stream, PSM_LE_DYN_START},
     Address, AddressType,
+    l2cap::{PSM_LE_DYN_START, SocketAddr, Stream},
 };
 use rand::prelude::*;
 use std::{env, process::exit};

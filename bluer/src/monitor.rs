@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 use strum::{Display, EnumString};
-use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
+use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 use zbus::{
@@ -22,7 +22,7 @@ use zbus::{
     zvariant::{ObjectPath, OwnedObjectPath, Value},
 };
 
-use crate::{Address, Device, Error, ErrorKind, Result, SessionInner, SERVICE_NAME};
+use crate::{Address, Device, Error, ErrorKind, Result, SERVICE_NAME, SessionInner};
 
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";

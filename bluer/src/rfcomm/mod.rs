@@ -13,8 +13,8 @@
 
 use futures::ready;
 use libc::{
-    c_int, AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_RAW, SOCK_STREAM,
-    SOL_BLUETOOTH, SOL_SOCKET, SO_ERROR, SO_RCVBUF, TIOCINQ, TIOCOUTQ,
+    AF_BLUETOOTH, EAGAIN, EINPROGRESS, MSG_PEEK, SHUT_RD, SHUT_RDWR, SHUT_WR, SO_ERROR, SO_RCVBUF, SOCK_RAW,
+    SOCK_STREAM, SOL_BLUETOOTH, SOL_SOCKET, TIOCINQ, TIOCOUTQ, c_int,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -30,7 +30,7 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
 #[cfg(feature = "bluetoothd")]
 pub(crate) mod profile;
@@ -39,13 +39,13 @@ pub(crate) mod profile;
 pub use profile::{Channel, ConnectRequest, Profile, ProfileHandle, ReqError, ReqResult, Role};
 
 use crate::{
+    Address,
     sock::{self, OwnedFd},
     sys::{
-        bt_security, rfcomm_dev_req, sockaddr_rc, BTPROTO_RFCOMM, BT_SECURITY, BT_SECURITY_HIGH, BT_SECURITY_LOW,
-        BT_SECURITY_MEDIUM, BT_SECURITY_SDP, RFCOMMCREATEDEV, RFCOMMRELEASEDEV, RFCOMM_CONNINFO, RFCOMM_LM,
-        RFCOMM_LM_MASTER, RFCOMM_RELEASE_ONHUP, RFCOMM_REUSE_DLC, SOL_RFCOMM,
+        BT_SECURITY, BT_SECURITY_HIGH, BT_SECURITY_LOW, BT_SECURITY_MEDIUM, BT_SECURITY_SDP, BTPROTO_RFCOMM,
+        RFCOMM_CONNINFO, RFCOMM_LM, RFCOMM_LM_MASTER, RFCOMM_RELEASE_ONHUP, RFCOMM_REUSE_DLC, RFCOMMCREATEDEV,
+        RFCOMMRELEASEDEV, SOL_RFCOMM, bt_security, rfcomm_dev_req, sockaddr_rc,
     },
-    Address,
 };
 
 pub use crate::sys::rfcomm_conninfo as ConnInfo;

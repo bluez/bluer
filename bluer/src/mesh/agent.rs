@@ -5,7 +5,7 @@ use futures::Future;
 use std::{fmt::Debug, pin::Pin, str::FromStr, sync::Arc};
 use strum::{EnumString, IntoStaticStr};
 
-use crate::{SessionInner, ERR_PREFIX};
+use crate::{ERR_PREFIX, SessionInner};
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
 

@@ -1,8 +1,8 @@
 //! Connects to rfcomm_server and sends and receives test data.
 
 use bluer::{
-    rfcomm::{SocketAddr, Stream},
     Address,
+    rfcomm::{SocketAddr, Stream},
 };
 use rand::prelude::*;
 use std::{env, process::exit};

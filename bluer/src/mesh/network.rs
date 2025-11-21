@@ -5,13 +5,13 @@ use tokio::sync::oneshot;
 use zbus::{proxy, zvariant::OwnedObjectPath};
 
 use crate::{
+    Error, ErrorKind, Result, SessionInner,
     mesh::{
+        PATH, SERVICE_NAME,
         application::{Application, ApplicationHandle, RegisteredApplication},
         element::ElementConfig,
         node::Node,
-        PATH, SERVICE_NAME,
     },
-    Error, ErrorKind, Result, SessionInner,
 };
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
@@ -64,14 +64,12 @@ impl Network {
         let (done_tx, done_rx) = oneshot::channel();
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
-            if done_rx.await.is_err() {
-                if let Ok(proxy) =
+            if done_rx.await.is_err()
+                && let Ok(proxy) =
                     NetworkProxy::builder(&connection).destination(SERVICE_NAME).and_then(|b| b.path(PATH))
-                {
-                    if let Ok(proxy) = proxy.build().await {
-                        let _ = proxy.cancel().await;
-                    }
-                }
+                && let Ok(proxy) = proxy.build().await
+            {
+                let _ = proxy.cancel().await;
             }
         });
 

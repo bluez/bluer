@@ -1,7 +1,7 @@
 //! Connects to the Bluetooth GATT echo service and tests it.
 
-use bluer::{gatt::remote::Characteristic, AdapterEvent, AddressType, Device, Result};
-use futures::{pin_mut, StreamExt};
+use bluer::{AdapterEvent, AddressType, Device, Result, gatt::remote::Characteristic};
+use futures::{StreamExt, pin_mut};
 use rand::Rng;
 use std::time::Duration;
 use tokio::{

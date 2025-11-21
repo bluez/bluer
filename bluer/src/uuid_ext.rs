@@ -19,20 +19,12 @@ const BASE_MASK_16: u128 = 0xffff0000_ffff_ffff_ffff_ffffffffffff;
 impl UuidExt for Uuid {
     fn as_u32(&self) -> Option<u32> {
         let value = self.as_u128();
-        if value & BASE_MASK_32 == BASE_UUID {
-            Some((value >> 96) as u32)
-        } else {
-            None
-        }
+        if value & BASE_MASK_32 == BASE_UUID { Some((value >> 96) as u32) } else { None }
     }
 
     fn as_u16(&self) -> Option<u16> {
         let value = self.as_u128();
-        if value & BASE_MASK_16 == BASE_UUID {
-            Some((value >> 96) as u16)
-        } else {
-            None
-        }
+        if value & BASE_MASK_16 == BASE_UUID { Some((value >> 96) as u16) } else { None }
     }
 
     fn from_u32(v: u32) -> Uuid {

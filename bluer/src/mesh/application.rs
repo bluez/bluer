@@ -15,8 +15,8 @@ use super::{
     provisioner::{Provisioner, RegisteredProvisioner},
 };
 use crate::{
-    mesh::element::{Element, RegisteredElement},
     Error, ErrorKind, Result, SessionInner,
+    mesh::element::{Element, RegisteredElement},
 };
 
 // pub(crate) const INTERFACE: &str = "org.bluez.mesh.Application1";

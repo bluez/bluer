@@ -1,9 +1,9 @@
 //! Bluetooth session.
 
 use futures::{
+    Future, SinkExt, Stream, StreamExt,
     channel::{mpsc, oneshot},
     lock::Mutex,
-    Future, SinkExt, Stream, StreamExt,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -11,11 +11,11 @@ use std::{
     sync::{Arc, Weak},
 };
 use tokio::select;
-use zbus::{fdo::ObjectManagerProxy, Connection};
+use zbus::{Connection, fdo::ObjectManagerProxy};
 
 use crate::{
-    agent::{Agent, AgentHandle, RegisteredAgent},
     Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
+    agent::{Agent, AgentHandle, RegisteredAgent},
 };
 
 #[cfg(feature = "rfcomm")]
@@ -205,10 +205,10 @@ impl Session {
         let objects = object_manager.get_managed_objects().await?;
         let mut names = Vec::new();
         for (path, interfaces) in objects {
-            if interfaces.contains_key("org.bluez.Adapter1") {
-                if let Some(name) = path.split('/').next_back() {
-                    names.push(name.to_string());
-                }
+            if interfaces.contains_key("org.bluez.Adapter1")
+                && let Some(name) = path.split('/').next_back()
+            {
+                names.push(name.to_string());
             }
         }
         Ok(names)
@@ -217,11 +217,7 @@ impl Session {
     /// Get the default adapter.
     pub async fn default_adapter(&self) -> Result<Adapter> {
         let names = self.adapter_names().await?;
-        if let Some(name) = names.first() {
-            self.adapter(name)
-        } else {
-            Err(Error::new(ErrorKind::NotFound))
-        }
+        if let Some(name) = names.first() { self.adapter(name) } else { Err(Error::new(ErrorKind::NotFound)) }
     }
 
     /// Create an interface to the Bluetooth adapter with the specified name.
@@ -329,7 +325,7 @@ impl Event {
     pub(crate) async fn handle_connection(
         connection: zbus::Connection, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
     ) -> Result<()> {
-        use zbus::{message::Type, MessageStream};
+        use zbus::{MessageStream, message::Type};
 
         let object_manager_match = zbus::MatchRule::builder()
             .msg_type(Type::Signal)
@@ -397,8 +393,8 @@ impl Event {
                                             }
                                         }
                                     }
-                                } else if member == "InterfacesRemoved" {
-                                    if let Ok((object, interfaces)) = msg.body().deserialize::<(zbus::zvariant::OwnedObjectPath, Vec<String>)>() {
+                                } else if member == "InterfacesRemoved"
+                                    && let Ok((object, interfaces)) = msg.body().deserialize::<(zbus::zvariant::OwnedObjectPath, Vec<String>)>() {
                                         // Check for parent path match for ObjectRemoved event.
                                         let parent = crate::parent_path(&object);
                                         if let Some(parent_subs) = subs.get_mut(parent.as_str()) {
@@ -419,7 +415,6 @@ impl Event {
                                             }
                                         }
                                     }
-                                }
                             }
                         } else {
                             break;
@@ -435,8 +430,8 @@ impl Event {
                                 }
                             };
 
-                            if let Ok((interface_name, changed_properties, _invalidated_properties)) = msg.body().deserialize::<(String, HashMap<String, zbus::zvariant::OwnedValue>, Vec<String>)>() {
-                                if let Some(object) = msg.header().path() {
+                            if let Ok((interface_name, changed_properties, _invalidated_properties)) = msg.body().deserialize::<(String, HashMap<String, zbus::zvariant::OwnedValue>, Vec<String>)>()
+                                && let Some(object) = msg.header().path() {
                                     let object_str = object.as_str();
                                     // Check for direct path match for PropertiesChanged event.
                                     if let Some(path_subs) = subs.get_mut(object_str) {
@@ -452,7 +447,6 @@ impl Event {
                                         }
                                     }
                                 }
-                            }
                         } else {
                             break;
                         }
