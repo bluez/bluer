@@ -95,6 +95,8 @@ compile_error!("BlueR only supports the Linux operating system.");
 #[cfg(feature = "bluetoothd")]
 pub use zbus;
 
+#[cfg(feature = "bluetoothd")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 pub mod monitor;
 
 #[cfg(feature = "bluetoothd")]
@@ -581,9 +583,6 @@ pub mod l2cap;
 #[cfg(feature = "mesh")]
 #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
 pub mod mesh;
-// #[cfg(feature = "bluetoothd")]
-// #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
-// pub mod monitor;
 #[cfg(feature = "rfcomm")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rfcomm")))]
 pub mod rfcomm;

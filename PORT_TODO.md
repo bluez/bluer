@@ -15,10 +15,10 @@
 - [x] Reenable and port rfcomm/profile.rs
 - [x] Reenable and port device.rs
 - [x] Reenable and port bluer-tools
-- [ ] Reenable and port mesh module
+- [x] Reenable and port mesh module
 
 ## Current Status
-- Initializing port.
+- Porting complete. Verification needed.
 
 ## Known Issues
 - `gatt_echo_client` stress test fails with `UnexpectedEof` and timeouts (exit code 124) on some systems.

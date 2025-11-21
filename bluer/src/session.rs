@@ -26,12 +26,11 @@ use crate::rfcomm::{
     profile::{Profile, ProfileHandle, RegisteredProfile},
 };
 
-// TODO: re-enable when mesh module is ported
-// #[cfg(feature = "mesh")]
-// use crate::mesh::{
-//     agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
-//     network::Network, provisioner::RegisteredProvisioner,
-// };
+#[cfg(feature = "mesh")]
+use crate::mesh::{
+    agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
+    network::Network, provisioner::RegisteredProvisioner,
+};
 
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
@@ -238,24 +237,13 @@ impl Session {
         Adapter::new(self.inner.clone(), adapter_name)
     }
 
-    // /// Create an interface for the Bluetooth mesh network.
-    // TODO: re-enable when mesh module is ported
-    // #[cfg(feature = "mesh")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    // pub async fn mesh(&self) -> Result<Network> {
-    //     Network::new(self.inner.clone()).await
-    // }
+    /// Create an interface for the Bluetooth mesh network.
+    #[cfg(feature = "mesh")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+    pub async fn mesh(&self) -> Result<Network> {
+        Network::new(self.inner.clone()).await
+    }
 
-    // TODO: re-enable when agent module is ported
-    // /// Registers a Bluetooth authorization agent handler.
-    // ///
-    // /// Every application can register its own agent to use
-    // /// that agent for all actions triggered by that application.
-    // ///
-    // /// It is not required by an application to register
-    // /// an agent. If an application chooses not to
-    // /// register an agent, the default agent is used. This
-    // /// is in most cases a good idea. Only applications
     /// Register a [Bluetooth agent](Agent).
     ///
     /// This registers a Bluetooth agent that handles authentication
