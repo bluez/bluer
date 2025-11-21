@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     all_dbus_objects, Address, Device, Error, ErrorKind, Event, InternalErrorKind, Result, SessionInner,
-    SingleSessionToken, SERVICE_NAME, TIMEOUT,
+    SingleSessionToken, SERVICE_NAME,
 };
 
 // ===========================================================================================
@@ -55,10 +55,6 @@ impl Service {
             device_address,
             id,
         })
-    }
-
-    async fn proxy(&self) -> Result<Proxy<'_>> {
-        Ok(Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, SERVICE_INTERFACE).await?)
     }
 
     pub(crate) fn dbus_path(adapter_name: &str, device_address: Address, id: u16) -> Result<OwnedObjectPath> {

@@ -6,15 +6,16 @@
 - [x] Make lib.rs compile by commenting all dependencies inside it
 - [x] Port lib.rs
 - [x] Reenable and port session.rs
-- [ ] Reenable and port adapter.rs
-- [ ] Reenable and port adv.rs
-- [ ] Reenable and port agent.rs
-- [ ] Reenable and port monitor.rs
-- [ ] Reenable and port gatt/mod.rs and gatt/remote.rs
+- [x] Reenable and port adapter.rs
+- [x] Reenable and port adv.rs
+- [x] Reenable and port agent.rs
+- [x] Reenable and port monitor.rs
+- [x] Reenable and port gatt/mod.rs and gatt/remote.rs
 - [x] Reenable and port gatt/local.rs
-- [ ] Reenable and port rfcomm/profile.rs
-- [ ] Reenable and port remaining modules
-- [ ] Reenable and port bluer-tools
+- [x] Reenable and port rfcomm/profile.rs
+- [x] Reenable and port device.rs
+- [x] Reenable and port bluer-tools
+- [ ] Reenable and port mesh module
 
 ## Current Status
 - Initializing port.

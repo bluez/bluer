@@ -19,14 +19,13 @@ path = "src/bluadv.rs"
 name = "blumon"
 path = "src/blumon.rs"
 
-# Disabled until GATT and other modules are ported to zbus
-# [[bin]]
-# name = "gattcat"
-# path = "src/gattcat.rs"
+[[bin]]
+name = "gattcat"
+path = "src/gattcat.rs"
 
-# [[bin]]
-# name = "l2cat"
-# path = "src/l2cat.rs"
+[[bin]]
+name = "l2cat"
+path = "src/l2cat.rs"
 
 [[bin]]
 name = "rfcat"

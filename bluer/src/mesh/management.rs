@@ -1,32 +1,34 @@
 //! Bluetooth mesh management.
 
-use dbus::{
-    arg::{RefArg, Variant},
-    nonblock::{Proxy, SyncConnection},
-    Path,
-};
 use std::{collections::HashMap, sync::Arc};
 use strum::EnumString;
 use uuid::Uuid;
+use zbus::{dbus_proxy, zvariant::{OwnedObjectPath, OwnedValue}};
 
 use super::application::ApplicationInner;
 use crate::{
-    mesh::{SERVICE_NAME, TIMEOUT},
+    mesh::SERVICE_NAME,
     Error, ErrorKind, Result, SessionInner,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Management1";
+
+#[zbus::proxy(interface = "org.bluez.mesh.Management1")]
+trait Management {
+    #[zbus(name = "AddNode")]
+    fn add_node(&self, uuid: Vec<u8>, options: HashMap<String, OwnedValue>) -> zbus::Result<()>;
+}
 
 /// Interface to Bluetooth mesh management.
 #[derive(Clone)]
 pub struct Management {
     inner: Arc<SessionInner>,
     app_inner: Arc<ApplicationInner>,
-    path: Path<'static>,
+    path: OwnedObjectPath,
 }
 
 impl Management {
-    pub(crate) fn new(inner: Arc<SessionInner>, app_inner: Arc<ApplicationInner>, path: Path<'static>) -> Self {
+    pub(crate) fn new(inner: Arc<SessionInner>, app_inner: Arc<ApplicationInner>, path: OwnedObjectPath) -> Self {
         Self { inner, app_inner, path }
     }
 
@@ -34,8 +36,14 @@ impl Management {
     pub async fn add_node(&self, uuid: Uuid) -> Result<NodeAdded> {
         let mut rx = self.app_inner.add_node_result_rx.resubscribe();
 
-        let opts = HashMap::<String, Variant<Box<dyn RefArg + 'static>>>::new();
-        let () = self.call_method("AddNode", (uuid.as_bytes().to_vec(), opts)).await?;
+        let opts = HashMap::new();
+        let proxy = ManagementProxy::builder(&self.inner.connection)
+            .destination(SERVICE_NAME)?
+            .path(self.path.clone())?
+            .build()
+            .await?;
+        
+        proxy.add_node(uuid.as_bytes().to_vec(), opts).await?;
 
         loop {
             match rx.recv().await {
@@ -48,13 +56,6 @@ impl Management {
             }
         }
     }
-
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, self.path.clone(), TIMEOUT, &*self.inner.connection)
-    }
-
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
 }
 
 /// Information about an added node.
@@ -98,4 +99,10 @@ pub enum AddNodeFailedReason {
     CannotAssignAddresses,
     /// unknown reason
     Unknown,
+}
+
+impl Default for AddNodeFailedReason {
+    fn default() -> Self {
+        Self::Aborted
+    }
 }

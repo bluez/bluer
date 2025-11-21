@@ -95,26 +95,24 @@ compile_error!("BlueR only supports the Linux operating system.");
 #[cfg(feature = "bluetoothd")]
 pub use zbus;
 
-// mod gatt;
 pub mod monitor;
-// mod device;
 
 #[cfg(feature = "bluetoothd")]
 use zbus::{
-    proxy::Proxy,
-    Connection,
+    // proxy::Proxy,
+    // Connection,
     Error as ZbusError,
 };
 // #[cfg(feature = "bluetoothd")]
 // use dbus_crossroads::{Context, Crossroads};
-#[cfg(feature = "bluetoothd")]
-use futures::Future;
+// #[cfg(feature = "bluetoothd")]
+// use futures::Future;
 #[cfg(feature = "bluetoothd")]
 use hex::FromHex;
 use macaddr::MacAddr6;
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{time::Duration};
 use std::{
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
@@ -403,6 +401,7 @@ macro_rules! define_properties {
                 name: &str,
                 var_value: &$crate::zbus::zvariant::OwnedValue
             ) -> $crate::Result<Option<Self>> {
+                #[allow(unused_imports)]
                 use std::ops::Deref;
                 match name {
                     $(
@@ -545,19 +544,19 @@ macro_rules! define_flags {
     };
 }
 
-#[cfg(feature = "bluetoothd")]
-macro_rules! read_prop {
-    ($dict:expr, $name:expr, $type:ty) => {
-        dbus::arg::prop_cast::<$type>($dict, $name).ok_or(MethodErr::invalid_arg($name))?.to_owned()
-    };
-}
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! read_prop {
+//     ($dict:expr, $name:expr, $type:ty) => {
+//         dbus::arg::prop_cast::<$type>($dict, $name).ok_or(MethodErr::invalid_arg($name))?.to_owned()
+//     };
+// }
 
-#[cfg(feature = "bluetoothd")]
-macro_rules! read_opt_prop {
-    ($dict:expr, $name:expr, $type:ty) => {
-        dbus::arg::prop_cast::<$type>($dict, $name).cloned()
-    };
-}
+// #[cfg(feature = "bluetoothd")]
+// macro_rules! read_opt_prop {
+//     ($dict:expr, $name:expr, $type:ty) => {
+//         dbus::arg::prop_cast::<$type>($dict, $name).cloned()
+//     };
+// }
 
 #[cfg(any(feature = "l2cap", feature = "rfcomm"))]
 #[macro_use]
@@ -579,9 +578,9 @@ pub mod gatt;
 #[cfg(feature = "l2cap")]
 #[cfg_attr(docsrs, doc(cfg(feature = "l2cap")))]
 pub mod l2cap;
-// #[cfg(feature = "mesh")]
-// #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-// pub mod mesh;
+#[cfg(feature = "mesh")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
+pub mod mesh;
 // #[cfg(feature = "bluetoothd")]
 // #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
 // pub mod monitor;
@@ -593,7 +592,7 @@ mod session;
 mod sys;
 
 #[cfg(feature = "bluetoothd")]
-pub use crate::{adapter::*, session::*, device::*}; // TODO: re-enable device when ported
+pub use crate::{adapter::*, session::*, device::*};
 
 #[doc(no_inline)]
 pub use uuid::Uuid;
@@ -652,58 +651,44 @@ pub enum ErrorKind {
     NotAvailable,
     /// Bluetooth operation not authorized
     NotAuthorized,
-    /// Bluetooth device not ready
-    NotReady,
-    /// Bluetooth operation not supported
-    NotSupported,
-    /// Bluetooth operation not permitted
-    NotPermitted,
-    /// invalid offset for Bluetooth GATT property
-    InvalidOffset,
-    /// invalid Bluetooth address: {0}
-    #[strum(disabled)]
-    InvalidAddress(String),
-    /// invalid Bluetooth adapter name: {0}
-    #[strum(disabled)]
-    InvalidName(String),
-    /// GATT services have not been resolved for that Bluetooth device
-    #[strum(disabled)]
+    /// Bluetooth services unresolved
     ServicesUnresolved,
-    /// Bluetooth application is not registered
-    #[strum(disabled)]
-    NotRegistered,
-    /// the receiving Bluetooth device has stopped the notification session
-    #[strum(disabled)]
-    NotificationSessionStopped,
-    /// the indication was not confirmed by the receiving device
-    #[strum(disabled)]
-    IndicationUnconfirmed,
-    /// the target object was either not present or removed
-    #[strum(disabled)]
-    NotFound,
-    /// advertisement monitor could not be activated
-    #[strum(disabled)]
+    /// Bluetooth operation timed out
+    TimedOut,
+    /// Advertisement monitor rejected
     AdvertisementMonitorRejected,
-    /// the discovery filter cannot be changed while a discovery session is active
-    #[strum(disabled)]
+    /// Discovery active
     DiscoveryActive,
-    // /// joining the mesh network failed: {0}
-    // #[cfg(feature = "mesh")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    // #[strum(disabled)]
-    // MeshJoinFailed(mesh::application::JoinFailedReason),
-    // /// adding a node to the mesh network failed: {0}
-    // #[cfg(feature = "mesh")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    // #[strum(disabled)]
-    // MeshAddNodeFailed(mesh::management::AddNodeFailedReason),
-    // /// mesh element is not published
-    // #[cfg(feature = "mesh")]
-    // #[cfg_attr(docsrs, doc(cfg(feature = "mesh")))]
-    // #[strum(disabled)]
-    // MeshElementUnpublished,
-    /// internal error: {0}
-    #[strum(disabled)]
+    /// Notification session stopped
+    NotificationSessionStopped,
+    /// Indication unconfirmed
+    IndicationUnconfirmed,
+    /// Not found
+    NotFound,
+    /// Invalid name: {0}
+    InvalidName(String),
+    /// Not registered
+    NotRegistered,
+    /// Invalid address: {0}
+    InvalidAddress(String),
+    /// Not ready
+    NotReady,
+    /// Not supported
+    NotSupported,
+    /// Not permitted
+    NotPermitted,
+    /// Invalid offset
+    InvalidOffset,
+    #[cfg(feature = "mesh")]
+    /// Mesh element unpublished
+    MeshElementUnpublished,
+    #[cfg(feature = "mesh")]
+    /// Mesh join failed
+    MeshJoinFailed(crate::mesh::application::JoinFailedReason),
+    #[cfg(feature = "mesh")]
+    /// Mesh add node failed
+    MeshAddNodeFailed(crate::mesh::management::AddNodeFailedReason),
+    /// Internal error
     Internal(InternalErrorKind),
 }
 
@@ -737,6 +722,12 @@ pub enum InternalErrorKind {
     DBus(String),
     /// lost connection to D-Bus
     DBusConnectionLost,
+}
+
+impl Default for InternalErrorKind {
+    fn default() -> Self {
+        Self::InvalidValue
+    }
 }
 
 #[cfg(feature = "bluetoothd")]
@@ -851,12 +842,13 @@ impl From<Error> for std::io::Error {
             ErrorKind::NotFound => E::NotFound,
             ErrorKind::DiscoveryActive => E::PermissionDenied,
             ErrorKind::AdvertisementMonitorRejected => E::InvalidInput,
-            // #[cfg(feature = "mesh")]
-            // ErrorKind::MeshJoinFailed(_) => E::ConnectionRefused,
-            // #[cfg(feature = "mesh")]
-            // ErrorKind::MeshAddNodeFailed(_) => E::ConnectionRefused,
-            // #[cfg(feature = "mesh")]
-            // ErrorKind::MeshElementUnpublished => E::InvalidInput,
+            ErrorKind::TimedOut => E::TimedOut,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshElementUnpublished => E::InvalidInput,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshJoinFailed(_) => E::ConnectionRefused,
+            #[cfg(feature = "mesh")]
+            ErrorKind::MeshAddNodeFailed(_) => E::ConnectionRefused,
             ErrorKind::Internal(InternalErrorKind::Io(err)) => err,
             ErrorKind::Internal(_) => E::Other,
         };
@@ -1178,6 +1170,33 @@ pub(crate) fn parent_path(path: &zbus::zvariant::ObjectPath) -> zbus::zvariant::
 //         ctx.reply(result)
 //     }
 // }
+impl From<Error> for zbus::fdo::Error {
+    fn from(err: Error) -> Self {
+        match err.kind {
+            ErrorKind::NotSupported => zbus::fdo::Error::NotSupported(err.message),
+            ErrorKind::NotAuthorized => zbus::fdo::Error::AccessDenied(err.message),
+            ErrorKind::NotFound => zbus::fdo::Error::UnknownObject(err.message),
+            ErrorKind::InvalidArguments => zbus::fdo::Error::InvalidArgs(err.message),
+            ErrorKind::TimedOut => zbus::fdo::Error::TimedOut(err.message),
+            _ => zbus::fdo::Error::Failed(err.message),
+        }
+    }
+}
+
+impl zbus::DBusError for Error {
+    fn create_reply(&self, call: &zbus::message::Header<'_>) -> zbus::Result<zbus::Message> {
+        zbus::fdo::Error::from(self.clone()).create_reply(call)
+    }
+    
+    fn name(&self) -> zbus::names::ErrorName<'_> {
+        zbus::fdo::Error::from(self.clone()).name().into_owned()
+    }
+    
+    fn description(&self) -> Option<&str> {
+        None
+    }
+}
+
 
 
 

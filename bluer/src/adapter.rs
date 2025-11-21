@@ -4,13 +4,7 @@ use zbus::{
     proxy::Proxy,
     zvariant::{ObjectPath, OwnedObjectPath},
 };
-// use dbus::{
-//     arg::{PropMap, RefArg, Variant},
-//     nonblock::{Proxy, SyncConnection},
-//     Path,
-// };
 use futures::{
-    future,
     stream::{self, SelectAll},
     Stream, StreamExt,
 };
@@ -37,11 +31,7 @@ use crate::{
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
-pub(crate) const PATH: &str = "/org/bluez";
 pub(crate) const PREFIX: &str = "/org/bluez/";
-
-/// Default adapter name.
-pub(crate) const DEFAULT_NAME: &str = "hci0";
 
 /// Interface to a Bluetooth adapter.
 #[cfg_attr(docsrs, doc(cfg(feature = "bluetoothd")))]
@@ -70,10 +60,6 @@ impl Adapter {
         })
     }
 
-    async fn proxy(&self) -> Result<Proxy<'_>> {
-        Proxy::new(&self.inner.connection, SERVICE_NAME, &self.dbus_path, INTERFACE).await.map_err(Into::into)
-    }
-
     pub(crate) fn dbus_path(adapter_name: &str) -> Result<OwnedObjectPath> {
         ObjectPath::try_from(format!("{PREFIX}{adapter_name}"))
             .map_err(|_| Error::new(ErrorKind::InvalidName((*adapter_name).to_string())))
@@ -88,13 +74,6 @@ impl Adapter {
             Some((&p[0..sep], &p[sep..]))
         } else {
             None
-        }
-    }
-
-    pub(crate) fn parse_dbus_path<'a>(path: &'a ObjectPath) -> Option<&'a str> {
-        match Self::parse_dbus_path_prefix(path) {
-            Some((v, "")) => Some(v),
-            _ => None,
         }
     }
 
@@ -363,7 +342,7 @@ impl Adapter {
         let mut m: HashMap<String, zbus::zvariant::Value> = HashMap::new();
         m.insert("Address".to_string(), zbus::zvariant::Value::from(address.to_string()).into());
         m.insert("AddressType".to_string(), zbus::zvariant::Value::from(address_type.to_string()).into());
-        let path: zbus::zvariant::OwnedObjectPath = self.call_method("ConnectDevice", &(m,)).await?;
+        let _path: zbus::zvariant::OwnedObjectPath = self.call_method("ConnectDevice", &(m,)).await?;
         self.device(address)
     }
 }

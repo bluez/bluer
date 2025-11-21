@@ -2,23 +2,8 @@
 
 use zbus::{
     Connection,
-    // export::ordered_stream::OrderedStreamExt,
     fdo::ObjectManagerProxy,
 };
-// use dbus::{
-//     arg::Variant,
-//     message::MatchRule,
-//     nonblock::{
-//         stdintf::org_freedesktop_dbus::{
-//             ObjectManagerInterfacesAdded, ObjectManagerInterfacesRemoved, PropertiesPropertiesChanged,
-//         },
-//         SyncConnection,
-//     },
-//     strings::BusName,
-//     Message,
-// };
-// use dbus_crossroads::{Crossroads, IfaceToken};
-// use dbus_tokio::connection;
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
@@ -32,19 +17,13 @@ use std::{
 use tokio::select;
 
 use crate::{
-    // adapter,
-    // adv::Advertisement,
     agent::{Agent, AgentHandle, RegisteredAgent},
-    // all_dbus_objects, gatt,
-    // monitor::RegisteredMonitor,
-    // parent_path, Adapter, DiscoveryFilter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
     Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME, Adapter,
 };
 
 #[cfg(feature = "rfcomm")]
 use crate::rfcomm::{
     profile::{Profile, ProfileHandle, RegisteredProfile},
-    ConnectRequest,
 };
 
 // TODO: re-enable when mesh module is ported
@@ -54,37 +33,14 @@ use crate::rfcomm::{
 //     network::Network, provisioner::RegisteredProvisioner,
 // };
 
-// TODO: re-enable when rfcomm module is ported
-// #[cfg(feature = "rfcomm")]
-// use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
-
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
 
 /// Shared state of all objects in a Bluetooth session.
 pub(crate) struct SessionInner {
     pub connection: Connection,
-    // pub crossroads: Mutex<Crossroads>,
-    // pub le_advertisment_token: IfaceToken<Advertisement>,
-    // pub gatt_reg_service_token: IfaceToken<Arc<gatt::local::RegisteredService>>,
-    // pub gatt_reg_characteristic_token: IfaceToken<Arc<gatt::local::RegisteredCharacteristic>>,
-    // pub gatt_reg_characteristic_descriptor_token: IfaceToken<Arc<gatt::local::RegisteredDescriptor>>,
-    // pub gatt_profile_token: IfaceToken<gatt::local::Profile>,
-    // pub agent_token: IfaceToken<Arc<RegisteredAgent>>,
-    // #[cfg(feature = "mesh")]
-    // pub application_token: IfaceToken<Arc<RegisteredApplication>>,
-    // #[cfg(feature = "mesh")]
-    // pub element_token: IfaceToken<Arc<RegisteredElement>>,
-    // #[cfg(feature = "mesh")]
-    // pub provisioner_token: IfaceToken<Arc<RegisteredApplication>>,
-    // #[cfg(feature = "mesh")]
-    // pub provision_agent_token: IfaceToken<Arc<RegisteredProvisionAgent>>,
-    // pub monitor_token: IfaceToken<Arc<RegisteredMonitor>>,
-    // #[cfg(feature = "rfcomm")]
-    // pub profile_token: IfaceToken<Arc<RegisteredProfile>>,
     pub single_sessions: Mutex<HashMap<zbus::zvariant::OwnedObjectPath, SingleSessionTerm>>,
     pub event_sub_tx: mpsc::Sender<SubscriptionReq>,
-    // dbus_task: JoinHandle<connection::IOResourceError>,
     pub adapter_discovery_filter: Mutex<HashMap<String, crate::DiscoveryFilter>>,
 }
 
@@ -202,27 +158,8 @@ impl Session {
         Ok(Self {
             inner: Arc::new(SessionInner {
                 connection,
-                // crossroads: Mutex::new(Crossroads::new()),
-                // le_advertisment_token: IfaceToken::new(),
-                // gatt_reg_service_token: IfaceToken::new(),
-                // gatt_reg_characteristic_token: IfaceToken::new(),
-                // gatt_reg_characteristic_descriptor_token: IfaceToken::new(),
-                // gatt_profile_token: IfaceToken::new(),
-                // agent_token: IfaceToken::new(),
-                // #[cfg(feature = "mesh")]
-                // application_token: IfaceToken::new(),
-                // #[cfg(feature = "mesh")]
-                // element_token: IfaceToken::new(),
-                // #[cfg(feature = "mesh")]
-                // provisioner_token: IfaceToken::new(),
-                // #[cfg(feature = "mesh")]
-                // provision_agent_token: IfaceToken::new(),
-                // monitor_token: IfaceToken::new(),
-                // #[cfg(feature = "rfcomm")]
-                // profile_token: IfaceToken::new(),
                 single_sessions: Mutex::new(HashMap::new()),
                 event_sub_tx,
-                // dbus_task,
                 adapter_discovery_filter: Mutex::new(HashMap::new()),
             }),
         })
@@ -343,7 +280,6 @@ impl Session {
         reg_agent.register(self.inner.clone()).await
     }
 
-    // TODO: re-enable when rfcomm module is ported
     /// This registers a [Bluetooth profile implementation](Profile) for RFCOMM connections.
     ///
     /// The returned [ProfileHandle] provides a stream of
@@ -363,11 +299,25 @@ impl Session {
 #[derive(Debug, Clone)]
 pub(crate) enum Event {
     /// Object or object interfaces added.
+    #[allow(dead_code)]
     ObjectAdded { object: zbus::zvariant::OwnedObjectPath, interfaces: HashSet<String> },
     /// Object or object interfaces removed.
+    #[allow(dead_code)]
     ObjectRemoved { object: zbus::zvariant::OwnedObjectPath, interfaces: HashSet<String> },
     /// Properties changed.
+    #[allow(dead_code)]
     PropertiesChanged { object: zbus::zvariant::OwnedObjectPath, interface: String, changed: Arc<HashMap<String, zbus::zvariant::OwnedValue>> },
+}
+
+#[allow(dead_code)]
+impl Event {
+    pub(crate) fn object(&self) -> &zbus::zvariant::ObjectPath<'_> {
+        match self {
+            Event::ObjectAdded { object, .. } => object,
+            Event::ObjectRemoved { object, .. } => object,
+            Event::PropertiesChanged { object, .. } => object,
+        }
+    }
 }
 
 /// D-Bus events subscription request.

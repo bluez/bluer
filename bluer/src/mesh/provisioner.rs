@@ -1,18 +1,16 @@
 //! Bluetooth mesh provisioner.
 
-use dbus::nonblock::{Proxy, SyncConnection};
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use std::{str::FromStr, sync::Arc};
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use zbus::{interface, fdo};
 
-use super::application::RegisteredApplication;
 use crate::{
     mesh::{
         management::{AddNodeFailedReason, NodeAdded},
         ReqError, PATH, SERVICE_NAME, TIMEOUT,
     },
-    method_call, SessionInner,
+    SessionInner,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Provisioner1";
@@ -29,78 +27,50 @@ pub struct Provisioner {
 }
 
 /// A provisioner exposed over D-Bus to bluez.
+#[derive(Clone)]
 pub(crate) struct RegisteredProvisioner {
     inner: Arc<SessionInner>,
     provisioner: Provisioner,
-    next_address: Mutex<u16>,
+    next_address: Arc<Mutex<u16>>,
+    add_node_result_tx: tokio::sync::broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
 }
 
 impl RegisteredProvisioner {
-    pub(crate) fn new(inner: Arc<SessionInner>, provisioner: Provisioner) -> Self {
-        Self { inner, provisioner: provisioner.clone(), next_address: Mutex::new(provisioner.start_address) }
+    pub(crate) fn new(
+        inner: Arc<SessionInner>,
+        provisioner: Provisioner,
+        add_node_result_tx: tokio::sync::broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
+    ) -> Self {
+        Self {
+            inner,
+            provisioner: provisioner.clone(),
+            next_address: Arc::new(Mutex::new(provisioner.start_address)),
+            add_node_result_tx,
+        }
+    }
+}
+
+#[interface(name = "org.bluez.mesh.Provisioner1")]
+impl RegisteredProvisioner {
+    async fn add_node_complete(&self, uuid: Vec<u8>, unicast: u16, count: u8) -> Result<(), fdo::Error> {
+        let uuid = Uuid::from_slice(&uuid).map_err(|_| ReqError::Failed)?;
+        self.add_node_result_tx
+            .send((uuid, Ok(NodeAdded { unicast, count: count.into() })))
+            .map_err(|_| ReqError::Failed)?;
+        Ok(())
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, PATH, TIMEOUT, &*self.inner.connection)
+    async fn add_node_failed(&self, uuid: Vec<u8>, reason: String) -> Result<(), fdo::Error> {
+        let uuid = Uuid::from_slice(&uuid).map_err(|_| ReqError::Failed)?;
+        let reason = AddNodeFailedReason::from_str(&reason).unwrap_or(AddNodeFailedReason::Unknown);
+        self.add_node_result_tx.send((uuid, Err(reason))).map_err(|_| ReqError::Failed)?;
+        Ok(())
     }
 
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
-
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<RegisteredApplication>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<RegisteredApplication>>| {
-            ib.method_with_cr_async(
-                "AddNodeComplete",
-                ("uuid", "unicast", "count"),
-                (),
-                |ctx, cr, (uuid, unicast, count): (Vec<u8>, u16, u8)| {
-                    method_call(ctx, cr, move |reg: Arc<RegisteredApplication>| async move {
-                        let uuid = Uuid::from_slice(&uuid).map_err(|_| ReqError::Failed)?;
-                        reg.add_node_result_tx
-                            .send((uuid, Ok(NodeAdded { unicast, count: count.into() })))
-                            .map_err(|_| ReqError::Failed)?;
-                        Ok(())
-                    })
-                },
-            );
-
-            ib.method_with_cr_async(
-                "AddNodeFailed",
-                ("uuid", "reason"),
-                (),
-                |ctx, cr, (uuid, reason): (Vec<u8>, String)| {
-                    method_call(ctx, cr, move |reg: Arc<RegisteredApplication>| async move {
-                        let uuid = Uuid::from_slice(&uuid).map_err(|_| ReqError::Failed)?;
-                        let reason =
-                            AddNodeFailedReason::from_str(&reason).unwrap_or(AddNodeFailedReason::Unknown);
-                        reg.add_node_result_tx.send((uuid, Err(reason))).map_err(|_| ReqError::Failed)?;
-                        Ok(())
-                    })
-                },
-            );
-
-            ib.method_with_cr_async(
-                "RequestProvData",
-                ("count",),
-                ("net_index", "unicast"),
-                |ctx, cr, (count,): (u8,)| {
-                    method_call(ctx, cr, move |reg: Arc<RegisteredApplication>| async move {
-                        match &reg.provisioner {
-                            Some(prov) => {
-                                let mut next_addr = prov.next_address.lock().await;
-                                let addr = *next_addr;
-                                *next_addr += u16::from(count) + 1;
-                                Ok((prov.provisioner.net_index, addr))
-                            }
-                            None => Err(dbus::MethodErr::from(ReqError::Failed)),
-                        }
-                    })
-                },
-            );
-
-            cr_property!(ib, "VersionID", _reg => {
-                Some(1u16)
-            });
-        })
+    async fn request_prov_data(&self, count: u8) -> Result<(u16, u16), fdo::Error> {
+        let mut next_addr = self.next_address.lock().await;
+        let addr = *next_addr;
+        *next_addr += u16::from(count) + 1;
+        Ok((self.provisioner.net_index, addr))
     }
 }

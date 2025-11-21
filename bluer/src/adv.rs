@@ -2,8 +2,7 @@
 
 use zbus::{
     interface,
-    zvariant::{ObjectPath, OwnedObjectPath, Value},
-    Connection,
+    zvariant::{OwnedObjectPath, Value},
 };
 use futures::channel::oneshot;
 use std::{
@@ -18,7 +17,6 @@ use uuid::Uuid;
 use crate::{Adapter, Result, SessionInner, SERVICE_NAME};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.LEAdvertisingManager1";
-pub(crate) const ADVERTISEMENT_INTERFACE: &str = "org.bluez.LEAdvertisement1";
 pub(crate) const ADVERTISEMENT_PREFIX: &str = "/org/bluez/bluer/advertisement";
 
 /// Determines the type of advertising packet requested.
@@ -249,7 +247,7 @@ impl Advertisement {
     }
 
     #[zbus(property, name = "ManufacturerData")]
-    fn manufacturer_data(&self) -> HashMap<u16, Value> {
+    fn manufacturer_data(&self) -> HashMap<u16, Value<'_>> {
         self.manufacturer_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
     }
 
@@ -259,12 +257,12 @@ impl Advertisement {
     }
 
     #[zbus(property, name = "ServiceData")]
-    fn service_data(&self) -> HashMap<String, Value> {
+    fn service_data(&self) -> HashMap<String, Value<'_>> {
         self.service_data.iter().map(|(k, v)| (k.to_string(), Value::from(v.clone()))).collect()
     }
 
     #[zbus(property, name = "Data")]
-    fn data(&self) -> HashMap<u8, Value> {
+    fn data(&self) -> HashMap<u8, Value<'_>> {
         self.advertising_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
     }
 

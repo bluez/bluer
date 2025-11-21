@@ -394,8 +394,8 @@ impl AdaptersOpts {
             if let Some(caps) = adapter.supported_advertising_capabilities().await? {
                 print_if_some_20(4, "Max. advertisement", Some(caps.max_advertisement_length), "bytes");
                 print_if_some_20(4, "Max. scan response", Some(caps.max_scan_response_length), "bytes");
-                print_if_some_20(4, "Min. TX power", Some(caps.min_tx_power), "dBm");
-                print_if_some_20(4, "Max. TX power", Some(caps.max_tx_power), "dBm");
+                print_if_some_20(4, "Min. TX power", caps.min_tx_power, "dBm");
+                print_if_some_20(4, "Max. TX power", caps.max_tx_power, "dBm");
             }
 
             println!();

@@ -53,10 +53,32 @@ impl Default for ReqError {
     }
 }
 
-impl From<ReqError> for dbus::MethodErr {
+impl From<ReqError> for crate::Error {
     fn from(err: ReqError) -> Self {
-        let name: &'static str = err.into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+        let kind = match err {
+            ReqError::Failed => crate::ErrorKind::Failed,
+            ReqError::InProgress => crate::ErrorKind::InProgress,
+            ReqError::InvalidOffset => crate::ErrorKind::InvalidOffset,
+            ReqError::InvalidValueLength => crate::ErrorKind::InvalidLength,
+            ReqError::NotPermitted => crate::ErrorKind::NotPermitted,
+            ReqError::NotAuthorized => crate::ErrorKind::NotAuthorized,
+            ReqError::NotSupported => crate::ErrorKind::NotSupported,
+        };
+        crate::Error::new(kind)
+    }
+}
+
+impl From<ReqError> for zbus::fdo::Error {
+    fn from(err: ReqError) -> Self {
+        match err {
+            ReqError::Failed => zbus::fdo::Error::Failed("Failed".into()),
+            ReqError::InProgress => zbus::fdo::Error::Failed("In Progress".into()),
+            ReqError::InvalidOffset => zbus::fdo::Error::InvalidArgs("Invalid Offset".into()),
+            ReqError::InvalidValueLength => zbus::fdo::Error::InvalidArgs("Invalid Value Length".into()),
+            ReqError::NotPermitted => zbus::fdo::Error::AccessDenied("Not Permitted".into()),
+            ReqError::NotAuthorized => zbus::fdo::Error::AccessDenied("Not Authorized".into()),
+            ReqError::NotSupported => zbus::fdo::Error::NotSupported("Not Supported".into()),
+        }
     }
 }
 

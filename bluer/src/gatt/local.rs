@@ -1,8 +1,7 @@
 //! Publish local GATT services to remove devices.
 
 use zbus::{
-    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Type},
-    Interface,
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
 };
 use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
 use pin_project::pin_project;
@@ -12,7 +11,7 @@ use std::{
     mem::take,
     num::NonZeroU16,
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::Arc,
     task::Poll,
 };
 use strum::{Display, EnumString, IntoStaticStr};
@@ -22,11 +21,11 @@ use uuid::Uuid;
 
 use super::{
     make_socket_pair, mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
-    DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE, DESCRIPTOR_INTERFACE, SERVICE_INTERFACE,
+    DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE,
 };
 use crate::{
     Adapter, Address, Device, Error, ErrorKind, Result, SessionInner,
-    ERR_PREFIX, SERVICE_NAME, TIMEOUT,
+    ERR_PREFIX, SERVICE_NAME,
 };
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";

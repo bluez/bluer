@@ -1,15 +1,13 @@
 //! Bluetooth mesh provisoner agent.
 
 use core::fmt;
-use dbus::nonblock::{Proxy, SyncConnection};
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 use futures::Future;
 use std::{fmt::Debug, pin::Pin, str::FromStr, sync::Arc};
 use strum::{EnumString, IntoStaticStr};
 
 use crate::{
     mesh::{PATH, SERVICE_NAME, TIMEOUT},
-    method_call, SessionInner, ERR_PREFIX,
+    SessionInner, ERR_PREFIX,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
@@ -33,10 +31,10 @@ impl Default for ReqError {
     }
 }
 
-impl From<ReqError> for dbus::MethodErr {
+impl From<ReqError> for zbus::fdo::Error {
     fn from(err: ReqError) -> Self {
         let name: &'static str = err.into();
-        Self::from((ERR_PREFIX.to_string() + name, &err.to_string()))
+        zbus::fdo::Error::Failed(format!("{}.{}", ERR_PREFIX, name))
     }
 }
 
@@ -162,10 +160,6 @@ impl RegisteredProvisionAgent {
         Self { agent, inner }
     }
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, PATH, TIMEOUT, &*self.inner.connection)
-    }
-
     async fn call<A, F, R>(&self, f: &Option<impl Fn(A) -> F>, arg: A) -> ReqResult<R>
     where
         F: Future<Output = ReqResult<R>> + 'static,
@@ -175,47 +169,32 @@ impl RegisteredProvisionAgent {
             None => Err(ReqError::Rejected),
         }
     }
+}
 
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
+#[zbus::interface(name = "org.bluez.mesh.ProvisionAgent1")]
+impl RegisteredProvisionAgent {
+    async fn display_numeric(&self, type_: String, value: u32) -> zbus::fdo::Result<()> {
+        self.call(
+            &self.agent.display_numeric,
+            DisplayNumeric {
+                display_type: NumericCapability::from_str(&type_).unwrap(),
+                number: value,
+            },
+        )
+        .await
+        .map_err(zbus::fdo::Error::from)
+    }
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            ib.method_with_cr_async(
-                "DisplayNumeric",
-                ("type", "value"),
-                (),
-                |ctx, cr, (display_type, number): (String, u32)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        reg.call(
-                            &reg.agent.display_numeric,
-                            DisplayNumeric {
-                                display_type: NumericCapability::from_str(&display_type).unwrap(),
-                                number,
-                            },
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                },
-            );
-            ib.method_with_cr_async(
-                "PromptStatic",
-                ("type",),
-                ("value",),
-                |ctx, cr, (input_type,): (String,)| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        let data = reg
-                            .call(&reg.agent.prompt_static, StaticCapability::from_str(&input_type).unwrap())
-                            .await?;
-                        Ok((Vec::from(data),))
-                    })
-                },
-            );
+    async fn prompt_static(&self, type_: String) -> zbus::fdo::Result<Vec<u8>> {
+        let data = self
+            .call(&self.agent.prompt_static, StaticCapability::from_str(&type_).unwrap())
+            .await
+            .map_err(zbus::fdo::Error::from)?;
+        Ok(Vec::from(data))
+    }
 
-            cr_property!(ib, "Capabilities", reg => {
-                Some(reg.agent.capabilities.iter().map(|c| c.to_string()).collect::<Vec<_>>())
-            });
-        })
+    #[zbus(property)]
+    fn capabilities(&self) -> Vec<String> {
+        self.agent.capabilities.iter().map(|c| c.to_string()).collect()
     }
 }

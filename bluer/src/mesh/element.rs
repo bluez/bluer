@@ -1,11 +1,5 @@
 //! Bluetooth mesh element.
 
-use dbus::{
-    arg::{ArgType, RefArg, Variant},
-    nonblock::{Proxy, SyncConnection},
-};
-use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
-use futures::{Stream, StreamExt};
 use std::{
     collections::HashMap,
     fmt,
@@ -13,17 +7,19 @@ use std::{
     sync::{Arc, Weak},
     task::{Context, Poll},
 };
+use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use zbus::{interface, fdo, zvariant::{OwnedValue, Value}};
 
 use crate::{
     mesh::{ReqError, PATH, SERVICE_NAME, TIMEOUT},
-    method_call, Error, ErrorKind, Result, SessionInner,
+    Error, ErrorKind, Result, SessionInner,
 };
 
 pub(crate) const ELEMENT_INTERFACE: &str = "org.bluez.mesh.Element1";
 
-pub(crate) type ElementConfig = HashMap<String, Variant<Box<dyn RefArg + 'static>>>;
+pub(crate) type ElementConfig = HashMap<String, OwnedValue>;
 pub(crate) type ElementConfigs = HashMap<usize, HashMap<u16, ElementConfig>>;
 
 /// Interface to a Bluetooth mesh element interface.
@@ -65,10 +61,10 @@ impl Model {
         Self { id, ..Default::default() }
     }
 
-    fn as_tuple(&self) -> (u16, HashMap<String, Variant<Box<dyn RefArg>>>) {
-        let mut opts: HashMap<String, Variant<Box<dyn RefArg>>> = HashMap::new();
-        opts.insert("Publish".to_string(), Variant(Box::new(self.publish)));
-        opts.insert("Subscribe".to_string(), Variant(Box::new(self.subscribe)));
+    fn as_tuple(&self) -> (u16, HashMap<String, OwnedValue>) {
+        let mut opts = HashMap::new();
+        opts.insert("Publish".to_string(), OwnedValue::from(self.publish));
+        opts.insert("Subscribe".to_string(), OwnedValue::from(self.subscribe));
         (self.id, opts)
     }
 }
@@ -105,10 +101,10 @@ impl VendorModel {
     }
 
     #[allow(clippy::type_complexity)]
-    fn as_tuple(&self) -> (u16, u16, HashMap<String, Variant<Box<dyn RefArg>>>) {
-        let mut opts: HashMap<String, Variant<Box<dyn RefArg>>> = HashMap::new();
-        opts.insert("Publish".to_string(), Variant(Box::new(self.publish)));
-        opts.insert("Subscribe".to_string(), Variant(Box::new(self.subscribe)));
+    fn as_tuple(&self) -> (u16, u16, HashMap<String, OwnedValue>) {
+        let mut opts = HashMap::new();
+        opts.insert("Publish".to_string(), OwnedValue::from(self.publish));
+        opts.insert("Subscribe".to_string(), OwnedValue::from(self.subscribe));
         (self.vendor, self.id, opts)
     }
 }
@@ -131,122 +127,88 @@ impl RegisteredElement {
         *element.control_handle.element_ref.lock().unwrap() = Some(ElementRefInner { root_path, index });
         Self { inner, element, index }
     }
+}
 
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, PATH, TIMEOUT, &*self.inner.connection)
+#[interface(name = "org.bluez.mesh.Element1")]
+impl RegisteredElement {
+    async fn message_received(&self, source: u16, key_index: u16, destination: OwnedValue, data: Vec<u8>) -> std::result::Result<(), fdo::Error> {
+        log::trace!(
+            "Message received for element {:?}: source={:?} key_index={:?} dest={:?} data={:?}",
+            self.index,
+            source,
+            key_index,
+            destination,
+            data
+        );
+
+        let destination = if let Ok(dest) = <u16>::try_from(&destination) {
+            dest
+        } else if let Ok(dest) = <Vec<u8>>::try_from(destination) {
+             if dest.len() < 2 {
+                return Err(ReqError::Failed.into());
+            }
+            u16::from_be_bytes([dest[0], dest[1]])
+        } else {
+            return Err(ReqError::Failed.into());
+        };
+
+        let msg = ReceivedMessage {
+            key_index,
+            source,
+            destination,
+            data,
+        };
+        self.element.control_handle
+            .event_tx
+            .send(ElementEvent::MessageReceived(msg))
+            .await
+            .map_err(|_| ReqError::Failed)?;
+
+        Ok(())
     }
 
-    dbus_interface!();
-    dbus_default_interface!(ELEMENT_INTERFACE);
+    async fn dev_key_message_received(&self, source: u16, remote: bool, net_index: u16, data: Vec<u8>) -> std::result::Result<(), fdo::Error> {
+        log::trace!(
+            "Dev Key Message received for element {:?}: source={:?} net_index={:?} remote={:?} data={:?}",
+            self.index,
+            source,
+            net_index,
+            remote,
+            data
+        );
 
-    pub(crate) fn register_interface(cr: &mut Crossroads) -> IfaceToken<Arc<Self>> {
-        cr.register(ELEMENT_INTERFACE, |ib: &mut IfaceBuilder<Arc<Self>>| {
-            ib.method_with_cr_async(
-                "MessageReceived",
-                ("source", "key_index", "destination", "data"),
-                (),
-                |ctx,
-                 cr,
-                 (source, key_index, destination, data): (
-                    u16,
-                    u16,
-                    Variant<Box<dyn RefArg + 'static>>,
-                    Vec<u8>,
-                )| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        log::trace!(
-                            "Message received for element {:?}: source={:?} key_index={:?} dest={:?} data={:?}",
-                            reg.index,
-                            source,
-                            key_index,
-                            destination,
-                            data
-                        );
+        let msg = ReceivedDevKeyMessage {
+            source,
+            remote,
+            net_index,
+            data,
+        };
+        self.element.control_handle
+            .event_tx
+            .send(ElementEvent::DevKeyMessageReceived(msg))
+            .await
+            .map_err(|_| ReqError::Failed)?;
+        Ok(())
+    }
 
-                        let destination = match destination.0.arg_type() {
-                            ArgType::Array => {
-                                let args = dbus::arg::cast::<Vec<u8>>(&destination.0).ok_or(ReqError::Failed)?;
-                                if args.len() < 2 {
-                                    return Err(ReqError::Failed.into());
-                                }
-                                u16::from_be_bytes([args[0], args[1]])
-                            }
-                            ArgType::UInt16 => *dbus::arg::cast::<u16>(&destination.0).ok_or(ReqError::Failed)?,
-                            _ => return Err(ReqError::Failed.into()),
-                        };
+    #[zbus(property)]
+    fn index(&self) -> u8 {
+        self.index as u8
+    }
 
-                        let msg = ReceivedMessage {
-                            key_index,
-                            source,
-                            destination,
-                            data,
-                        };
-                        reg.element.control_handle
-                            .event_tx
-                            .send(ElementEvent::MessageReceived(msg))
-                            .await
-                            .map_err(|_| ReqError::Failed)?;
+    #[zbus(property)]
+    fn models(&self) -> Vec<(u16, HashMap<String, OwnedValue>)> {
+        self.element.models.iter().map(|m| m.as_tuple()).collect()
+    }
 
-                        Ok(())
-                    })
-                },
-            );
+    #[zbus(property)]
+    fn vendor_models(&self) -> Vec<(u16, u16, HashMap<String, OwnedValue>)> {
+        self.element.vendor_models.iter().map(|m| m.as_tuple()).collect()
+    }
 
-            ib.method_with_cr_async(
-                "DevKeyMessageReceived",
-                ("source", "remote", "net_index", "data"),
-                (),
-                |ctx,
-                 cr,
-                 (source, remote, net_index, data): (
-                    u16,
-                    bool,
-                    u16,
-                    Vec<u8>,
-                )| {
-                    method_call(ctx, cr, move |reg: Arc<Self>| async move {
-                        log::trace!(
-                            "Dev Key Message received for element {:?}: source={:?} net_index={:?} remote={:?} data={:?}",
-                            reg.index,
-                            source,
-                            net_index,
-                            remote,
-                            data
-                        );
-
-                        let msg = ReceivedDevKeyMessage {
-                            source,
-                            remote,
-                            net_index,
-                            data,
-                        };
-                        reg.element.control_handle
-                            .event_tx
-                            .send(ElementEvent::DevKeyMessageReceived(msg))
-                            .await
-                            .map_err(|_| ReqError::Failed)?;
-
-                        Ok(())
-                    })
-                },
-            );
-
-            cr_property!(ib, "Index", reg => {
-                Some(reg.index as u8)
-            });
-
-            cr_property!(ib, "Models", reg => {
-                Some(reg.element.models.iter().map(|m| m.as_tuple()).collect::<Vec<_>>())
-            });
-
-            cr_property!(ib, "VendorModels", reg => {
-                Some(reg.element.vendor_models.iter().map(|m| m.as_tuple()).collect::<Vec<_>>())
-            });
-
-            cr_property!(ib, "Location", reg => {
-                reg.element.location
-            });
-        })
+    #[zbus(property)]
+    fn location(&self) -> u16 {
+        self.element.location.unwrap_or(0)
     }
 }
 
@@ -263,7 +225,7 @@ impl ElementRef {
     }
 
     /// Element D-Bus path.
-    pub(crate) fn path(&self) -> Result<dbus::Path<'static>> {
+    pub(crate) fn path(&self) -> Result<zbus::zvariant::OwnedObjectPath> {
         self.0
             .upgrade()
             .and_then(|m| m.lock().unwrap().as_ref().map(|i| i.path()))
@@ -284,9 +246,9 @@ struct ElementRefInner {
 
 impl ElementRefInner {
     /// Element D-Bus path.
-    fn path(&self) -> dbus::Path<'static> {
+    fn path(&self) -> zbus::zvariant::OwnedObjectPath {
         let element_path = format!("{}/ele{}", &self.root_path, self.index);
-        dbus::Path::new(element_path).unwrap()
+        zbus::zvariant::ObjectPath::try_from(element_path).unwrap().into()
     }
 }
 

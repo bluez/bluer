@@ -1,23 +1,28 @@
 //! Implement Network bluetooth mesh interface
 
-use dbus::{
-    nonblock::{Proxy, SyncConnection},
-    Path,
-};
 use std::sync::Arc;
 use tokio::sync::oneshot;
+use zbus::{zvariant::OwnedObjectPath, proxy};
 
 use crate::{
     mesh::{
         application::{Application, ApplicationHandle, RegisteredApplication},
         element::ElementConfig,
         node::Node,
-        PATH, SERVICE_NAME, TIMEOUT,
+        PATH, SERVICE_NAME,
     },
     Error, ErrorKind, Result, SessionInner,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
+
+#[proxy(interface = "org.bluez.mesh.Network1")]
+trait Network {
+    fn join(&self, app: &zbus::zvariant::ObjectPath<'_>, uuid: Vec<u8>) -> zbus::Result<()>;
+    fn cancel(&self) -> zbus::Result<()>;
+    fn attach(&self, app: &zbus::zvariant::ObjectPath<'_>, token: u64) -> zbus::Result<(OwnedObjectPath, Vec<(u8, Vec<(u16, ElementConfig)>)>)>;
+    fn leave(&self, token: u64) -> zbus::Result<()>;
+}
 
 /// Interface to a Bluetooth mesh network.
 ///
@@ -30,10 +35,6 @@ pub struct Network {
 impl Network {
     pub(crate) async fn new(inner: Arc<SessionInner>) -> Result<Self> {
         Ok(Self { inner })
-    }
-
-    fn proxy(&self) -> Proxy<'_, &SyncConnection> {
-        Proxy::new(SERVICE_NAME, PATH, TIMEOUT, &*self.inner.connection)
     }
 
     /// Create mesh application
@@ -58,12 +59,23 @@ impl Network {
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
             if done_rx.await.is_err() {
-                let proxy = Proxy::new(SERVICE_NAME, PATH, TIMEOUT, &*connection);
-                let _: std::result::Result<(), dbus::Error> = proxy.method_call(INTERFACE, "Cancel", ()).await;
+                if let Ok(proxy) = NetworkProxy::builder(&connection)
+                    .destination(SERVICE_NAME).and_then(|b| b.path(PATH))
+                {
+                    if let Ok(proxy) = proxy.build().await {
+                        let _ = proxy.cancel().await;
+                    }
+                }
             }
         });
 
-        let () = self.call_method("Join", (app_hnd.name.clone(), app_hnd.device_id.as_bytes().to_vec())).await?;
+        let proxy = NetworkProxy::builder(&self.inner.connection)
+            .destination(SERVICE_NAME)?
+            .path(PATH)?
+            .build()
+            .await?;
+        
+        proxy.join(&app_hnd.name, app_hnd.device_id.as_bytes().to_vec()).await?;
 
         let result = match app_hnd.join_result_rx.recv().await {
             Some(Ok(token)) => {
@@ -90,9 +102,14 @@ impl Network {
     pub async fn attach(&self, app: Application, token: u64) -> Result<Node> {
         let app_hnd = self.application(app).await?;
 
-        #[allow(clippy::type_complexity)]
-        let (node_path, element_config): (Path<'static>, Vec<(u8, Vec<(u16, ElementConfig)>)>) =
-            self.call_method("Attach", (app_hnd.name.clone(), token)).await?;
+        let proxy = NetworkProxy::builder(&self.inner.connection)
+            .destination(SERVICE_NAME)?
+            .path(PATH)?
+            .build()
+            .await?;
+
+        let (node_path, element_config) = proxy.attach(&app_hnd.name, token).await?;
+        
         let element_config =
             element_config.into_iter().map(|(idx, ent)| (idx as usize, ent.into_iter().collect())).collect();
 
@@ -106,9 +123,11 @@ impl Network {
     /// This removes the configuration information about the mesh node
     /// identified by the 64-bit token parameter.
     pub async fn leave(&self, token: u64) -> Result<()> {
-        self.call_method("Leave", (token,)).await
+        let proxy = NetworkProxy::builder(&self.inner.connection)
+            .destination(SERVICE_NAME)?
+            .path(PATH)?
+            .build()
+            .await?;
+        proxy.leave(token).await.map_err(Into::into)
     }
-
-    dbus_interface!();
-    dbus_default_interface!(INTERFACE);
 }
