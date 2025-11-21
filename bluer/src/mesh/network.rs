@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use zbus::{zvariant::OwnedObjectPath, proxy};
+use zbus::{proxy, zvariant::OwnedObjectPath};
 
 use crate::{
     mesh::{
@@ -14,13 +14,19 @@ use crate::{
     Error, ErrorKind, Result, SessionInner,
 };
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.Network1";
 
 #[proxy(interface = "org.bluez.mesh.Network1")]
 trait Network {
+    /// Join.
     fn join(&self, app: &zbus::zvariant::ObjectPath<'_>, uuid: Vec<u8>) -> zbus::Result<()>;
+    /// Cancel.
     fn cancel(&self) -> zbus::Result<()>;
-    fn attach(&self, app: &zbus::zvariant::ObjectPath<'_>, token: u64) -> zbus::Result<(OwnedObjectPath, Vec<(u8, Vec<(u16, ElementConfig)>)>)>;
+    /// Attach.
+    fn attach(
+        &self, app: &zbus::zvariant::ObjectPath<'_>, token: u64,
+    ) -> zbus::Result<(OwnedObjectPath, Vec<(u8, Vec<(u16, ElementConfig)>)>)>;
+    /// Leave.
     fn leave(&self, token: u64) -> zbus::Result<()>;
 }
 
@@ -59,8 +65,8 @@ impl Network {
         let connection = self.inner.connection.clone();
         tokio::spawn(async move {
             if done_rx.await.is_err() {
-                if let Ok(proxy) = NetworkProxy::builder(&connection)
-                    .destination(SERVICE_NAME).and_then(|b| b.path(PATH))
+                if let Ok(proxy) =
+                    NetworkProxy::builder(&connection).destination(SERVICE_NAME).and_then(|b| b.path(PATH))
                 {
                     if let Ok(proxy) = proxy.build().await {
                         let _ = proxy.cancel().await;
@@ -69,12 +75,9 @@ impl Network {
             }
         });
 
-        let proxy = NetworkProxy::builder(&self.inner.connection)
-            .destination(SERVICE_NAME)?
-            .path(PATH)?
-            .build()
-            .await?;
-        
+        let proxy =
+            NetworkProxy::builder(&self.inner.connection).destination(SERVICE_NAME)?.path(PATH)?.build().await?;
+
         proxy.join(&app_hnd.name, app_hnd.device_id.as_bytes().to_vec()).await?;
 
         let result = match app_hnd.join_result_rx.recv().await {
@@ -102,14 +105,11 @@ impl Network {
     pub async fn attach(&self, app: Application, token: u64) -> Result<Node> {
         let app_hnd = self.application(app).await?;
 
-        let proxy = NetworkProxy::builder(&self.inner.connection)
-            .destination(SERVICE_NAME)?
-            .path(PATH)?
-            .build()
-            .await?;
+        let proxy =
+            NetworkProxy::builder(&self.inner.connection).destination(SERVICE_NAME)?.path(PATH)?.build().await?;
 
         let (node_path, element_config) = proxy.attach(&app_hnd.name, token).await?;
-        
+
         let element_config =
             element_config.into_iter().map(|(idx, ent)| (idx as usize, ent.into_iter().collect())).collect();
 
@@ -123,11 +123,8 @@ impl Network {
     /// This removes the configuration information about the mesh node
     /// identified by the 64-bit token parameter.
     pub async fn leave(&self, token: u64) -> Result<()> {
-        let proxy = NetworkProxy::builder(&self.inner.connection)
-            .destination(SERVICE_NAME)?
-            .path(PATH)?
-            .build()
-            .await?;
+        let proxy =
+            NetworkProxy::builder(&self.inner.connection).destination(SERVICE_NAME)?.path(PATH)?.build().await?;
         proxy.leave(token).await.map_err(Into::into)
     }
 }

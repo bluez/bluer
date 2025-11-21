@@ -2,12 +2,15 @@
 
 use bluer::{
     agent::Agent,
-    rfcomm::{Profile, Role, ReqError},
-    AdapterEvent, Session, Address,
+    rfcomm::{Profile, ReqError, Role},
+    AdapterEvent, Address, Session,
 };
 use futures::StreamExt;
 use std::{env, process::exit, time::Duration};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 
 include!("rfcomm.inc");
 
@@ -76,7 +79,7 @@ async fn main() -> bluer::Result<()> {
                     if req.device() == target_addr {
                         println!("Accepting request...");
                         let mut stream = req.accept()?;
-                        
+
                         println!("\nReceiving hello");
                         let mut hello_buf = [0u8; HELLO_MSG.len()];
                         stream.read_exact(&mut hello_buf).await.expect("read failed");
@@ -87,7 +90,7 @@ async fn main() -> bluer::Result<()> {
 
                         println!("Sending hello back");
                         stream.write_all(HELLO_MSG).await.expect("write failed");
-                        
+
                         println!("Test finished successfully");
                         return Ok(());
                     } else {

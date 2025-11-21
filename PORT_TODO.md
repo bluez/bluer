@@ -26,3 +26,45 @@
   - Potential Fix: Switch `gatt_echo_server` to `mpsc::unbounded_channel()` and increase the read buffer size.
   - Workaround: Reduce test load in `gatt_echo_client` (iterations: 50, max size: 20KB).
 
+## Modified Files
+- AGENTS.md
+- PORT_TODO.md
+- bluer-tools/src/gattcat.rs
+- bluer-tools/src/rfcat.rs
+- bluer/Cargo.toml
+- bluer/examples/gatt_client.rs
+- bluer/examples/gatt_echo_client.rs
+- bluer/examples/gatt_echo_server.rs
+- bluer/examples/gatt_server_cb.rs
+- bluer/examples/gatt_server_io.rs
+- bluer/examples/le_advertise.rs
+- bluer/examples/rfcomm.inc
+- bluer/examples/rfcomm_profile_client.rs
+- bluer/examples/rfcomm_profile_server.rs
+- bluer/examples/simple_agent.rs
+- bluer/src/adapter.rs
+- bluer/src/adv.rs
+- bluer/src/agent.rs
+- bluer/src/device.rs
+- bluer/src/gatt/local.rs
+- bluer/src/gatt/mod.rs
+- bluer/src/gatt/remote.rs
+- bluer/src/lib.rs
+- bluer/src/mesh/agent.rs
+- bluer/src/mesh/application.rs
+- bluer/src/mesh/element.rs
+- bluer/src/mesh/management.rs
+- bluer/src/mesh/mod.rs
+- bluer/src/mesh/network.rs
+- bluer/src/mesh/node.rs
+- bluer/src/mesh/provisioner.rs
+- bluer/src/monitor.rs
+- bluer/src/rfcomm/mod.rs
+- bluer/src/rfcomm/profile.rs
+- bluer/src/session.rs
+- bluer/src/test_zbus.rs
+- test_advertising.py
+- test_gatt.py
+- test_rfcat.py
+- test_rfcomm.py
+

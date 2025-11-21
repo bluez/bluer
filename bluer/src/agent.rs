@@ -1,9 +1,5 @@
 //! Bluetooth authorization agent.
 
-use zbus::{
-    zvariant::{ObjectPath, OwnedObjectPath},
-    Proxy,
-};
 use futures::{pin_mut, Future};
 use std::{fmt, pin::Pin, sync::Arc};
 use strum::IntoStaticStr;
@@ -12,6 +8,10 @@ use tokio::{
     sync::{oneshot, Mutex},
 };
 use uuid::Uuid;
+use zbus::{
+    zvariant::{ObjectPath, OwnedObjectPath},
+    Proxy,
+};
 
 use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
 
@@ -380,12 +380,16 @@ impl RegisteredAgent {
     }
 
     async fn request_pin_code(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<String> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        self.call_with_cancel(&self.a.request_pin_code, RequestPinCode { adapter, device }).await.map_err(Into::into)
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_pin_code, RequestPinCode { adapter, device })
+            .await
+            .map_err(Into::into)
     }
 
     async fn display_pin_code(&self, device: ObjectPath<'_>, pincode: String) -> zbus::fdo::Result<()> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
         self.call(
             &self.a.display_pin_code,
             DisplayPinCode { adapter, device, pincode, cancel: self.get_cancel().await },
@@ -395,12 +399,16 @@ impl RegisteredAgent {
     }
 
     async fn request_passkey(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<u32> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        self.call_with_cancel(&self.a.request_passkey, RequestPasskey { adapter, device }).await.map_err(Into::into)
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_passkey, RequestPasskey { adapter, device })
+            .await
+            .map_err(Into::into)
     }
 
     async fn display_passkey(&self, device: ObjectPath<'_>, passkey: u32, entered: u16) -> zbus::fdo::Result<()> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
         self.call(
             &self.a.display_passkey,
             DisplayPasskey { adapter, device, passkey, entered, cancel: self.get_cancel().await },
@@ -410,27 +418,24 @@ impl RegisteredAgent {
     }
 
     async fn request_confirmation(&self, device: ObjectPath<'_>, passkey: u32) -> zbus::fdo::Result<()> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        self.call_with_cancel(
-            &self.a.request_confirmation,
-            RequestConfirmation { adapter, device, passkey },
-        )
-        .await
-        .map_err(Into::into)
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_confirmation, RequestConfirmation { adapter, device, passkey })
+            .await
+            .map_err(Into::into)
     }
 
     async fn request_authorization(&self, device: ObjectPath<'_>) -> zbus::fdo::Result<()> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
-        self.call_with_cancel(
-            &self.a.request_authorization,
-            RequestAuthorization { adapter, device },
-        )
-        .await
-        .map_err(Into::into)
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        self.call_with_cancel(&self.a.request_authorization, RequestAuthorization { adapter, device })
+            .await
+            .map_err(Into::into)
     }
 
     async fn authorize_service(&self, device: ObjectPath<'_>, uuid: String) -> zbus::fdo::Result<()> {
-        let (adapter, device) = Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        let (adapter, device) =
+            Self::parse_device_path(&device).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
         let service: Uuid = match uuid.parse() {
             Ok(service) => service,
             Err(_) => {
@@ -438,12 +443,9 @@ impl RegisteredAgent {
                 return Err(zbus::fdo::Error::Failed("Invalid UUID".to_string()));
             }
         };
-        self.call_with_cancel(
-            &self.a.authorize_service,
-            AuthorizeService { adapter, device, service },
-        )
-        .await
-        .map_err(Into::into)
+        self.call_with_cancel(&self.a.authorize_service, AuthorizeService { adapter, device, service })
+            .await
+            .map_err(Into::into)
     }
 }
 

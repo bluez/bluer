@@ -1,10 +1,11 @@
 //! Connects to the Bluetooth GATT echo service and tests it.
 
-use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, DeviceEvent, DeviceProperty, Result, AddressType};
+use bluer::{
+    gatt::remote::Characteristic, AdapterEvent, AddressType, Device, DeviceEvent, DeviceProperty, Result,
+};
 use futures::{pin_mut, StreamExt};
 use rand::Rng;
-use std::collections::HashSet;
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::{sleep, timeout},
@@ -69,32 +70,32 @@ async fn find_our_characteristic(adapter: &bluer::Adapter, device: &Device) -> R
 
         println!("    Enumerating services...");
         for i in 0..10 {
-                let services = device.services().await?;
-                println!("    Found {} services (attempt {})", services.len(), i + 1);
-                
-                let mut found_service = false;
-                for service in services {
-                    let uuid = service.uuid().await?;
-                    println!("    Service UUID: {}", &uuid);
-                    if uuid == SERVICE_UUID {
-                        println!("    Found our service!");
-                        found_service = true;
-                        for char in service.characteristics().await? {
-                            let uuid = char.uuid().await?;
-                            println!("    Characteristic UUID: {}", &uuid);
-                            if uuid == CHARACTERISTIC_UUID {
-                                println!("    Found our characteristic!");
-                                return Ok(Some(char));
-                            }
+            let services = device.services().await?;
+            println!("    Found {} services (attempt {})", services.len(), i + 1);
+
+            let mut found_service = false;
+            for service in services {
+                let uuid = service.uuid().await?;
+                println!("    Service UUID: {}", &uuid);
+                if uuid == SERVICE_UUID {
+                    println!("    Found our service!");
+                    found_service = true;
+                    for char in service.characteristics().await? {
+                        let uuid = char.uuid().await?;
+                        println!("    Characteristic UUID: {}", &uuid);
+                        if uuid == CHARACTERISTIC_UUID {
+                            println!("    Found our characteristic!");
+                            return Ok(Some(char));
                         }
                     }
                 }
-                
-                if !found_service {
-                    println!("    Target service not found, retrying...");
-                    sleep(Duration::from_secs(2)).await;
-                }
             }
+
+            if !found_service {
+                println!("    Target service not found, retrying...");
+                sleep(Duration::from_secs(2)).await;
+            }
+        }
 
         println!("    Not found!");
     }
@@ -229,7 +230,7 @@ async fn main() -> bluer::Result<()> {
 
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
-        
+
         while let Some(evt) = discover.next().await {
             match evt {
                 AdapterEvent::DeviceAdded(addr) => {

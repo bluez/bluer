@@ -3,18 +3,16 @@
 use std::{collections::HashMap, sync::Arc};
 use strum::EnumString;
 use uuid::Uuid;
-use zbus::{dbus_proxy, zvariant::{OwnedObjectPath, OwnedValue}};
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 use super::application::ApplicationInner;
-use crate::{
-    mesh::SERVICE_NAME,
-    Error, ErrorKind, Result, SessionInner,
-};
+use crate::{mesh::SERVICE_NAME, Error, ErrorKind, Result, SessionInner};
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.Management1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.Management1";
 
 #[zbus::proxy(interface = "org.bluez.mesh.Management1")]
 trait Management {
+    /// Add node.
     #[zbus(name = "AddNode")]
     fn add_node(&self, uuid: Vec<u8>, options: HashMap<String, OwnedValue>) -> zbus::Result<()>;
 }
@@ -42,7 +40,7 @@ impl Management {
             .path(self.path.clone())?
             .build()
             .await?;
-        
+
         proxy.add_node(uuid.as_bytes().to_vec(), opts).await?;
 
         loop {

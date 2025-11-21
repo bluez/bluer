@@ -5,12 +5,9 @@ use futures::Future;
 use std::{fmt::Debug, pin::Pin, str::FromStr, sync::Arc};
 use strum::{EnumString, IntoStaticStr};
 
-use crate::{
-    mesh::{PATH, SERVICE_NAME, TIMEOUT},
-    SessionInner, ERR_PREFIX,
-};
+use crate::{SessionInner, ERR_PREFIX};
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.ProvisionAgent1";
 
 /// Error response from us to a Bluetooth agent request.
 #[derive(Clone, Copy, Debug, displaydoc::Display, Eq, PartialEq, Ord, PartialOrd, Hash, IntoStaticStr)]
@@ -152,6 +149,7 @@ impl fmt::Debug for ProvisionAgent {
 /// Implements org.bluez.mesh.ProvisionAgent1 interface
 pub(crate) struct RegisteredProvisionAgent {
     agent: ProvisionAgent,
+    #[allow(dead_code)]
     inner: Arc<SessionInner>,
 }
 
@@ -176,10 +174,7 @@ impl RegisteredProvisionAgent {
     async fn display_numeric(&self, type_: String, value: u32) -> zbus::fdo::Result<()> {
         self.call(
             &self.agent.display_numeric,
-            DisplayNumeric {
-                display_type: NumericCapability::from_str(&type_).unwrap(),
-                number: value,
-            },
+            DisplayNumeric { display_type: NumericCapability::from_str(&type_).unwrap(), number: value },
         )
         .await
         .map_err(zbus::fdo::Error::from)

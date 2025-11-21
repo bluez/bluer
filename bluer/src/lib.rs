@@ -114,7 +114,7 @@ use hex::FromHex;
 use macaddr::MacAddr6;
 use num_derive::FromPrimitive;
 #[cfg(feature = "bluetoothd")]
-use std::{time::Duration};
+use std::time::Duration;
 use std::{
     convert::TryInto,
     fmt::{self, Debug, Display, Formatter},
@@ -246,7 +246,9 @@ macro_rules! zbus_interface {
             R: TryFrom<zbus::zvariant::OwnedValue>,
             R::Error: Into<zbus::Error>,
         {
-            let proxy = zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            let proxy =
+                zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface)
+                    .await?;
             Ok(proxy.get_property(name).await?)
         }
 
@@ -255,7 +257,13 @@ macro_rules! zbus_interface {
         where
             T: Into<$crate::zbus::zvariant::Value<'static>>,
         {
-            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            let proxy = $crate::zbus::proxy::Proxy::new(
+                &self.inner.connection,
+                crate::SERVICE_NAME,
+                &self.dbus_path,
+                $interface,
+            )
+            .await?;
             Ok(proxy.set_property(name, value).await?)
         }
 
@@ -265,7 +273,13 @@ macro_rules! zbus_interface {
             B: serde::Serialize + zbus::zvariant::DynamicType,
             R: serde::de::DeserializeOwned + zbus::zvariant::Type,
         {
-            let proxy = $crate::zbus::proxy::Proxy::new(&self.inner.connection, crate::SERVICE_NAME, &self.dbus_path, $interface).await?;
+            let proxy = $crate::zbus::proxy::Proxy::new(
+                &self.inner.connection,
+                crate::SERVICE_NAME,
+                &self.dbus_path,
+                $interface,
+            )
+            .await?;
             Ok(proxy.call(name, body).await?)
         }
     };
@@ -273,6 +287,7 @@ macro_rules! zbus_interface {
 
 #[cfg(feature = "bluetoothd")]
 #[macro_export]
+/// Define properties for a D-Bus interface.
 macro_rules! define_properties {
     (@get
         $(#[$outer:meta])*
@@ -591,7 +606,7 @@ mod session;
 mod sys;
 
 #[cfg(feature = "bluetoothd")]
-pub use crate::{adapter::*, session::*, device::*};
+pub use crate::{adapter::*, device::*, session::*};
 
 #[doc(no_inline)]
 pub use uuid::Uuid;
@@ -759,17 +774,16 @@ impl From<ZbusError> for Error {
                 if name == "org.freedesktop.DBus.Error.UnknownObject" {
                     return Self::new(ErrorKind::NotFound);
                 }
-                let kind = match name.strip_prefix(ERR_PREFIX)
-                    .and_then(|s| ErrorKind::from_str(s).ok())
-                {
+                let kind = match name.strip_prefix(ERR_PREFIX).and_then(|s| ErrorKind::from_str(s).ok()) {
                     Some(kind) => kind,
                     _ => ErrorKind::Internal(InternalErrorKind::DBus(name.to_string())),
                 };
                 Self { kind, message: message.unwrap_or_default() }
             }
-            _ => {
-                Self { kind: ErrorKind::Internal(InternalErrorKind::DBus(err.to_string())), message: err.to_string() }
-            }
+            _ => Self {
+                kind: ErrorKind::Internal(InternalErrorKind::DBus(err.to_string())),
+                message: err.to_string(),
+            },
         }
     }
 }
@@ -1082,12 +1096,14 @@ impl FromStr for Modalias {
 #[cfg(feature = "bluetoothd")]
 pub(crate) async fn all_dbus_objects(
     connection: &zbus::Connection,
-) -> Result<std::collections::HashMap<zbus::zvariant::OwnedObjectPath, std::collections::HashMap<String, std::collections::HashMap<String, zbus::zvariant::OwnedValue>>>> {
-    let object_manager = zbus::fdo::ObjectManagerProxy::builder(connection)
-        .destination(SERVICE_NAME)?
-        .path("/")?
-        .build()
-        .await?;
+) -> Result<
+    std::collections::HashMap<
+        zbus::zvariant::OwnedObjectPath,
+        std::collections::HashMap<String, std::collections::HashMap<String, zbus::zvariant::OwnedValue>>,
+    >,
+> {
+    let object_manager =
+        zbus::fdo::ObjectManagerProxy::builder(connection).destination(SERVICE_NAME)?.path("/")?.build().await?;
     let objects = object_manager.get_managed_objects().await?;
     let mut res = std::collections::HashMap::new();
     for (path, interfaces) in objects {
@@ -1108,11 +1124,11 @@ pub(crate) fn read_dict<T>(
 where
     T: TryFrom<zbus::zvariant::OwnedValue, Error = zbus::zvariant::Error>,
 {
-    let value = dict.get(key)
+    let value = dict
+        .get(key)
         .ok_or_else(|| Error::new(ErrorKind::Internal(InternalErrorKind::MissingKey(key.to_string()))))?;
-    
-    Ok((*value).try_clone().map_err(zbus::Error::from)?
-        .try_into().map_err(zbus::Error::from)?)
+
+    Ok((*value).try_clone().map_err(zbus::Error::from)?.try_into().map_err(zbus::Error::from)?)
 }
 
 /// Returns the parent path of the specified D-Bus path.
@@ -1186,16 +1202,12 @@ impl zbus::DBusError for Error {
     fn create_reply(&self, call: &zbus::message::Header<'_>) -> zbus::Result<zbus::Message> {
         zbus::fdo::Error::from(self.clone()).create_reply(call)
     }
-    
+
     fn name(&self) -> zbus::names::ErrorName<'_> {
         zbus::fdo::Error::from(self.clone()).name().into_owned()
     }
-    
+
     fn description(&self) -> Option<&str> {
         None
     }
 }
-
-
-
-

@@ -1,9 +1,5 @@
 //! Bluetooth profiles for RFCOMM connections.
 
-use zbus::{
-    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Type},
-    Proxy,
-};
 use futures::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -18,13 +14,17 @@ use strum::{Display, EnumString, IntoStaticStr};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+use zbus::{
+    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
+    Proxy,
+};
 
 use super::{Socket, Stream};
 use crate::{Address, Device, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.ProfileManager1";
 pub(crate) const MANAGER_PATH: &str = "/org/bluez";
-pub(crate) const PROFILE_INTERFACE: &str = "org.bluez.Profile1";
+// pub(crate) const PROFILE_INTERFACE: &str = "org.bluez.Profile1";
 pub(crate) const PROFILE_PREFIX: &str = "/org/bluez/profile/";
 
 /// Error response from us to a Bluetooth profile request.
@@ -194,7 +194,10 @@ impl Profile {
             pm.insert("AutoConnect".to_string(), OwnedValue::from(*auto_connect));
         }
         if let Some(service_record) = &self.service_record {
-            pm.insert("ServiceRecord".to_string(), OwnedValue::from(zbus::zvariant::Str::from(service_record.clone())));
+            pm.insert(
+                "ServiceRecord".to_string(),
+                OwnedValue::from(zbus::zvariant::Str::from(service_record.clone())),
+            );
         }
         if let Some(version) = &self.version {
             pm.insert("Version".to_string(), OwnedValue::from(*version));
@@ -305,10 +308,7 @@ pub(crate) struct RegisteredProfile {
 #[zbus::interface(name = "org.bluez.Profile1")]
 impl RegisteredProfile {
     async fn new_connection(
-        &self,
-        device: OwnedObjectPath,
-        fd: OwnedFd,
-        fd_properties: HashMap<String, OwnedValue>,
+        &self, device: OwnedObjectPath, fd: OwnedFd, fd_properties: HashMap<String, OwnedValue>,
     ) -> zbus::fdo::Result<()> {
         let device = if let Some((_, device)) = Device::parse_dbus_path(&device) {
             device
@@ -361,19 +361,16 @@ impl RegisteredProfile {
     pub(crate) async fn register(
         self, inner: Arc<SessionInner>, profile: Profile, req_rx: mpsc::Receiver<ConnectRequest>,
     ) -> Result<ProfileHandle> {
-        let name = OwnedObjectPath::try_from(format!("{}{}", PROFILE_PREFIX, Uuid::new_v4().as_simple())).unwrap();
+        let name =
+            OwnedObjectPath::try_from(format!("{}{}", PROFILE_PREFIX, Uuid::new_v4().as_simple())).unwrap();
         log::trace!("Publishing profile at {}", &name);
 
         inner.connection.object_server().at(name.clone(), self).await?;
 
         log::trace!("Registering profile at {}", &name);
         let proxy = Proxy::new(&inner.connection, SERVICE_NAME, MANAGER_PATH, MANAGER_INTERFACE).await?;
-        let () = proxy
-            .call(
-                "RegisterProfile",
-                &(name.clone(), profile.uuid.to_string(), profile.to_dict()),
-            )
-            .await?;
+        let () =
+            proxy.call("RegisterProfile", &(name.clone(), profile.uuid.to_string(), profile.to_dict())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let unreg_name = name.clone();

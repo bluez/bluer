@@ -2,7 +2,7 @@
 
 use bluer::{
     agent::Agent,
-    rfcomm::{Profile, Role, Channel},
+    rfcomm::{Channel, Profile, Role},
     Session, Uuid,
 };
 use futures::StreamExt;
@@ -25,7 +25,7 @@ async fn main() -> bluer::Result<()> {
     let _agent_hndl = session.register_agent(agent).await?;
 
     let uuid = PROFILE_UUID;
-    
+
     println!("Registering profile with UUID {}...", uuid);
 
     let profile = Profile {
@@ -54,7 +54,7 @@ async fn main() -> bluer::Result<()> {
                         println!("Write failed: {}", &err);
                         continue;
                     }
-                    
+
                     // Echo loop
                     let mut buf = [0u8; 1024];
                     loop {

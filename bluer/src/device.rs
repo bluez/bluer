@@ -1,9 +1,5 @@
 //! Remote Bluetooth device.
 
-use zbus::{
-    zvariant::{OwnedObjectPath, ObjectPath},
-    Proxy, ProxyBuilder,
-};
 use futures::{pin_mut, select, stream, FutureExt, Stream, StreamExt};
 use std::{
     collections::{HashMap, HashSet},
@@ -12,6 +8,10 @@ use std::{
 };
 use tokio::{sync::oneshot, time::sleep};
 use uuid::Uuid;
+use zbus::{
+    zvariant::{ObjectPath, OwnedObjectPath},
+    Proxy, ProxyBuilder,
+};
 
 use crate::{
     all_dbus_objects,
@@ -52,9 +52,7 @@ impl Device {
     pub(crate) fn dbus_path(adapter_name: &str, address: Address) -> Result<OwnedObjectPath> {
         let adapter_path = Adapter::dbus_path(adapter_name)?;
         let path_str = format!("{}/dev_{}", adapter_path.as_str(), address.to_string().replace(':', "_"));
-        Ok(ObjectPath::try_from(path_str)
-            .map(OwnedObjectPath::from)
-            .map_err(zbus::Error::from)?)
+        Ok(ObjectPath::try_from(path_str).map(OwnedObjectPath::from).map_err(zbus::Error::from)?)
     }
 
     pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a ObjectPath) -> Option<((&'a str, Address), &'a str)> {
@@ -96,10 +94,10 @@ impl Device {
     pub async fn events(&self) -> Result<impl Stream<Item = DeviceEvent>> {
         let events = self.inner.events(self.dbus_path.clone(), false).await?;
         let stream = events.flat_map(move |event| match event {
-            Event::PropertiesChanged { changed, .. } => {
-                stream::iter(DeviceProperty::from_prop_map(&changed).into_iter().map(DeviceEvent::PropertyChanged))
-                    .boxed()
-            }
+            Event::PropertiesChanged { changed, .. } => stream::iter(
+                DeviceProperty::from_prop_map(&changed).into_iter().map(DeviceEvent::PropertyChanged),
+            )
+            .boxed(),
             _ => stream::empty().boxed(),
         });
 
@@ -269,13 +267,17 @@ impl Device {
         tokio::spawn(async move {
             if done_rx.await.is_err() {
                 let proxy = ProxyBuilder::<Proxy>::new(&connection)
-                    .destination(SERVICE_NAME).unwrap()
-                    .path(dbus_path).unwrap()
-                    .interface(INTERFACE).unwrap()
-                    .build().await;
-                
+                    .destination(SERVICE_NAME)
+                    .unwrap()
+                    .path(dbus_path)
+                    .unwrap()
+                    .interface(INTERFACE)
+                    .unwrap()
+                    .build()
+                    .await;
+
                 if let Ok(proxy) = proxy {
-                     let _: std::result::Result<(), _> = proxy.call("CancelPairing", &()).await;
+                    let _: std::result::Result<(), _> = proxy.call("CancelPairing", &()).await;
                 }
             }
         });

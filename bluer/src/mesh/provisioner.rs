@@ -3,17 +3,17 @@
 use std::{str::FromStr, sync::Arc};
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use zbus::{interface, fdo};
+use zbus::{fdo, interface};
 
 use crate::{
     mesh::{
         management::{AddNodeFailedReason, NodeAdded},
-        ReqError, PATH, SERVICE_NAME, TIMEOUT,
+        ReqError,
     },
     SessionInner,
 };
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.Provisioner1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.Provisioner1";
 
 /// Bluetooth mesh provisioner.
 #[derive(Debug, Clone, Default)]
@@ -29,17 +29,21 @@ pub struct Provisioner {
 /// A provisioner exposed over D-Bus to bluez.
 #[derive(Clone)]
 pub(crate) struct RegisteredProvisioner {
+    #[allow(dead_code)]
     inner: Arc<SessionInner>,
     provisioner: Provisioner,
     next_address: Arc<Mutex<u16>>,
-    add_node_result_tx: tokio::sync::broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
+    add_node_result_tx:
+        tokio::sync::broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
 }
 
 impl RegisteredProvisioner {
     pub(crate) fn new(
-        inner: Arc<SessionInner>,
-        provisioner: Provisioner,
-        add_node_result_tx: tokio::sync::broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
+        inner: Arc<SessionInner>, provisioner: Provisioner,
+        add_node_result_tx: tokio::sync::broadcast::Sender<(
+            Uuid,
+            std::result::Result<NodeAdded, AddNodeFailedReason>,
+        )>,
     ) -> Self {
         Self {
             inner,

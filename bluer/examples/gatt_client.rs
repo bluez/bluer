@@ -1,6 +1,6 @@
 //! Connects to our Bluetooth GATT service and exercises the characteristic.
 
-use bluer::{gatt::remote::Characteristic, AdapterEvent, Device, Result, AddressType};
+use bluer::{gatt::remote::Characteristic, AdapterEvent, AddressType, Device, Result};
 use futures::{pin_mut, StreamExt};
 use std::time::Duration;
 use tokio::{

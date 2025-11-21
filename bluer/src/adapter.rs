@@ -1,9 +1,5 @@
 //! Bluetooth adapter.
 
-use zbus::{
-    proxy::Proxy,
-    zvariant::{ObjectPath, OwnedObjectPath},
-};
 use futures::{
     stream::{self, SelectAll},
     Stream, StreamExt,
@@ -17,17 +13,31 @@ use strum::{Display, EnumString};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+use zbus::{
+    proxy::Proxy,
+    zvariant::{ObjectPath, OwnedObjectPath},
+};
 
 use crate::{
     adv,
-    gatt,
     adv::{Advertisement, Capabilities, Feature, PlatformFeature, SecondaryChannel},
+    gatt,
     // all_dbus_objects, device,
     // device::Device,
     // gatt,
     monitor::MonitorManager,
-    Address, AddressType, Error, ErrorKind, InternalErrorKind, Modalias, Result, SessionInner,
-    SingleSessionToken, SERVICE_NAME, Device, Event,
+    Address,
+    AddressType,
+    Device,
+    Error,
+    ErrorKind,
+    Event,
+    InternalErrorKind,
+    Modalias,
+    Result,
+    SessionInner,
+    SingleSessionToken,
+    SERVICE_NAME,
 };
 
 pub(crate) const INTERFACE: &str = "org.bluez.Adapter1";
@@ -89,7 +99,9 @@ impl Adapter {
         let mut addrs = Vec::new();
         for (path, interfaces) in crate::all_dbus_objects(&self.inner.connection).await? {
             match Device::parse_dbus_path(&path) {
-                Some((adapter, addr)) if adapter == *self.name && interfaces.contains_key(crate::device::INTERFACE) => {
+                Some((adapter, addr))
+                    if adapter == *self.name && interfaces.contains_key(crate::device::INTERFACE) =>
+                {
                     addrs.push(addr)
                 }
                 _ => (),
@@ -231,8 +243,7 @@ impl Adapter {
                 async move {
                     log::trace!("{}: {}.StopDiscovery ()", &dbus_path, SERVICE_NAME);
                     let proxy = Proxy::new(&connection, SERVICE_NAME, &dbus_path, INTERFACE).await.unwrap();
-                    let result: std::result::Result<(), zbus::Error> =
-                        proxy.call("StopDiscovery", &()).await;
+                    let result: std::result::Result<(), zbus::Error> = proxy.call("StopDiscovery", &()).await;
                     log::trace!("{}: {}.StopDiscovery () -> {:?}", &dbus_path, SERVICE_NAME, &result);
                 },
             )
@@ -730,7 +741,7 @@ impl DiscoveryFilter {
         let mut hm = HashMap::new();
         let Self { uuids, rssi, pathloss, transport, duplicate_data, discoverable, pattern, _non_exhaustive } =
             self;
-        
+
         let uuids: Vec<String> = uuids.into_iter().map(|uuid| uuid.to_string()).collect();
         if !uuids.is_empty() {
             hm.insert("UUIDs".to_string(), zbus::zvariant::Value::from(uuids).into());

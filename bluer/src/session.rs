@@ -1,9 +1,5 @@
 //! Bluetooth session.
 
-use zbus::{
-    Connection,
-    fdo::ObjectManagerProxy,
-};
 use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
@@ -15,22 +11,18 @@ use std::{
     sync::{Arc, Weak},
 };
 use tokio::select;
+use zbus::{fdo::ObjectManagerProxy, Connection};
 
 use crate::{
     agent::{Agent, AgentHandle, RegisteredAgent},
-    Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME, Adapter,
+    Adapter, Error, ErrorKind, InternalErrorKind, Result, SERVICE_NAME,
 };
 
 #[cfg(feature = "rfcomm")]
-use crate::rfcomm::{
-    profile::{Profile, ProfileHandle, RegisteredProfile},
-};
+use crate::rfcomm::profile::{Profile, ProfileHandle, RegisteredProfile};
 
 #[cfg(feature = "mesh")]
-use crate::mesh::{
-    agent::RegisteredProvisionAgent, application::RegisteredApplication, element::RegisteredElement,
-    network::Network, provisioner::RegisteredProvisioner,
-};
+use crate::mesh::network::Network;
 
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
@@ -192,13 +184,13 @@ impl Session {
             let path = args.object_path;
             let interfaces = args.interfaces;
             if interfaces.contains(&"org.bluez.Adapter1") {
-                 let name = path.split('/').last()?.to_string();
-                 Some(SessionEvent::AdapterRemoved(name))
+                let name = path.split('/').last()?.to_string();
+                Some(SessionEvent::AdapterRemoved(name))
             } else {
                 None
             }
         });
-        
+
         Ok(futures::stream::select(added_stream, removed_stream))
     }
 
@@ -209,7 +201,7 @@ impl Session {
             .path("/")?
             .build()
             .await?;
-        
+
         let objects = object_manager.get_managed_objects().await?;
         let mut names = Vec::new();
         for (path, interfaces) in objects {
@@ -294,7 +286,11 @@ pub(crate) enum Event {
     ObjectRemoved { object: zbus::zvariant::OwnedObjectPath, interfaces: HashSet<String> },
     /// Properties changed.
     #[allow(dead_code)]
-    PropertiesChanged { object: zbus::zvariant::OwnedObjectPath, interface: String, changed: Arc<HashMap<String, zbus::zvariant::OwnedValue>> },
+    PropertiesChanged {
+        object: zbus::zvariant::OwnedObjectPath,
+        interface: String,
+        changed: Arc<HashMap<String, zbus::zvariant::OwnedValue>>,
+    },
 }
 
 #[allow(dead_code)]
@@ -318,18 +314,13 @@ pub(crate) struct SubscriptionReq {
 
 impl Event {
     pub(crate) async fn subscribe(
-        tx: &mut mpsc::Sender<SubscriptionReq>,
-        path: zbus::zvariant::OwnedObjectPath,
-        child_objects: bool,
+        tx: &mut mpsc::Sender<SubscriptionReq>, path: zbus::zvariant::OwnedObjectPath, child_objects: bool,
     ) -> Result<mpsc::UnboundedReceiver<Event>> {
         let (ready_tx, ready_rx) = oneshot::channel();
         let (event_tx, event_rx) = mpsc::unbounded();
-        tx.send(SubscriptionReq {
-            path,
-            child_objects,
-            tx: event_tx,
-            ready_tx,
-        }).await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::Cancelled)))?;
+        tx.send(SubscriptionReq { path, child_objects, tx: event_tx, ready_tx })
+            .await
+            .map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::Cancelled)))?;
         ready_rx.await.map_err(|_| Error::new(ErrorKind::Internal(InternalErrorKind::Cancelled)))?;
         Ok(event_rx)
     }
@@ -338,15 +329,14 @@ impl Event {
     pub(crate) async fn handle_connection(
         connection: zbus::Connection, mut sub_rx: mpsc::Receiver<SubscriptionReq>,
     ) -> Result<()> {
-        use zbus::message::Type;
-        use zbus::MessageStream;
+        use zbus::{message::Type, MessageStream};
 
         let object_manager_match = zbus::MatchRule::builder()
             .msg_type(Type::Signal)
             .sender(SERVICE_NAME)?
             .interface("org.freedesktop.DBus.ObjectManager")?
             .build();
-        
+
         let properties_match = zbus::MatchRule::builder()
             .msg_type(Type::Signal)
             .sender(SERVICE_NAME)?
@@ -354,19 +344,15 @@ impl Event {
             .member("PropertiesChanged")?
             .build();
 
-        let mut object_manager_stream = MessageStream::for_match_rule(
-            object_manager_match,
-            &connection,
-            None,
-        ).await?;
-        let mut properties_stream = MessageStream::for_match_rule(
-            properties_match,
-            &connection,
-            None,
-        ).await?;
+        let mut object_manager_stream =
+            MessageStream::for_match_rule(object_manager_match, &connection, None).await?;
+        let mut properties_stream = MessageStream::for_match_rule(properties_match, &connection, None).await?;
 
         tokio::spawn(async move {
-            log::trace!("Starting event loop for {}", connection.unique_name().map(|n| n.as_str()).unwrap_or_default());
+            log::trace!(
+                "Starting event loop for {}",
+                connection.unique_name().map(|n| n.as_str()).unwrap_or_default()
+            );
 
             struct Subscription {
                 child_objects: bool,
@@ -385,7 +371,7 @@ impl Event {
                                     continue;
                                 }
                             };
-                            
+
                             let header = msg.header();
                             let member = header.member();
                             if let Some(member) = member {

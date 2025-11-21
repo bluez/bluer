@@ -1,13 +1,18 @@
 //! Consume remote GATT services of connected devices.
 
+use futures::{Stream, StreamExt};
+use std::{
+    collections::HashMap,
+    fmt,
+    os::unix::prelude::{FromRawFd, IntoRawFd},
+    sync::Arc,
+};
+use tokio::net::UnixDatagram;
+use uuid::Uuid;
 use zbus::{
     zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
     Proxy,
 };
-use futures::{Stream, StreamExt};
-use std::{collections::HashMap, fmt, os::unix::prelude::{FromRawFd, IntoRawFd}, sync::Arc};
-use tokio::net::UnixDatagram;
-use uuid::Uuid;
 
 use super::{
     mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter, WriteOp,
@@ -62,7 +67,9 @@ impl Service {
         Ok(OwnedObjectPath::try_from(format!("{device_path}/service{id:04x}")).unwrap())
     }
 
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a OwnedObjectPath) -> Option<((&'a str, Address, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix<'a>(
+        path: &'a OwnedObjectPath,
+    ) -> Option<((&'a str, Address, u16), &'a str)> {
         match Device::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address), p)) => match p.strip_prefix("/service") {
                 Some(p) => {
@@ -221,7 +228,9 @@ impl Characteristic {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(crate) fn parse_dbus_path_prefix<'a>(path: &'a OwnedObjectPath) -> Option<((&'a str, Address, u16, u16), &'a str)> {
+    pub(crate) fn parse_dbus_path_prefix<'a>(
+        path: &'a OwnedObjectPath,
+    ) -> Option<((&'a str, Address, u16, u16), &'a str)> {
         match Service::parse_dbus_path_prefix(path) {
             Some(((adapter_name, device_address, service_id), p)) => match p.strip_prefix("/char") {
                 Some(p) => {
@@ -393,13 +402,15 @@ impl Characteristic {
             .single_session(
                 &self.dbus_path,
                 async move {
-                    let proxy = Proxy::new(&connection, SERVICE_NAME, &dbus_path, CHARACTERISTIC_INTERFACE).await?;
+                    let proxy =
+                        Proxy::new(&connection, SERVICE_NAME, &dbus_path, CHARACTERISTIC_INTERFACE).await?;
                     let () = proxy.call("StartNotify", &()).await?;
                     Ok(())
                 },
                 async move {
                     log::trace!("{}: {}.StopNotify ()", &dbus_path2, SERVICE_NAME);
-                    let proxy = Proxy::new(&connection2, SERVICE_NAME, &dbus_path2, CHARACTERISTIC_INTERFACE).await;
+                    let proxy =
+                        Proxy::new(&connection2, SERVICE_NAME, &dbus_path2, CHARACTERISTIC_INTERFACE).await;
                     if let Ok(proxy) = proxy {
                         let result: zbus::Result<()> = proxy.call("StopNotify", &()).await;
                         log::trace!("{}: {}.StopNotify () -> {:?}", &dbus_path2, SERVICE_NAME, &result);

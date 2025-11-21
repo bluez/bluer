@@ -1,5 +1,6 @@
 //! Bluetooth mesh element.
 
+use futures::{Stream, StreamExt};
 use std::{
     collections::HashMap,
     fmt,
@@ -7,17 +8,13 @@ use std::{
     sync::{Arc, Weak},
     task::{Context, Poll},
 };
-use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use zbus::{interface, fdo, zvariant::{OwnedValue, Value}};
+use zbus::{fdo, interface, zvariant::OwnedValue};
 
-use crate::{
-    mesh::{ReqError, PATH, SERVICE_NAME, TIMEOUT},
-    Error, ErrorKind, Result, SessionInner,
-};
+use crate::{mesh::ReqError, Error, ErrorKind, Result, SessionInner};
 
-pub(crate) const ELEMENT_INTERFACE: &str = "org.bluez.mesh.Element1";
+// pub(crate) const ELEMENT_INTERFACE: &str = "org.bluez.mesh.Element1";
 
 pub(crate) type ElementConfig = HashMap<String, OwnedValue>;
 pub(crate) type ElementConfigs = HashMap<usize, HashMap<u16, ElementConfig>>;
@@ -117,6 +114,7 @@ impl Default for VendorModel {
 
 /// An element exposed over D-Bus to bluez.
 pub(crate) struct RegisteredElement {
+    #[allow(dead_code)]
     inner: Arc<SessionInner>,
     element: Element,
     index: usize,
@@ -131,7 +129,9 @@ impl RegisteredElement {
 
 #[interface(name = "org.bluez.mesh.Element1")]
 impl RegisteredElement {
-    async fn message_received(&self, source: u16, key_index: u16, destination: OwnedValue, data: Vec<u8>) -> std::result::Result<(), fdo::Error> {
+    async fn message_received(
+        &self, source: u16, key_index: u16, destination: OwnedValue, data: Vec<u8>,
+    ) -> std::result::Result<(), fdo::Error> {
         log::trace!(
             "Message received for element {:?}: source={:?} key_index={:?} dest={:?} data={:?}",
             self.index,
@@ -144,7 +144,7 @@ impl RegisteredElement {
         let destination = if let Ok(dest) = <u16>::try_from(&destination) {
             dest
         } else if let Ok(dest) = <Vec<u8>>::try_from(destination) {
-             if dest.len() < 2 {
+            if dest.len() < 2 {
                 return Err(ReqError::Failed.into());
             }
             u16::from_be_bytes([dest[0], dest[1]])
@@ -152,13 +152,9 @@ impl RegisteredElement {
             return Err(ReqError::Failed.into());
         };
 
-        let msg = ReceivedMessage {
-            key_index,
-            source,
-            destination,
-            data,
-        };
-        self.element.control_handle
+        let msg = ReceivedMessage { key_index, source, destination, data };
+        self.element
+            .control_handle
             .event_tx
             .send(ElementEvent::MessageReceived(msg))
             .await
@@ -167,7 +163,9 @@ impl RegisteredElement {
         Ok(())
     }
 
-    async fn dev_key_message_received(&self, source: u16, remote: bool, net_index: u16, data: Vec<u8>) -> std::result::Result<(), fdo::Error> {
+    async fn dev_key_message_received(
+        &self, source: u16, remote: bool, net_index: u16, data: Vec<u8>,
+    ) -> std::result::Result<(), fdo::Error> {
         log::trace!(
             "Dev Key Message received for element {:?}: source={:?} net_index={:?} remote={:?} data={:?}",
             self.index,
@@ -177,13 +175,9 @@ impl RegisteredElement {
             data
         );
 
-        let msg = ReceivedDevKeyMessage {
-            source,
-            remote,
-            net_index,
-            data,
-        };
-        self.element.control_handle
+        let msg = ReceivedDevKeyMessage { source, remote, net_index, data };
+        self.element
+            .control_handle
             .event_tx
             .send(ElementEvent::DevKeyMessageReceived(msg))
             .await

@@ -1,8 +1,7 @@
 //! Publish local GATT services to remove devices.
 
-use zbus::{
-    zvariant::{OwnedFd, OwnedObjectPath, OwnedValue},
-};
+#![allow(missing_docs)]
+
 use futures::{channel::oneshot, lock::Mutex, Future, FutureExt, Stream};
 use pin_project::pin_project;
 use std::{
@@ -18,15 +17,13 @@ use strum::{Display, EnumString, IntoStaticStr};
 use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
 
 use super::{
     make_socket_pair, mtu_workaround, CharacteristicFlags, CharacteristicReader, CharacteristicWriter,
     DescriptorFlags, WriteOp, CHARACTERISTIC_INTERFACE,
 };
-use crate::{
-    Adapter, Address, Device, Error, ErrorKind, Result, SessionInner,
-    ERR_PREFIX, SERVICE_NAME,
-};
+use crate::{Adapter, Address, Device, Error, ErrorKind, Result, SessionInner, ERR_PREFIX, SERVICE_NAME};
 
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.GattManager1";
 
@@ -435,7 +432,11 @@ impl Characteristic {
 /// Parse the `device` option.
 fn parse_device(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<(String, Address)> {
     let path = dict.get("device").ok_or_else(|| zbus::fdo::Error::InvalidArgs("device missing".to_string()))?;
-    let path: OwnedObjectPath = (*path).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("device invalid".to_string()))?;
+    let path: OwnedObjectPath = (*path)
+        .try_clone()
+        .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+        .try_into()
+        .map_err(|_| zbus::fdo::Error::InvalidArgs("device invalid".to_string()))?;
     let (adapter, addr) = Device::parse_dbus_path(&path).ok_or_else(|| {
         log::warn!("cannot parse device path: {}", path);
         zbus::fdo::Error::InvalidArgs("device path invalid".to_string())
@@ -462,28 +463,40 @@ pub struct CharacteristicReadRequest {
 impl CharacteristicReadRequest {
     fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
-        
-        let offset = dict.get("offset")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+
+        let offset = dict
+            .get("offset")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string()))
+            })
             .transpose()?
             .unwrap_or_default();
-            
-        let mtu = dict.get("mtu")
+
+        let mtu = dict
+            .get("mtu")
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
-            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
-            
-        let link = dict.get("link")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .and_then(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string()))
+            })?;
+
+        let link = dict
+            .get("link")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string()))
+            })
             .transpose()?
             .and_then(|v: String| v.parse().ok());
 
-        Ok(Self {
-            adapter_name,
-            device_address,
-            offset,
-            mtu,
-            link,
-        })
+        Ok(Self { adapter_name, device_address, offset, mtu, link })
     }
 }
 
@@ -510,42 +523,64 @@ pub struct CharacteristicWriteRequest {
 impl CharacteristicWriteRequest {
     fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
-        
-        let offset = dict.get("offset")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+
+        let offset = dict
+            .get("offset")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string()))
+            })
             .transpose()?
             .unwrap_or_default();
-            
-        let op_type = dict.get("type")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("type invalid".to_string())))
+
+        let op_type = dict
+            .get("type")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("type invalid".to_string()))
+            })
             .transpose()?
             .map(|s: String| s.parse().map_err(|_| zbus::fdo::Error::InvalidArgs("type invalid".to_string())))
             .transpose()?
             .unwrap_or_default();
-            
-        let mtu = dict.get("mtu")
+
+        let mtu = dict
+            .get("mtu")
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
-            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
-            
-        let link = dict.get("link")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .and_then(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string()))
+            })?;
+
+        let link = dict
+            .get("link")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string()))
+            })
             .transpose()?
             .and_then(|v: String| v.parse().ok());
-            
-        let prepare_authorize = dict.get("prepare-authorize")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string())))
+
+        let prepare_authorize = dict
+            .get("prepare-authorize")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string()))
+            })
             .transpose()?
             .unwrap_or_default();
 
-        Ok(Self {
-            adapter_name,
-            device_address,
-            offset,
-            op_type,
-            mtu,
-            link,
-            prepare_authorize,
-        })
+        Ok(Self { adapter_name, device_address, offset, op_type, mtu, link, prepare_authorize })
     }
 }
 
@@ -597,18 +632,22 @@ impl CharacteristicNotifier {
         }
 
         // Send notification.
-        let changed_properties: HashMap<String, OwnedValue> = [
-            ("Value".to_string(), zbus::zvariant::Value::from(value).try_into().expect("value conversion"))
-        ].into_iter().collect();
+        let changed_properties: HashMap<String, OwnedValue> =
+            [("Value".to_string(), zbus::zvariant::Value::from(value).try_into().expect("value conversion"))]
+                .into_iter()
+                .collect();
         let invalidated_properties: Vec<String> = Vec::new();
 
-        self.connection.emit_signal(
-            Option::<&str>::None,
-            &self.path,
-            "org.freedesktop.DBus.Properties",
-            "PropertiesChanged",
-            &(CHARACTERISTIC_INTERFACE, changed_properties, invalidated_properties),
-        ).await.map_err(|_| Error::new(ErrorKind::NotificationSessionStopped))?;
+        self.connection
+            .emit_signal(
+                Option::<&str>::None,
+                &self.path,
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                &(CHARACTERISTIC_INTERFACE, changed_properties, invalidated_properties),
+            )
+            .await
+            .map_err(|_| Error::new(ErrorKind::NotificationSessionStopped))?;
 
         // Wait for confirmation if this is an indication session.
         // Note that we can be aborted before we receive the confirmation.
@@ -787,22 +826,29 @@ struct CharacteristicAcquireRequest {
 impl CharacteristicAcquireRequest {
     fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
-        
-        let mtu = dict.get("mtu")
+
+        let mtu = dict
+            .get("mtu")
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs("mtu missing".to_string()))
-            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string())))?;
-            
-        let link = dict.get("link")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+            .and_then(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("mtu invalid".to_string()))
+            })?;
+
+        let link = dict
+            .get("link")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string()))
+            })
             .transpose()?
             .and_then(|v: String| v.parse().ok());
 
-        Ok(Self {
-            adapter_name,
-            device_address,
-            mtu,
-            link,
-        })
+        Ok(Self { adapter_name, device_address, mtu, link })
     }
 }
 
@@ -907,7 +953,10 @@ impl RegisteredCharacteristic {
         }
     }
 
-    async fn start_notify(&self, #[zbus(object_server)] _server: &zbus::ObjectServer, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>) -> zbus::fdo::Result<()> {
+    async fn start_notify(
+        &self, #[zbus(object_server)] _server: &zbus::ObjectServer,
+        #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>,
+    ) -> zbus::fdo::Result<()> {
         let path = ctxt.path().to_owned();
         let connection = ctxt.connection().clone();
         match &self.c.notify {
@@ -926,17 +975,10 @@ impl RegisteredCharacteristic {
                 };
                 {
                     let mut notify = self.notify.lock().await;
-                    *notify = Some(CharacteristicNotifyState {
-                        _stop_notify_rx: stop_notify_rx,
-                        confirm_tx,
-                    });
+                    *notify = Some(CharacteristicNotifyState { _stop_notify_rx: stop_notify_rx, confirm_tx });
                 }
-                let notifier = CharacteristicNotifier {
-                    connection,
-                    path: path.into(),
-                    stop_notify_tx,
-                    confirm_rx,
-                };
+                let notifier =
+                    CharacteristicNotifier { connection, path: path.into(), stop_notify_tx, confirm_rx };
                 notify_fn(notifier).await;
                 Ok(())
             }
@@ -995,11 +1037,7 @@ impl RegisteredCharacteristic {
                     mtu,
                     socket,
                 };
-                let _ = self.c
-                    .control_handle
-                    .events_tx
-                    .send(CharacteristicControlEvent::Notify(writer))
-                    .await;
+                let _ = self.c.control_handle.events_tx.send(CharacteristicControlEvent::Notify(writer)).await;
                 Ok((fd, options.mtu))
             }
             _ => Err(ReqError::NotSupported.into()),
@@ -1152,23 +1190,30 @@ pub struct DescriptorReadRequest {
 impl DescriptorReadRequest {
     fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
-        
-        let offset = dict.get("offset")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+
+        let offset = dict
+            .get("offset")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string()))
+            })
             .transpose()?
             .unwrap_or_default();
-            
-        let link = dict.get("link")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+
+        let link = dict
+            .get("link")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string()))
+            })
             .transpose()?
             .and_then(|v: String| v.parse().ok());
 
-        Ok(Self {
-            adapter_name,
-            device_address,
-            offset,
-            link,
-        })
+        Ok(Self { adapter_name, device_address, offset, link })
     }
 }
 
@@ -1191,28 +1236,40 @@ pub struct DescriptorWriteRequest {
 impl DescriptorWriteRequest {
     fn from_dict(dict: &HashMap<String, OwnedValue>) -> zbus::fdo::Result<Self> {
         let (adapter_name, device_address) = parse_device(dict)?;
-        
-        let offset = dict.get("offset")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string())))
+
+        let offset = dict
+            .get("offset")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("offset invalid".to_string()))
+            })
             .transpose()?
             .unwrap_or_default();
-            
-        let link = dict.get("link")
-            .map(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string())))
+
+        let link = dict
+            .get("link")
+            .map(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("link invalid".to_string()))
+            })
             .transpose()?
             .and_then(|v: String| v.parse().ok());
-            
-        let prepare_authorize = dict.get("prepare-authorize")
-            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("prepare-authorize missing".to_string()))
-            .and_then(|v| (*v).try_clone().map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?.try_into().map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string())))?;
 
-        Ok(Self {
-            adapter_name,
-            device_address,
-            offset,
-            link,
-            prepare_authorize,
-        })
+        let prepare_authorize = dict
+            .get("prepare-authorize")
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs("prepare-authorize missing".to_string()))
+            .and_then(|v| {
+                (*v).try_clone()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("clone failed".to_string()))?
+                    .try_into()
+                    .map_err(|_| zbus::fdo::Error::InvalidArgs("prepare-authorize invalid".to_string()))
+            })?;
+
+        Ok(Self { adapter_name, device_address, offset, link, prepare_authorize })
     }
 }
 
@@ -1370,7 +1427,9 @@ impl Application {
     pub(crate) async fn register(
         mut self, inner: Arc<SessionInner>, adapter_name: Arc<String>,
     ) -> crate::Result<ApplicationHandle> {
-        let mut cleanup_actions: Vec<Box<dyn FnOnce(zbus::Connection) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>> = Vec::new();
+        let mut cleanup_actions: Vec<
+            Box<dyn FnOnce(zbus::Connection) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>,
+        > = Vec::new();
         let app_path_str = format!("{}{}", GATT_APP_PREFIX, Uuid::new_v4().as_simple());
         let app_path = OwnedObjectPath::try_from(app_path_str.clone()).unwrap();
         log::trace!("Publishing application at {}", &app_path);
@@ -1380,10 +1439,12 @@ impl Application {
         let object_manager = zbus::fdo::ObjectManager;
         server.at(&app_path, object_manager).await?;
         let app_path_clone = app_path.clone();
-        cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
-            let server = connection.object_server();
-            let _ = server.remove::<zbus::fdo::ObjectManager, _>(&app_path_clone).await;
-        })));
+        cleanup_actions.push(Box::new(move |connection| {
+            Box::pin(async move {
+                let server = connection.object_server();
+                let _ = server.remove::<zbus::fdo::ObjectManager, _>(&app_path_clone).await;
+            })
+        }));
 
         let services = take(&mut self.services);
 
@@ -1396,10 +1457,12 @@ impl Application {
             log::trace!("Publishing service at {}", &service_path);
             server.at(&service_path, reg_service).await?;
             let service_path_clone = service_path.clone();
-            cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
-                let server = connection.object_server();
-                let _ = server.remove::<RegisteredService, _>(&service_path_clone).await;
-            })));
+            cleanup_actions.push(Box::new(move |connection| {
+                Box::pin(async move {
+                    let server = connection.object_server();
+                    let _ = server.remove::<RegisteredService, _>(&service_path_clone).await;
+                })
+            }));
 
             for (char_idx, mut char) in chars.into_iter().enumerate() {
                 let descs = take(&mut char.descriptors);
@@ -1410,10 +1473,12 @@ impl Application {
                 log::trace!("Publishing characteristic at {}", &char_path);
                 server.at(&char_path, reg_char).await?;
                 let char_path_clone = char_path.clone();
-                cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
-                    let server = connection.object_server();
-                    let _ = server.remove::<RegisteredCharacteristic, _>(&char_path_clone).await;
-                })));
+                cleanup_actions.push(Box::new(move |connection| {
+                    Box::pin(async move {
+                        let server = connection.object_server();
+                        let _ = server.remove::<RegisteredCharacteristic, _>(&char_path_clone).await;
+                    })
+                }));
 
                 for (desc_idx, desc) in descs.into_iter().enumerate() {
                     let reg_desc = RegisteredDescriptor::new(desc, char_path.clone());
@@ -1422,17 +1487,26 @@ impl Application {
                     log::trace!("Publishing descriptor at {}", &desc_path);
                     server.at(&desc_path, reg_desc).await?;
                     let desc_path_clone = desc_path.clone();
-                    cleanup_actions.push(Box::new(move |connection| Box::pin(async move {
-                        let server = connection.object_server();
-                        let _ = server.remove::<RegisteredDescriptor, _>(&desc_path_clone).await;
-                    })));
+                    cleanup_actions.push(Box::new(move |connection| {
+                        Box::pin(async move {
+                            let server = connection.object_server();
+                            let _ = server.remove::<RegisteredDescriptor, _>(&desc_path_clone).await;
+                        })
+                    }));
                 }
             }
         }
 
         log::trace!("Registering application at {}", &app_path);
-        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
-        let () = proxy.call("RegisterApplication", &(app_path.clone(), HashMap::<String, OwnedValue>::new())).await?;
+        let proxy = zbus::Proxy::new(
+            &inner.connection,
+            SERVICE_NAME,
+            Adapter::dbus_path(&adapter_name)?,
+            MANAGER_INTERFACE,
+        )
+        .await?;
+        let () =
+            proxy.call("RegisterApplication", &(app_path.clone(), HashMap::<String, OwnedValue>::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let app_path_unreg = app_path.clone();
@@ -1441,7 +1515,13 @@ impl Application {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering application at {}", &app_path_unreg);
-            let proxy = zbus::Proxy::new(&connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name).unwrap(), MANAGER_INTERFACE).await;
+            let proxy = zbus::Proxy::new(
+                &connection,
+                SERVICE_NAME,
+                Adapter::dbus_path(&adapter_name).unwrap(),
+                MANAGER_INTERFACE,
+            )
+            .await;
             if let Ok(proxy) = proxy {
                 let _: zbus::Result<()> = proxy.call("UnregisterApplication", &(app_path_unreg,)).await;
             }
@@ -1497,6 +1577,7 @@ pub struct Profile {
 
 #[zbus::interface(name = "org.bluez.GattProfile1")]
 impl Profile {
+    /// UUIDs.
     #[zbus(property, name = "UUIDs")]
     fn uuids(&self) -> Vec<String> {
         self.uuids.iter().map(|uuid| uuid.to_string()).collect()
@@ -1515,8 +1596,16 @@ impl Profile {
         server.at(&profile_path, self).await?;
 
         log::trace!("Registering profile at {}", &profile_path);
-        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
-        let () = proxy.call("RegisterApplication", &(profile_path.clone(), HashMap::<String, OwnedValue>::new())).await?;
+        let proxy = zbus::Proxy::new(
+            &inner.connection,
+            SERVICE_NAME,
+            Adapter::dbus_path(&adapter_name)?,
+            MANAGER_INTERFACE,
+        )
+        .await?;
+        let () = proxy
+            .call("RegisterApplication", &(profile_path.clone(), HashMap::<String, OwnedValue>::new()))
+            .await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
         let profile_path_unreg = profile_path.clone();
@@ -1525,9 +1614,16 @@ impl Profile {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering profile at {}", &profile_path_unreg);
-            let proxy = zbus::Proxy::new(&connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name).unwrap(), MANAGER_INTERFACE).await;
+            let proxy = zbus::Proxy::new(
+                &connection,
+                SERVICE_NAME,
+                Adapter::dbus_path(&adapter_name).unwrap(),
+                MANAGER_INTERFACE,
+            )
+            .await;
             if let Ok(proxy) = proxy {
-                let _: zbus::Result<()> = proxy.call("UnregisterApplication", &(profile_path_unreg.clone(),)).await;
+                let _: zbus::Result<()> =
+                    proxy.call("UnregisterApplication", &(profile_path_unreg.clone(),)).await;
             }
 
             log::trace!("Unpublishing profile at {}", &profile_path_unreg);

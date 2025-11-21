@@ -1,9 +1,5 @@
 //! Bluetooth LE advertising.
 
-use zbus::{
-    interface,
-    zvariant::{OwnedObjectPath, Value},
-};
 use futures::channel::oneshot;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -13,6 +9,10 @@ use std::{
 };
 use strum::{Display, EnumString};
 use uuid::Uuid;
+use zbus::{
+    interface,
+    zvariant::{OwnedObjectPath, Value},
+};
 
 use crate::{Adapter, Result, SessionInner, SERVICE_NAME};
 
@@ -236,86 +236,115 @@ pub struct Advertisement {
 
 #[interface(name = "org.bluez.LEAdvertisement1")]
 impl Advertisement {
+    /// Type.
     #[zbus(property)]
     fn type_(&self) -> String {
         self.advertisement_type.to_string()
     }
 
+    /// Service UUIDs.
     #[zbus(property, name = "ServiceUUIDs")]
     fn service_uuids(&self) -> Vec<String> {
         self.service_uuids.iter().map(|uuid| uuid.to_string()).collect()
     }
 
+    /// Manufacturer data.
     #[zbus(property, name = "ManufacturerData")]
     fn manufacturer_data(&self) -> HashMap<u16, Value<'_>> {
         self.manufacturer_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
     }
 
+    /// Solicit UUIDs.
     #[zbus(property, name = "SolicitUUIDs")]
     fn solicit_uuids(&self) -> Vec<String> {
         self.solicit_uuids.iter().map(|uuid| uuid.to_string()).collect()
     }
 
+    /// Service data.
     #[zbus(property, name = "ServiceData")]
     fn service_data(&self) -> HashMap<String, Value<'_>> {
         self.service_data.iter().map(|(k, v)| (k.to_string(), Value::from(v.clone()))).collect()
     }
 
+    /// Data.
     #[zbus(property, name = "Data")]
     fn data(&self) -> HashMap<u8, Value<'_>> {
         self.advertising_data.iter().map(|(k, v)| (*k, Value::from(v.clone()))).collect()
     }
 
+    /// Discoverable.
     #[zbus(property)]
     fn discoverable(&self) -> std::result::Result<bool, zbus::fdo::Error> {
         self.discoverable.ok_or_else(|| zbus::fdo::Error::UnknownProperty("Discoverable".into()))
     }
 
+    /// Discoverable timeout.
     #[zbus(property, name = "DiscoverableTimeout")]
     fn discoverable_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.discoverable_timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("DiscoverableTimeout".into()))
+        self.discoverable_timeout
+            .map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("DiscoverableTimeout".into()))
     }
 
+    /// Includes.
     #[zbus(property, name = "Includes")]
     fn includes(&self) -> Vec<String> {
         self.system_includes.iter().map(|v| v.to_string()).collect()
     }
 
+    /// Local name.
     #[zbus(property, name = "LocalName")]
     fn local_name(&self) -> std::result::Result<String, zbus::fdo::Error> {
         self.local_name.clone().ok_or_else(|| zbus::fdo::Error::UnknownProperty("LocalName".into()))
     }
 
+    /// Appearance.
     #[zbus(property)]
     fn appearance(&self) -> std::result::Result<u16, zbus::fdo::Error> {
         self.appearance.ok_or_else(|| zbus::fdo::Error::UnknownProperty("Appearance".into()))
     }
 
+    /// Duration.
     #[zbus(property)]
     fn duration(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.duration.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Duration".into()))
+        self.duration
+            .map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("Duration".into()))
     }
 
+    /// Timeout.
     #[zbus(property)]
     fn timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.timeout.map(|t| t.as_secs().min(u16::MAX as _) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Timeout".into()))
+        self.timeout
+            .map(|t| t.as_secs().min(u16::MAX as _) as u16)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("Timeout".into()))
     }
 
+    /// Secondary channel.
     #[zbus(property, name = "SecondaryChannel")]
     fn secondary_channel(&self) -> std::result::Result<String, zbus::fdo::Error> {
-        self.secondary_channel.map(|v| v.to_string()).ok_or_else(|| zbus::fdo::Error::UnknownProperty("SecondaryChannel".into()))
+        self.secondary_channel
+            .map(|v| v.to_string())
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("SecondaryChannel".into()))
     }
 
+    /// Min interval.
     #[zbus(property, name = "MinInterval")]
     fn min_interval(&self) -> std::result::Result<u32, zbus::fdo::Error> {
-        self.min_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32).ok_or_else(|| zbus::fdo::Error::UnknownProperty("MinInterval".into()))
+        self.min_interval
+            .map(|t| t.as_millis().min(u32::MAX as _) as u32)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("MinInterval".into()))
     }
 
+    /// Max interval.
     #[zbus(property, name = "MaxInterval")]
     fn max_interval(&self) -> std::result::Result<u32, zbus::fdo::Error> {
-        self.max_interval.map(|t| t.as_millis().min(u32::MAX as _) as u32).ok_or_else(|| zbus::fdo::Error::UnknownProperty("MaxInterval".into()))
+        self.max_interval
+            .map(|t| t.as_millis().min(u32::MAX as _) as u32)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("MaxInterval".into()))
     }
 
+    /// Tx power.
     #[zbus(property, name = "TxPower")]
     fn tx_power(&self) -> std::result::Result<i16, zbus::fdo::Error> {
         self.tx_power.ok_or_else(|| zbus::fdo::Error::UnknownProperty("TxPower".into()))
@@ -333,7 +362,13 @@ impl Advertisement {
         let _ = inner.connection.object_server().at(&path, self).await?;
 
         log::trace!("Registering advertisement at {}", &path);
-        let proxy = zbus::Proxy::new(&inner.connection, SERVICE_NAME, Adapter::dbus_path(&adapter_name)?, MANAGER_INTERFACE).await?;
+        let proxy = zbus::Proxy::new(
+            &inner.connection,
+            SERVICE_NAME,
+            Adapter::dbus_path(&adapter_name)?,
+            MANAGER_INTERFACE,
+        )
+        .await?;
         let () = proxy.call("RegisterAdvertisement", &(&path, HashMap::<String, Value>::new())).await?;
 
         let (drop_tx, drop_rx) = oneshot::channel();
@@ -345,8 +380,11 @@ impl Advertisement {
 
             log::trace!("Unregistering advertisement at {}", &unreg_path);
             if let Ok(adapter_path) = Adapter::dbus_path(&adapter_name) {
-                if let Ok(proxy) = zbus::Proxy::new(&connection, SERVICE_NAME, adapter_path, MANAGER_INTERFACE).await {
-                    let _: std::result::Result<(), zbus::Error> = proxy.call("UnregisterAdvertisement", &(&unreg_path,)).await;
+                if let Ok(proxy) =
+                    zbus::Proxy::new(&connection, SERVICE_NAME, adapter_path, MANAGER_INTERFACE).await
+                {
+                    let _: std::result::Result<(), zbus::Error> =
+                        proxy.call("UnregisterAdvertisement", &(&unreg_path,)).await;
                 }
             }
 

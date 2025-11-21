@@ -4,7 +4,10 @@ use std::{fmt, sync::Arc};
 use strum::EnumString;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use uuid::Uuid;
-use zbus::{interface, fdo, zvariant::{OwnedObjectPath, ObjectPath}};
+use zbus::{
+    interface,
+    zvariant::{ObjectPath, OwnedObjectPath},
+};
 
 use super::{
     agent::{ProvisionAgent, RegisteredProvisionAgent},
@@ -12,14 +15,11 @@ use super::{
     provisioner::{Provisioner, RegisteredProvisioner},
 };
 use crate::{
-    mesh::{
-        element::{Element, RegisteredElement},
-        PATH, SERVICE_NAME, TIMEOUT,
-    },
+    mesh::element::{Element, RegisteredElement},
     Error, ErrorKind, Result, SessionInner,
 };
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.Application1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.Application1";
 pub(crate) const MESH_APP_PREFIX: &str = "/mesh/app/";
 
 /// Definition of Bluetooth mesh application.
@@ -98,11 +98,13 @@ impl From<JoinFailedReason> for Error {
 
 #[derive(Clone)]
 pub(crate) struct RegisteredApplication {
+    #[allow(dead_code)]
     inner: Arc<SessionInner>,
     device_id: Uuid,
     pub(crate) provisioner: Option<RegisteredProvisioner>,
     properties: Properties,
     join_result_tx: mpsc::Sender<std::result::Result<u64, JoinFailedReason>>,
+    #[allow(dead_code)]
     pub(crate) add_node_result_tx: broadcast::Sender<(Uuid, std::result::Result<NodeAdded, AddNodeFailedReason>)>,
 }
 
@@ -166,7 +168,8 @@ impl RegisteredApplication {
         let this = Self {
             inner: inner.clone(),
             device_id,
-            provisioner: provisioner.map(|prov| RegisteredProvisioner::new(inner.clone(), prov, add_node_result_tx.clone())),
+            provisioner: provisioner
+                .map(|prov| RegisteredProvisioner::new(inner.clone(), prov, add_node_result_tx.clone())),
             properties,
             join_result_tx,
             add_node_result_tx: add_node_result_tx.clone(),
@@ -176,7 +179,7 @@ impl RegisteredApplication {
         let root_path = this.dbus_path();
         log::trace!("Publishing mesh application at {}", &root_path);
 
-        let mut object_server = inner.connection.object_server();
+        let object_server = inner.connection.object_server();
 
         // register object manager
         let object_manager = zbus::fdo::ObjectManager;
@@ -184,10 +187,9 @@ impl RegisteredApplication {
 
         // register agent
         let agent_path = format!("{}/{}", root_path.as_str(), "agent");
-        object_server.at(
-            ObjectPath::try_from(agent_path).unwrap(),
-            RegisteredProvisionAgent::new(agent, inner.clone())
-        ).await?;
+        object_server
+            .at(ObjectPath::try_from(agent_path).unwrap(), RegisteredProvisionAgent::new(agent, inner.clone()))
+            .await?;
 
         // register application
         let app_path = this.app_dbus_path();
@@ -227,7 +229,7 @@ impl RegisteredApplication {
             // No, we should clean up.
             // But `RegisteredApplication` logic in `dbus-crossroads` was `cr.remove::<Self>(&path_unreg)`.
             // `dbus-crossroads` removes the path from the registry.
-            
+
             // For now, I will just remove the ObjectManager at root.
         });
 

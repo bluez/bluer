@@ -1,7 +1,10 @@
 //! Implements Node bluetooth mesh interface
 
 use std::{collections::HashMap, sync::Arc};
-use zbus::{zvariant::{OwnedObjectPath, OwnedValue}, proxy};
+use zbus::{
+    proxy,
+    zvariant::{OwnedObjectPath, OwnedValue},
+};
 
 use super::{
     application::ApplicationInner,
@@ -12,14 +15,30 @@ use crate::{
     Result, SessionInner,
 };
 
-pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";
+// pub(crate) const INTERFACE: &str = "org.bluez.mesh.Node1";
 
 #[proxy(interface = "org.bluez.mesh.Node1")]
 trait Node {
-    fn publish(&self, element_path: &zbus::zvariant::ObjectPath<'_>, model_id: u16, options: HashMap<String, OwnedValue>, data: Vec<u8>) -> zbus::Result<()>;
-    fn send(&self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, key_index: u16, options: HashMap<String, OwnedValue>, data: Vec<u8>) -> zbus::Result<()>;
-    fn dev_key_send(&self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, remote: bool, net_index: u16, options: HashMap<String, OwnedValue>, data: Vec<u8>) -> zbus::Result<()>;
-    fn add_app_key(&self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, app_key_index: u16, net_key_index: u16, update: bool) -> zbus::Result<()>;
+    /// Publish.
+    fn publish(
+        &self, element_path: &zbus::zvariant::ObjectPath<'_>, model_id: u16,
+        options: HashMap<String, OwnedValue>, data: Vec<u8>,
+    ) -> zbus::Result<()>;
+    /// Send.
+    fn send(
+        &self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, key_index: u16,
+        options: HashMap<String, OwnedValue>, data: Vec<u8>,
+    ) -> zbus::Result<()>;
+    /// DevKeySend.
+    fn dev_key_send(
+        &self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, remote: bool, net_index: u16,
+        options: HashMap<String, OwnedValue>, data: Vec<u8>,
+    ) -> zbus::Result<()>;
+    /// AddAppKey.
+    fn add_app_key(
+        &self, element_path: &zbus::zvariant::ObjectPath<'_>, destination: u16, app_key_index: u16,
+        net_key_index: u16, update: bool,
+    ) -> zbus::Result<()>;
 }
 
 /// Interface to a Bluetooth mesh node.
@@ -61,13 +80,13 @@ impl Node {
             &options,
             data
         );
-        
+
         let proxy = NodeProxy::builder(&self.inner.connection)
             .destination(SERVICE_NAME)?
             .path(self.path.clone())?
             .build()
             .await?;
-        
+
         proxy.publish(&path, model_id, options, data.to_vec()).await.map_err(Into::into)
     }
 
@@ -86,13 +105,13 @@ impl Node {
             &options,
             data
         );
-        
+
         let proxy = NodeProxy::builder(&self.inner.connection)
             .destination(SERVICE_NAME)?
             .path(self.path.clone())?
             .build()
             .await?;
-        
+
         proxy.send(&path, destination, key_index, options, data.to_vec()).await.map_err(Into::into)
     }
 
@@ -113,14 +132,17 @@ impl Node {
             &options,
             data
         );
-        
+
         let proxy = NodeProxy::builder(&self.inner.connection)
             .destination(SERVICE_NAME)?
             .path(self.path.clone())?
             .build()
             .await?;
-        
-        proxy.dev_key_send(&path, destination, remote, net_index, options, data.to_vec()).await.map_err(Into::into)
+
+        proxy
+            .dev_key_send(&path, destination, remote, net_index, options, data.to_vec())
+            .await
+            .map_err(Into::into)
     }
 
     /// Send add or update network key originated by the local configuration client to a remote configuration server.
@@ -137,13 +159,13 @@ impl Node {
             net_index,
             update
         );
-        
+
         let proxy = NodeProxy::builder(&self.inner.connection)
             .destination(SERVICE_NAME)?
             .path(self.path.clone())?
             .build()
             .await?;
-        
+
         proxy.add_app_key(&path, destination, app_key, net_index, update).await.map_err(Into::into)
     }
 }

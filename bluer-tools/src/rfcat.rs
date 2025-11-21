@@ -3,7 +3,7 @@
 use bluer::{
     agent::Agent,
     id::ServiceClass,
-    rfcomm::{Listener, Profile, ReqError, Role, Channel, Socket, SocketAddr, Stream},
+    rfcomm::{Channel, Listener, Profile, ReqError, Role, Socket, SocketAddr, Stream},
     AdapterEvent, Address, Uuid,
 };
 use bytes::BytesMut;

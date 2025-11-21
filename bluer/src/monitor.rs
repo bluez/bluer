@@ -4,27 +4,25 @@
 //! exposing advertisement monitors with filtering conditions, thresholds of RSSI and timers
 //! of RSSI thresholds.
 
-use zbus::{
-    interface,
-    zvariant::{ObjectPath, OwnedObjectPath, Value},
-};
 use futures::{Stream, StreamExt};
 use std::{
+    collections::HashMap,
     fmt,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
     time::Duration,
-    collections::HashMap,
 };
 use strum::{Display, EnumString};
 use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
-
-use crate::{
-    Address, Device, Error, ErrorKind, Result, SessionInner, SERVICE_NAME,
+use zbus::{
+    interface,
+    zvariant::{ObjectPath, OwnedObjectPath, Value},
 };
+
+use crate::{Address, Device, Error, ErrorKind, Result, SessionInner, SERVICE_NAME};
 
 pub(crate) const INTERFACE: &str = "org.bluez.AdvertisementMonitor1";
 pub(crate) const MANAGER_INTERFACE: &str = "org.bluez.AdvertisementMonitorManager1";
@@ -298,27 +296,35 @@ impl RegisteredMonitor {
 
     #[zbus(property, name = "RSSILowTimeout")]
     fn rssi_low_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.am.rssi_low_timeout.map(|t| t.as_secs().clamp(1, 300) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSILowTimeout".into()))
+        self.am
+            .rssi_low_timeout
+            .map(|t| t.as_secs().clamp(1, 300) as u16)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSILowTimeout".into()))
     }
 
     #[zbus(property, name = "RSSIHighTimeout")]
     fn rssi_high_timeout(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.am.rssi_high_timeout.map(|t| t.as_secs().clamp(1, 300) as u16).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSIHighTimeout".into()))
+        self.am
+            .rssi_high_timeout
+            .map(|t| t.as_secs().clamp(1, 300) as u16)
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSIHighTimeout".into()))
     }
 
     #[zbus(property, name = "RSSISamplingPeriod")]
     fn rssi_sampling_period(&self) -> std::result::Result<u16, zbus::fdo::Error> {
-        self.am.rssi_sampling_period.map(|v| v.to_value()).ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSISamplingPeriod".into()))
+        self.am
+            .rssi_sampling_period
+            .map(|v| v.to_value())
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("RSSISamplingPeriod".into()))
     }
 
     #[zbus(property)]
     fn patterns(&self) -> std::result::Result<Vec<(u8, u8, Vec<u8>)>, zbus::fdo::Error> {
-        self.am.patterns.as_ref().map(|patterns| {
-            patterns
-                .iter()
-                .map(|p| (p.start_position, p.data_type, p.content.clone()))
-                .collect()
-        }).ok_or_else(|| zbus::fdo::Error::UnknownProperty("Patterns".into()))
+        self.am
+            .patterns
+            .as_ref()
+            .map(|patterns| patterns.iter().map(|p| (p.start_position, p.data_type, p.content.clone())).collect())
+            .ok_or_else(|| zbus::fdo::Error::UnknownProperty("Patterns".into()))
     }
 }
 
@@ -334,7 +340,7 @@ impl MonitorApplication {
         for (path, monitor) in monitors.iter() {
             let mut interfaces = HashMap::new();
             let mut props = HashMap::new();
-            
+
             props.insert("Type".to_string(), Value::from(monitor.monitor_type.to_string()));
             if let Some(v) = monitor.rssi_low_threshold {
                 props.insert("RSSILowThreshold".to_string(), Value::from(v));
@@ -352,7 +358,8 @@ impl MonitorApplication {
                 props.insert("RSSISamplingPeriod".to_string(), Value::from(v.to_value()));
             }
             if let Some(patterns) = &monitor.patterns {
-                let p: Vec<(u8, u8, Vec<u8>)> = patterns.iter().map(|p| (p.start_position, p.data_type, p.content.clone())).collect();
+                let p: Vec<(u8, u8, Vec<u8>)> =
+                    patterns.iter().map(|p| (p.start_position, p.data_type, p.content.clone())).collect();
                 props.insert("Patterns".to_string(), Value::from(p));
             }
 
@@ -445,8 +452,7 @@ impl MonitorManager {
             let _ = drop_rx.await;
 
             log::trace!("Unregistering advertisement monitor root at {}", &unreg_root);
-            let _: std::result::Result<(), zbus::Error> =
-                proxy.call("UnregisterMonitor", &(&unreg_root,)).await;
+            let _: std::result::Result<(), zbus::Error> = proxy.call("UnregisterMonitor", &(&unreg_root,)).await;
 
             log::trace!("Unpublishing advertisement monitor root at {}", &unreg_root);
             let _ = connection.object_server().remove::<MonitorApplication, _>(&unreg_root).await;
@@ -477,7 +483,7 @@ impl MonitorManager {
         };
 
         let _ = self.inner.connection.object_server().at(&name, reg).await?;
-        
+
         {
             let mut monitors = self.monitors.lock().unwrap();
             monitors.insert(name.clone(), advertisement_monitor);
@@ -491,7 +497,7 @@ impl MonitorManager {
 
             log::trace!("Unpublishing advertisement monitor target at {}", &unreg_name);
             let _ = inner.connection.object_server().remove::<RegisteredMonitor, _>(&unreg_name).await;
-            
+
             let mut monitors = monitors.lock().unwrap();
             monitors.remove(&unreg_name);
         });
