@@ -469,18 +469,21 @@ impl RegisteredAgent {
         let () = proxy.method_call(MANAGER_INTERFACE, "RegisterAgent", (name.clone(), capability)).await?;
         let connection = inner.connection.clone();
 
-        let (drop_tx, drop_rx) = oneshot::channel();
+        let unregister = Arc::new(tokio::sync::Notify::new());
+
+        let unregistration_waiter = Arc::clone(&unregister);
         let unreg_name = name.clone();
-        tokio::spawn(async move {
-            let _ = drop_rx.await;
+        let drop_task = tokio::spawn(async move {
+            unregistration_waiter.notified().await;
 
             log::trace!("Unregistering agent at {}", &unreg_name);
-            let _: std::result::Result<(), dbus::Error> =
+            let unregistration: std::result::Result<(), dbus::Error> =
                 proxy.method_call(MANAGER_INTERFACE, "UnregisterAgent", (unreg_name.clone(),)).await;
 
             log::trace!("Unpublishing agent at {}", &unreg_name);
             let mut cr = inner.crossroads.lock().await;
             let _: Option<Self> = cr.remove(&unreg_name);
+            unregistration
         });
 
         if request_default {
@@ -489,7 +492,7 @@ impl RegisteredAgent {
             let () = proxy.method_call(MANAGER_INTERFACE, "RequestDefaultAgent", (name.clone(),)).await?;
         }
 
-        Ok(AgentHandle { name, _drop_tx: drop_tx })
+        Ok(AgentHandle { name, unregister, drop_task: Some(drop_task) })
     }
 }
 
@@ -499,12 +502,28 @@ impl RegisteredAgent {
 #[must_use = "AgentHandle must be held for agent to be registered"]
 pub struct AgentHandle {
     name: dbus::Path<'static>,
-    _drop_tx: oneshot::Sender<()>,
+    unregister: Arc<tokio::sync::Notify>,
+    drop_task: Option<tokio::task::JoinHandle<std::result::Result<(), dbus::Error>>>,
+}
+
+impl AgentHandle {
+    /// Unregister this pairing agent asynchronously.
+    ///
+    /// Agents will be unregistered at some point after being dropped.
+    /// The advantage of using this method is that it does not return until the unregistration is completed.
+    /// This is useful when you want to re-register a different pairing agent.
+    pub async fn unregister(mut self) -> Result<()> {
+        self.unregister.notify_waiters();
+
+        let drop_task = self.drop_task.take().expect("The only way for this to be none is if we have already unregistered, but unregistration takes self by value");
+        drop_task.await??;
+        Ok(())
+    }
 }
 
 impl Drop for AgentHandle {
     fn drop(&mut self) {
-        // required for drop order
+        self.unregister.notify_waiters();
     }
 }
 
