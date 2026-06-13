@@ -234,7 +234,6 @@ pub struct Advertisement {
     pub tx_power: Option<i16>,
 
     // ========== Scan Response Data (BlueZ experimental) ==========
-
     /// List of UUIDs to include in the "Service UUID" field of
     /// the Scan Response Data.
     ///
