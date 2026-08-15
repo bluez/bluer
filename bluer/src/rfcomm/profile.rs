@@ -150,8 +150,9 @@ impl Profile {
         if let Some(role) = &self.role {
             pm.insert("Role".to_string(), Variant(role.to_string().box_clone()));
         }
-        if let Some(channel) = &self.channel {
-            pm.insert("Channel".to_string(), Variant(channel.box_clone()));
+        if self.channel.is_some() || matches!(&self.role, Some(Role::Server)) {
+            // If role is server and channel is None, we actually should send 0, meaning auto-assign.
+            pm.insert("Channel".to_string(), Variant(self.channel.unwrap_or_default().box_clone()));
         }
         if let Some(psm) = &self.psm {
             pm.insert("PSM".to_string(), Variant(psm.box_clone()));
