@@ -164,9 +164,15 @@ pub type AuthorizeServiceFn =
 /// Bluetooth authorization agent handler.
 ///
 /// Each handler that is set to [None] will reject the request.
-/// The capabilities of the agent are published accordingly.
-/// Setting all handlers to [None] (the default) will result in a `NoInputNoOutput` handler
-/// that accepts all requests.
+/// The capabilities of the agent are published according to the
+/// input and output handlers that are set.
+/// The [request_authorization](Self::request_authorization) and
+/// [authorize_service](Self::authorize_service) handlers represent local
+/// authorization policy and thus do not affect the published capabilities.
+///
+/// Setting all handlers to [None] (the default) will result in a `NoInputNoOutput` agent
+/// that accepts all incoming pairing attempts using the just-works model
+/// and all service authorization requests.
 ///
 /// The future of a particular request is dropped when BlueZ cancels that request.
 ///
@@ -256,12 +262,14 @@ pub struct Agent {
 
 impl Agent {
     /// BlueZ capability parameter.
+    ///
+    /// The `request_authorization` and `authorize_service` handlers are not
+    /// considered, since they represent local authorization policy and are
+    /// called by BlueZ regardless of the published capabilities.
     pub(crate) fn capability(&self) -> &'static str {
         let keyboard = self.request_passkey.is_some() || self.request_pin_code.is_some();
         let display_only = self.display_passkey.is_some() || self.display_pin_code.is_some();
-        let yes_no = self.request_confirmation.is_some()
-            || self.request_authorization.is_some()
-            || self.authorize_service.is_some();
+        let yes_no = self.request_confirmation.is_some();
 
         match (keyboard, display_only, yes_no) {
             (true, false, false) => "KeyboardOnly",
@@ -271,6 +279,17 @@ impl Agent {
             (false, false, false) => "NoInputNoOutput",
         }
     }
+
+    /// Whether no handlers are set.
+    fn is_empty(&self) -> bool {
+        self.request_pin_code.is_none()
+            && self.display_pin_code.is_none()
+            && self.request_passkey.is_none()
+            && self.display_passkey.is_none()
+            && self.request_confirmation.is_none()
+            && self.request_authorization.is_none()
+            && self.authorize_service.is_none()
+    }
 }
 
 pub(crate) struct RegisteredAgent {
@@ -279,7 +298,14 @@ pub(crate) struct RegisteredAgent {
 }
 
 impl RegisteredAgent {
-    pub(crate) fn new(agent: Agent) -> Self {
+    pub(crate) fn new(mut agent: Agent) -> Self {
+        // An agent without any handlers acts as a NoInputNoOutput agent that
+        // accepts all requests it can receive, i.e. authorization of incoming
+        // just-works pairing attempts and service connections.
+        if agent.is_empty() {
+            agent.request_authorization = Some(Box::new(|_| Box::pin(async { Ok(()) })));
+            agent.authorize_service = Some(Box::new(|_| Box::pin(async { Ok(()) })));
+        }
         Self { a: agent, cancel: Mutex::new(None) }
     }
 
