@@ -232,6 +232,40 @@ pub struct Advertisement {
     /// provided value must be in range [-127 to +20], where
     /// units are in dBm.
     pub tx_power: Option<i16>,
+
+    // ========== Scan Response Data (BlueZ experimental) ==========
+    /// List of UUIDs to include in the "Service UUID" field of
+    /// the Scan Response Data.
+    ///
+    /// Note: This is an experimental BlueZ feature. Requires
+    /// `Experimental = true` in `/etc/bluetooth/main.conf`.
+    pub scan_response_service_uuids: BTreeSet<Uuid>,
+    /// Manufacturer Data fields to include in the Scan Response Data.
+    ///
+    /// Keys are the Manufacturer ID to associate with the data.
+    ///
+    /// Note: This is an experimental BlueZ feature.
+    pub scan_response_manufacturer_data: BTreeMap<u16, Vec<u8>>,
+    /// Array of UUIDs to include in "Service Solicitation"
+    /// field of the Scan Response Data.
+    ///
+    /// Note: This is an experimental BlueZ feature.
+    pub scan_response_solicit_uuids: BTreeSet<Uuid>,
+    /// Service Data elements to include in the Scan Response Data.
+    ///
+    /// The keys are the UUID to associate with the data.
+    /// This is useful for Legacy Advertising where you need to
+    /// split data between the main advertising packet and scan response.
+    ///
+    /// Note: This is an experimental BlueZ feature.
+    pub scan_response_service_data: BTreeMap<Uuid, Vec<u8>>,
+    /// Raw Scan Response Data to include.
+    ///
+    /// Key is the advertising type and value is the data as byte array.
+    ///
+    /// Note: This is an experimental BlueZ feature.
+    pub scan_response_data: BTreeMap<u8, Vec<u8>>,
+
     #[doc(hidden)]
     pub _non_exhaustive: (),
 }
@@ -289,6 +323,43 @@ impl Advertisement {
             });
             cr_property!(ib, "TxPower", la => {
                 la.tx_power
+            });
+
+            // Scan Response properties (BlueZ experimental)
+            cr_property!(ib, "ScanResponseServiceUUIDs", la => {
+                if la.scan_response_service_uuids.is_empty() {
+                    None
+                } else {
+                    Some(la.scan_response_service_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
+                }
+            });
+            cr_property!(ib, "ScanResponseManufacturerData", la => {
+                if la.scan_response_manufacturer_data.is_empty() {
+                    None
+                } else {
+                    Some(la.scan_response_manufacturer_data.clone().into_iter().map(|(k, v)| (k, Variant(v))).collect::<HashMap<_, _>>())
+                }
+            });
+            cr_property!(ib, "ScanResponseSolicitUUIDs", la => {
+                if la.scan_response_solicit_uuids.is_empty() {
+                    None
+                } else {
+                    Some(la.scan_response_solicit_uuids.iter().map(|uuid| uuid.to_string()).collect::<Vec<_>>())
+                }
+            });
+            cr_property!(ib, "ScanResponseServiceData", la => {
+                if la.scan_response_service_data.is_empty() {
+                    None
+                } else {
+                    Some(la.scan_response_service_data.iter().map(|(k, v)| (k.to_string(), Variant(v.clone()))).collect::<HashMap<_, _>>())
+                }
+            });
+            cr_property!(ib, "ScanResponseData", la => {
+                if la.scan_response_data.is_empty() {
+                    None
+                } else {
+                    Some(la.scan_response_data.iter().map(|(k, v)| (*k, Variant(v.clone()))).collect::<HashMap<_, _>>())
+                }
             });
         })
     }
