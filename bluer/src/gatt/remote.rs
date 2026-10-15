@@ -368,8 +368,8 @@ impl Characteristic {
     ///
     /// This will also notify after a read operation.
     pub async fn notify(&self) -> Result<impl Stream<Item = Vec<u8>>> {
-        let token = self.notify_session().await?;
         let events = self.inner.events(self.dbus_path.clone(), false).await?;
+        let token = self.notify_session().await?;
         let values = events.filter_map(move |evt| {
             let _token = &token;
             async move {
