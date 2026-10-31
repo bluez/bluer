@@ -275,18 +275,23 @@ impl Adapter {
         let name = self.name.clone();
         let events = self.inner.events(self.dbus_path.clone(), true).await?;
         let stream = events.flat_map(move |event| match event {
-            Event::ObjectAdded { object, .. } => match Device::parse_dbus_path(&object) {
-                Some((adapter, address)) if adapter == *name => {
-                    stream::once(async move { AdapterEvent::DeviceAdded(address) }).boxed()
+            Event::ObjectAdded { object, interfaces } if interfaces.iter().any(|i| i == device::INTERFACE) => {
+                match Device::parse_dbus_path(&object) {
+                    Some((adapter, address)) if adapter == *name => {
+                        stream::once(async move { AdapterEvent::DeviceAdded(address) }).boxed()
+                    }
+                    _ => stream::empty().boxed(),
                 }
-                _ => stream::empty().boxed(),
-            },
-            Event::ObjectRemoved { object, .. } => match Device::parse_dbus_path(&object) {
-                Some((adapter, address)) if adapter == *name => {
-                    stream::once(async move { AdapterEvent::DeviceRemoved(address) }).boxed()
+            }
+            Event::ObjectRemoved { object, interfaces } if interfaces.iter().any(|i| i == device::INTERFACE) => {
+                match Device::parse_dbus_path(&object) {
+                    Some((adapter, address)) if adapter == *name => {
+                        stream::once(async move { AdapterEvent::DeviceRemoved(address) }).boxed()
+                    }
+                    _ => stream::empty().boxed(),
                 }
-                _ => stream::empty().boxed(),
-            },
+            }
+            Event::ObjectAdded { .. } | Event::ObjectRemoved { .. } => stream::empty().boxed(),
             Event::PropertiesChanged { changed, .. } => stream::iter(
                 AdapterProperty::from_prop_map(changed).into_iter().map(AdapterEvent::PropertyChanged),
             )
