@@ -48,6 +48,8 @@ use crate::mesh::{
 #[cfg(feature = "rfcomm")]
 use crate::rfcomm::{profile::RegisteredProfile, Profile, ProfileHandle};
 
+const PROPERTIES_INTERFACE: &str = "org.freedesktop.DBus.Properties";
+
 /// Terminate TX and terminated RX for single session.
 type SingleSessionTerm = (Weak<oneshot::Sender<()>>, oneshot::Receiver<()>);
 
@@ -502,7 +504,8 @@ impl Event {
                                 {
                                     // Remove subscriptions for removed object.
                                     // This ends the event streams of the subscriptions.
-                                    if subs.remove(&*object).is_some() {
+                                    let object_unregistered = interfaces.iter().any(|i| i == PROPERTIES_INTERFACE);
+                                    if object_unregistered && subs.remove(&*object).is_some() {
                                         log::trace!("Event subscription for {} ended because object was removed", &object);
                                     }
 
