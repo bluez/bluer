@@ -359,6 +359,12 @@ define_properties!(
             get: (is_paired, v => {v.to_owned()}),
         );
 
+        property(
+            Bonded, bool,
+            dbus: (INTERFACE, "Bonded", bool, OPTIONAL),
+            get: (is_bonded, v => {v.to_owned()}),
+        );
+
         ///	Indicates if the remote device is connected.
         property(
             Connected, bool,
