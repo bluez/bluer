@@ -1,7 +1,7 @@
 //! Bluetooth LE advertising.
 
 use dbus::{
-    arg::{PropMap, RefArg, Variant},
+    arg::{prop_cast, PropMap, RefArg, Variant},
     nonblock::Proxy,
 };
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
@@ -104,9 +104,13 @@ pub struct Capabilities {
     /// Maximum advertising scan response length.
     pub max_scan_response_length: u8,
     /// Minimum advertising TX power (dBm).
-    pub min_tx_power: i16,
+    ///
+    /// `None` if the controller does not report its TX power range.
+    pub min_tx_power: Option<i16>,
     /// Maximum advertising TX power (dBm).
-    pub max_tx_power: i16,
+    ///
+    /// `None` if the controller does not report its TX power range.
+    pub max_tx_power: Option<i16>,
 }
 
 impl Capabilities {
@@ -114,8 +118,8 @@ impl Capabilities {
         Ok(Self {
             max_advertisement_length: *read_dict(dict, "MaxAdvLen")?,
             max_scan_response_length: *read_dict(dict, "MaxScnRspLen")?,
-            min_tx_power: *read_dict(dict, "MinTxPower")?,
-            max_tx_power: *read_dict(dict, "MaxTxPower")?,
+            min_tx_power: prop_cast(dict, "MinTxPower").copied(),
+            max_tx_power: prop_cast(dict, "MaxTxPower").copied(),
         })
     }
 }
